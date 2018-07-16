@@ -38,12 +38,13 @@ function Base.show(io::IO, op::Call)
     print(io, "Call(%$(op.var.id) = $(op.fn)($(args_str)$kwargs_str))")
 end
 
+
 """
 Execute operation on a tape, store result to op's var.
 """
 function exec!(tape::AbstractTape, op::Call)
-    arg_data = map(getdata, op.args)
-    op.var.data = op.fn(arg_data...; op.kwargs...)
+    arg_data = map(getvalue, op.args)
+    op.var.val = op.fn(arg_data...; op.kwargs...)
     return op.var
 end
 
