@@ -1,51 +1,19 @@
 import Base: *, /, +, -
 import LinearAlgebra: mul!
 
-    
 
-function *(x::TReal, y::TReal)
-    # TODO: don't calculate it twice (record! always executes)
-    var = tracked(x.tape, x.val * y.val)
-    op = Call(var, *, (x, y))
-    record!(tape, op)
-    return var
-end
+## REAL
 
-function /(x::TReal, y::TReal)
-    var = tracked(x.tape, x.val / y.val)
-    op = Call(var, /, (x, y))
-    record!(tape, op)
-    return var
-end
-
-function +(x::TReal, y::TReal)
-    var = tracked(x.tape, x.val + y.val)
-    op = Call(var, +, (x, y))
-    record!(tape, op)
-    return var
-end
-
-function -(x::TReal, y::TReal)
-    var = tracked(x.tape, x.val - y.val)
-    op = Call(var, -, (x, y))
-    record!(tape, op)
-    return var
-end
-
-function -(x::TReal)
-    var = tracked(tape, -1)
-    return record!(tape, Call(var, -, (x,)))
-end
-
+*(x::TReal, y::TReal) = record!(x.tape, Call, *, (x, y))
+/(x::TReal, y::TReal) = record!(x.tape, Call, /, (x, y))
++(x::TReal, y::TReal) = record!(x.tape, Call, +, (x, y))
+-(x::TReal, y::TReal) = record!(x.tape, Call, -, (x, y))
 
 
 ## ARRAYS
 
-function *(x::TArray, y::TArray)
-    var = zero(x)    
-    record!(tape, Call(var, *, (x, y)))
-    return var
-end
+*(x::TArray, y::TArray) = record!(x.tape, Call, *, (x, y))
+
 
 
 # function LinearAlgebra.mul!(C::TArray, A::TArray, B::TArray)
