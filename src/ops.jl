@@ -2,7 +2,7 @@
 
 ## Input
 
-struct Input <: AbstractOp    
+struct Input <: AbstractOp
     var::TAny
 end
 
@@ -55,7 +55,7 @@ end
 function record!(tape::Tape, ::Type{Call}, fn::Fn, args::ARGS;
                  kwargs=Dict{Symbol,Any}()) where {Fn, ARGS<:Tuple}
     arg_vals = map(getvalue, args)
-    val = fn(arg_vals...; kwargs...)       
+    val = fn(arg_vals...; kwargs...)
     var = tracked(tape, val)
     op = Call(var, fn, args, kwargs)
     _record!(tape, op)
@@ -110,3 +110,28 @@ end
 # function exec!(tape::Tape, op::AddGrad)
 #     op.var.grad += op.grad_var.data
 # end
+
+
+## mutable structs: writing all trackable fields to the tape
+
+"""
+Traverse mutable struct and write all trackable fields to the tape,
+keeping mapping from field paths to tracked vars.
+"""
+function record_struct!(tape::Tape, s, input_idx::Int; field_path=[])
+    for name in fieldnames(typeof(s))
+        full_field_path = vcat(field_path, name)
+        field = getfield(s, name)
+        if (field isa Real && !isa(field, Bool)) || field isa AbstractArray
+            var = record!(tape, Input, field)
+            setfield!(s, name, var)
+            # save mapping field_path → var
+            if !haskey(tape.sfields, input_idx)
+                tape.sfields[input_idx] = []
+            end            
+            push!(tape.sfields[input_idx], (full_field_path, var.id))            
+        elseif isstruct(field)
+            record_struct!(tape, field, input_idx; field_path=full_field_path)
+        end
+    end
+end

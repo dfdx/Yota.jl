@@ -1,4 +1,5 @@
 include("fwddecl.jl")
+include("utils.jl")
 include("tape.jl")
 include("tracked.jl")
 include("ops.jl")

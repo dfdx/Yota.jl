@@ -46,11 +46,6 @@ const TAny = Union{TReal, TArray}
 getvalue(x) = x
 
 
-
-# "Check if an object is of a struct type, i.e. not a number or array"
-# isstruct(::Type{T}) where T = !isbits(T) && !(T <: AbstractArray)
-# isstruct(obj) = !isbits(obj) && !isa(obj, AbstractArray)
-
 # # TODO: finish
 # function tracked(tape::Tape, s; cont=nothing, field=nothing)
 #     if isstruct(s)

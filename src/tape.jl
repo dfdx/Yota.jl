@@ -3,7 +3,8 @@
 mutable struct Tape
     ops::Vector{<:AbstractOp}   # linearized execution graph
     derivs::Dict{Int,Int}       # derivs[var.id] == grad_var.id
-    Tape() = new(AbstractOp[], Dict())
+    sfields::Dict{Int, Vector}  # mapping of struct field paths -> var ids 
+    Tape() = new(AbstractOp[], Dict(), Dict())
 end
 
 function Base.show(io::IO, tape::Tape)
