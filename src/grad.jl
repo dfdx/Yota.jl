@@ -43,8 +43,6 @@ function rev_step!(op::Call, i::Int)
 end
 
 
-
-
 function grad!(dy::TAny, ::Val{1}, op::Call{typeof(*), Tuple{TReal, TReal}})
     x, y = op.args
     grad_var = zero(op.args[2])
@@ -56,3 +54,47 @@ function grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TReal, TReal}})
     grad_var = zero(op.args[2])
     return record!(dy.tape, Call(grad_var, *, (dy, x)))
 end
+
+function grad!(dy::TAny, ::Val{1}, op::Call{typeof(+), Tuple{TReal, TReal}})
+    x, y = op.args
+    return record!(dy.tape, Assign(zero(x), dy))
+end
+
+function grad!(dy::TAny, ::Val{2}, op::Call{typeof(+), Tuple{TReal, TReal}})
+    x, y = op.args
+    return record!(dy.tape, Assign(zero(x), dy))
+end
+
+
+function grad!(dy::TAny, ::Val{1}, op::Call{typeof(-), Tuple{TReal, TReal}})
+    x, y = op.args
+    return record!(dy.tape, Assign(zero(x), dy))
+end
+
+function grad!(dy::TAny, ::Val{2}, op::Call{typeof(-), Tuple{TReal, TReal}})
+    x, y = op.args
+    return record!(dy.tape, Call(zero(x), -, (dy,)))
+end
+
+
+## high-level API
+
+
+function grad(f::Function, args...)
+    # 0. create tape
+    tape = Tape()
+    # 1. wrap args into tracked data    
+    tr_args = map(x -> tracked(tape, x), args)
+    for tr_arg in tr_args
+        record!(tape, Input(tr_arg))
+    end
+    # 2.(TODO) make shallow copy of structs, set fields to tracked copies, repeat recursively
+    # 3. execute function to fill in the tape
+    tr_val = f(tr_args...)
+    # 4. return value and the tape
+    return tr_val.val, tape
+end
+
+
+# 5. implement update! that can work with structs
+# 6. way to exec! tape with new inputs

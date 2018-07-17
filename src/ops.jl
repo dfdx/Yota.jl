@@ -49,19 +49,34 @@ function exec!(tape::AbstractTape, op::Call)
 end
 
 
+## Assign
+
+struct Assign <: AbstractOp
+    var::TAny
+    src::TAny
+end
+
+Base.show(io::IO, op::Assign) = print("Assign(%$(op.var.id) ← %$(op.src.id))")
+
+function exec!(tape::AbstractTape, op::Assign)
+    op.var.val = op.src.val
+    return op.var
+end
+
+
 ## AddGrad
 
-"""
-Addition of calculated gradient (stored in .data field of grad_var)
-to .grad field of var
-"""
-struct AddGrad <: AbstractOp
-    var::TAny
-    grad_var::TAny
-end
+# """
+# Addition of calculated gradient (stored in .data field of grad_var)
+# to .grad field of var
+# """
+# struct AddGrad <: AbstractOp
+#     var::TAny
+#     grad_var::TAny
+# end
 
-Base.show(io::IO, op::AddGrad) = print(io, "AddGrad(%$(op.var.id) ← %$(op.grad_var.id))")
+# Base.show(io::IO, op::AddGrad) = print(io, "AddGrad(%$(op.var.id) ← %$(op.grad_var.id))")
 
-function exec!(tape::AbstractTape, op::AddGrad)
-    op.var.grad += op.grad_var.data
-end
+# function exec!(tape::AbstractTape, op::AddGrad)
+#     op.var.grad += op.grad_var.data
+# end
