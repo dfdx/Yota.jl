@@ -4,12 +4,13 @@
 
 struct Input <: AbstractOp
     var::TAny
+    argid::Int
 end
 
 @inline exec!(tape::Tape, op::Input) = op.var
 
-function record!(tape::Tape, ::Type{Input}, val)
-    op = Input(tracked(tape, val))
+function record!(tape::Tape, ::Type{Input}, val; argid=-1)
+    op = Input(tracked(tape, val), argid)
     push!(tape.ops, op)
     op.var.id = length(tape)
     return op.var
@@ -25,7 +26,7 @@ end
 @inline exec!(tape::Tape, op::Constant) = op.var
 
 function record!(tape::Tape, ::Type{Constant}, val)
-    op = Input(tracked(tape, val))
+    op = Constant(tracked(tape, val))
     push!(tape.ops, op)
     op.var.id = length(tape)
     return op.var
@@ -47,7 +48,7 @@ struct Call{Fn, ARGS <: Tuple} <: AbstractOp
 end
 
 function Base.show(io::IO, op::Call)
-    args_str = join(["%$(var.id)" for var in op.args], ", ")
+    args_str = join([var isa TAny ? "%$(var.id)" : var for var in op.args], ", ")
     kwargs_str = isempty(op.kwargs) ? "" : "; " * join(["$k=$v" for (k, v) in op.kwargs], ", ")
     print(io, "Call(%$(op.var.id) = $(op.fn)($(args_str)$kwargs_str))")
 end
@@ -72,6 +73,41 @@ function exec!(tape::Tape, op::Call)
 end
 
 
+## Bcast
+
+"""
+Broadcasting
+"""
+struct Bcast{Fn, ARGS <: Tuple} <: AbstractOp
+    var::TAny
+    fn::Fn
+    args::ARGS
+end
+
+function Base.show(io::IO, op::Bcast)
+    args_str = join([var isa TAny ? "%$(var.id)" : var for var in op.args], ", ")
+    print(io, "Bcast(%$(op.var.id) = $(op.fn).($args_str))")
+end
+
+function record!(tape::Tape, ::Type{Bcast}, fn::Fn, args::ARGS) where {Fn, ARGS<:Tuple}
+    arg_vals = map(getvalue, args)
+    val = fn.(arg_vals...)
+    var = tracked(tape, val)
+    op = Bcast(var, fn, args)
+    _record!(tape, op)
+    return var
+end
+
+"""
+Execute operation on a tape, store result to op's var.
+"""
+function exec!(tape::Tape, op::Bcast)
+    arg_data = map(getvalue, op.args)
+    op.var.val = op.fn.(arg_data...)
+    return op.var
+end
+
+
 ## Assign
 
 struct Assign <: AbstractOp
@@ -90,6 +126,7 @@ end
 function record!(tape::Tape, ::Type{Assign}, src::TAny)
     var = tracked(tape, src.val)
     op = Assign(var, src)
+    _record!(tape, op)
     exec!(tape, op)
     return var
 end
@@ -128,8 +165,8 @@ function record_struct!(tape::Tape, s, input_idx::Int; field_path=[])
             # save mapping field_path → var
             if !haskey(tape.sfields, input_idx)
                 tape.sfields[input_idx] = []
-            end            
-            push!(tape.sfields[input_idx], (full_field_path, var.id))            
+            end
+            push!(tape.sfields[input_idx], (full_field_path, var.id))
         elseif isstruct(field)
             record_struct!(tape, field, input_idx; field_path=full_field_path)
         end

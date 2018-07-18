@@ -1,18 +1,19 @@
-
-# TODO: track_and_record!(tape, op)??
+## gradient function defintions
 
 function back!(tape::Tape)
     # z - final variable, y - resulting variable of current op, x - dependencies of y
     # dy - derivative of z w.r.t. y
     z = tape[end].var
-    dy = tracked(tape, 1.0)
-    record!(tape, Constant(dy))
+    dy = record!(tape, Constant, 1.0)
     # set initial derivative value
     tape.derivs[z.id] = dy.id
     for op in reverse(tape.ops[1:end-1])
-        if op isa Call
+        if op isa Call || op isa Bcast
             for i=1:length(op.args)
-                rev_step!(op, i)
+                # backpropagate only tracked vars
+                if op.args[i] isa TAny
+                    rev_step!(op, i)
+                end
             end
         end
     end
@@ -25,9 +26,7 @@ setderiv!(tape::Tape, var_id::Int, grad_var_id::Int) = (tape.derivs[var_id] = gr
 setderiv!(tape::Tape, var::TAny, grad_var::TAny) = (tape.derivs[var.id] = grad_var.id)
 
 
-# @inline rev_step!(op::Input, i::Int) = ()
-
-function rev_step!(op::Call, i::Int)
+function rev_step!(op::Union{Call, Bcast}, i::Int)
     tape = op.var.tape
     y = op.var
     x = op.args[i]
@@ -37,64 +36,55 @@ function rev_step!(op::Call, i::Int)
         setderiv!(tape, x, dx)
     else
         old_dx = getderiv(tape, x)
-        new_dx = record!(tape, Call(zero(dx), +, (dx, old_dx)))
+        new_dx = record!(tape, Call, +, (dx, old_dx))
         setderiv!(tape, x, new_dx)
     end
 end
 
 
-function grad!(dy::TAny, ::Val{1}, op::Call{typeof(*), Tuple{TReal, TReal}})
-    x, y = op.args
-    grad_var = zero(op.args[2])
-    return record!(dy.tape, Call(grad_var, *, (dy, y)))
-end
-
-function grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TReal, TReal}})
-    x, y = op.args
-    grad_var = zero(op.args[2])
-    return record!(dy.tape, Call(grad_var, *, (dy, x)))
-end
-
-function grad!(dy::TAny, ::Val{1}, op::Call{typeof(+), Tuple{TReal, TReal}})
-    x, y = op.args
-    return record!(dy.tape, Assign(zero(x), dy))
-end
-
-function grad!(dy::TAny, ::Val{2}, op::Call{typeof(+), Tuple{TReal, TReal}})
-    x, y = op.args
-    return record!(dy.tape, Assign(zero(x), dy))
-end
-
-
-function grad!(dy::TAny, ::Val{1}, op::Call{typeof(-), Tuple{TReal, TReal}})
-    x, y = op.args
-    return record!(dy.tape, Assign(zero(x), dy))
-end
-
-function grad!(dy::TAny, ::Val{2}, op::Call{typeof(-), Tuple{TReal, TReal}})
-    x, y = op.args
-    return record!(dy.tape, Call(zero(x), -, (dy,)))
-end
 
 
 ## high-level API
 
 
 function grad(f::Function, args...)
-    # 0. create tape
     tape = Tape()
-    # 1. wrap args into tracked data    
-    tr_args = map(x -> tracked(tape, x), args)
-    for tr_arg in tr_args
-        record!(tape, Input(tr_arg))
-    end
-    # 2.(TODO) make shallow copy of structs, set fields to tracked copies, repeat recursively
-    # 3. execute function to fill in the tape
-    tr_val = f(tr_args...)
-    # 4. return value and the tape
-    return tr_val.val, tape
+    # wrap args into tracked data
+    targs = []
+    for (argid, arg) in enumerate(args)
+        if isstruct(arg)
+            # we'd like to avoid deepcopy, but it's not clear yet how to make shallow one
+            # note: shallow copy will also require changes in record_struct!
+            arg = deepcopy(args)
+            targ = record_struct!(tape, arg; argid=argid)
+        else
+            targ = record!(tape, Input, arg; argid=argid)
+        end
+        push!(targs, arg)
+    end    
+    # execute function to fill in the tape
+    tres = f(targs...)
+    # backpropagate gradients
+    back!(tape)
+    # return value and the tape
+    return tres.val, tape
 end
 
+
+
+struct Grads
+    # gradient vars: argid -> gradient var
+    gvars::Dict{Int, Any}
+end
+
+
+function Grads(tape::Tape)
+    for op in tape.ops
+        if op isa Input
+            # TODO
+        end
+    end
+end
 
 # 5. implement update! that can work with structs
 # 6. way to exec! tape with new inputs
