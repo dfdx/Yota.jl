@@ -1,6 +1,8 @@
 *(x::TArray, y::TArray) = record!(x.tape, Call, *, (x, y))
 sum(x::TArray; dims) = record!(x.tape, Call, sum, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
+sum(x::TArray) = record!(x.tape, Call, sum, (x,))
 mean(x::TArray; dims) = record!(x.tape, Call, mean, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
+mean(x::TArray) = record!(x.tape, Call, mean, (x,))
 transpose(x::TArray) = record!(x.tape, Call, transpose, (x,))
 minimum(x::TArray) = record!(x.tape, Call, minimum, (x,))
 maximum(x::TArray) = record!(x.tape, Call, maximum, (x,))

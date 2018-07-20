@@ -38,6 +38,7 @@ getvalue(x::TArray) = x.val
 ## OTHER TYPES AND UTILS
 
 const TAny = Union{TReal, TArray}
+tracked(x::TAny) = x
 
 getvalue(x) = x
 

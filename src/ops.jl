@@ -115,7 +115,7 @@ struct Assign <: AbstractOp
     src::TAny
 end
 
-Base.show(io::IO, op::Assign) = print("Assign(%$(op.var.id) ← %$(op.src.id))")
+Base.show(io::IO, op::Assign) = print(io, "Assign(%$(op.var.id) = %$(op.src.id))")
 
 function exec!(tape::Tape, op::Assign)
     op.var.val = op.src.val

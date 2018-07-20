@@ -1,4 +1,4 @@
-module Gendo
+module Yota
 
 greet() = print("Hello World!")
 

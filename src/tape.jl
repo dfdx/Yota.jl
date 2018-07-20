@@ -19,7 +19,8 @@ end
 Base.getindex(tape::Tape, i...) = getindex(tape.ops, i...)
 Base.lastindex(tape::Tape) = lastindex(tape.ops)
 Base.length(tape::Tape) = length(tape.ops)
-
+Base.iterate(tape::Tape) = iterate(tape.ops)
+Base.iterate(tape::Tape, s) = iterate(tape.ops, s)
 
 """
 Record an operation onto a tape, assign new ID to op's var.
