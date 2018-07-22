@@ -1,17 +1,23 @@
 ## tape
 
+const MaybeFunction = Union{Function, Nothing}
+
 mutable struct Tape
     ops::Vector{<:AbstractOp}   # linearized execution graph
     derivs::Dict{Int,Int}       # derivs[var.id] == grad_var.id
-    sfields::Dict{Int, Vector}  # mapping of struct field paths -> var ids 
-    Tape() = new(AbstractOp[], Dict(), Dict())
+    sfields::Dict{Int, Dict}    # mapping of argid -> Dict(struct field paths -> var id)
+    compiled::MaybeFunction     # compiled tape or nothing
+    Tape() = new(AbstractOp[], Dict(), Dict(), nothing)
 end
 
 function Base.show(io::IO, tape::Tape)
     rev_derivs = Dict((j, i) for (i, j) in tape.derivs)
+    # rev_sfields = Dict((var.id, argid) for )
     println(io, "Tape")
     for (i, op) in enumerate(tape.ops)
-        hint = haskey(rev_derivs, i) ? "\t# deriv for %$(rev_derivs[i])" : ""
+        hint_deriv = haskey(rev_derivs, i) ? "deriv for %$(rev_derivs[i])" : ""
+        # hint_struct = haskey(tape.sfields, ) ?
+        hint = isempty(hint_deriv) ? "" : "\t # " * hint_deriv
         println(io, "  $op$hint")
     end
 end

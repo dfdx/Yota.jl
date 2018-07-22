@@ -1,13 +1,15 @@
 
-function grad!(dy::TAny, ::Val{1}, op::Call{typeof(*), Tuple{TArray, TArray}})
+function grad!(dy::TAny, ::Val{1},
+               op::Call{typeof(*), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
     x, y = op.args
-    yt = record!(dy.tape, Call, transpose, y)
+    yt = record!(dy.tape, Call, transpose, (y,))
     return record!(dy.tape, Call, *, (dy, yt))
 end
 
-function grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TArray, TArray}})
+function grad!(dy::TAny, ::Val{2},
+               op::Call{typeof(*), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
     x, y = op.args
-    xt = record!(dy.tape, Call, transpose, x)
+    xt = record!(dy.tape, Call, transpose, (x,))
     return record!(dy.tape, Call, *, (xt, dy))
 end
 

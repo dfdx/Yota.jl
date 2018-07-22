@@ -155,20 +155,21 @@ end
 Traverse mutable struct and write all trackable fields to the tape,
 keeping mapping from field paths to tracked vars.
 """
-function record_struct!(tape::Tape, s, input_idx::Int; field_path=[])
+function record_struct!(tape::Tape, s, argid::Int; field_path=[])
     for name in fieldnames(typeof(s))
         full_field_path = vcat(field_path, name)
         field = getfield(s, name)
         if (field isa Real && !isa(field, Bool)) || field isa AbstractArray
-            var = record!(tape, Input, field)
+            var = record!(tape, Input, field; argid=argid)
             setfield!(s, name, var)
-            # save mapping field_path → var
-            if !haskey(tape.sfields, input_idx)
-                tape.sfields[input_idx] = []
+            # save mapping field_path -> var
+            if !haskey(tape.sfields, argid)
+                tape.sfields[argid] = Dict{Any,Any}()
             end
-            push!(tape.sfields[input_idx], (full_field_path, var.id))
+            full_field_path_tuple = (full_field_path...,)
+            tape.sfields[argid][full_field_path_tuple] = var.id
         elseif isstruct(field)
-            record_struct!(tape, field, input_idx; field_path=full_field_path)
+            record_struct!(tape, field, argid; field_path=full_field_path)
         end
     end
 end

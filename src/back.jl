@@ -55,36 +55,110 @@ function grad(f::Function, args...)
         if isstruct(arg)
             # we'd like to avoid deepcopy, but it's not clear yet how to make shallow one
             # note: shallow copy will also require changes in record_struct!
-            arg = deepcopy(args)
-            targ = record_struct!(tape, arg; argid=argid)
+            arg = deepcopy(arg)
+            record_struct!(tape, arg, argid)
+            targ = arg  # we use the same (copy of) struct, but all fields are rewritten
         else
             targ = record!(tape, Input, arg; argid=argid)
         end
-        push!(targs, arg)
-    end    
+        push!(targs, targ)
+    end
     # execute function to fill in the tape
     tres = f(targs...)
+    res_id = tape[end].var
     # backpropagate gradients
     back!(tape)
-    # return value and the tape
-    return tres.val, tape
+    # construct Grads object that wraps tape and provide accessors for computed derivatives
+    return tres.val, Grads(tape)
 end
 
 
 
 struct Grads
+    tape::Tape
     # gradient vars: argid -> gradient var
     gvars::Dict{Int, Any}
 end
 
 
 function Grads(tape::Tape)
-    for op in tape.ops
-        if op isa Input
-            # TODO
+    gvars = Dict{Int,Any}()
+    # struct fields
+    for (argid, dct) in tape.sfields
+        gvars[argid] = Dict(field_path => tape.derivs[var_id]
+                            for (field_path, var_id) in dct
+                            if haskey(tape.derivs, var_id))  # not all fields may have derivatives
+    end
+    # other arguments
+    struct_arg_ids = Set(keys(tape.sfields))
+    for op in tape
+        if op isa Input && !in(op.argid, struct_arg_ids)
+            gvars[op.argid] = tape.derivs[op.var.id]
         end
+    end
+    return Grads(tape, gvars)
+end
+
+
+Base.show(io::IO, g::Grads) = print(io, "Grads($(length(g.gvars)))")
+
+function getindex(g::Grads, argid::Int)
+    tape = g.tape
+    gvar = g.gvars[argid]
+    if isa(gvar, Dict)
+        return Dict(f => tape[id].var.val for (f, id) in gvar)
+    else
+        return tape[gvar].var.val
     end
 end
 
-# 5. implement update! that can work with structs
-# 6. way to exec! tape with new inputs
+
+
+## TAPE COMPILATION
+
+function to_expr(op::Call)
+    if op.var.val isa AbstractArray
+        return :($(op.var).val .= $(op.fn)(map(getvalue, $(op.args))...))
+    else
+        return :($(op.var).val = $(op.fn)(map(getvalue, $(op.args))...))
+    end
+end
+function to_expr(op::Call{typeof(*), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
+    return :(mul!($(op.var).val, $(op.args[1]).val, $(op.args[2]).val))
+end
+to_expr(op::Bcast) = :($(op.var).val .= $(op.fn).(map(getvalue, $(op.args))...))
+to_expr(op::Assign) = :($(op.var).val = $(op.var).src)
+to_expr(op::Constant) = :()    # constants don't change anyway
+
+
+function compile(tape::Tape)
+    fn_ex = :(function $(gensym("tape_fn"))() end)
+    # do we need to pass inputs as args? it seems like we can do it manually before invoking
+    # the cached function and let it just use pre-existing vars
+    # head = fn_ex.args[1]
+    body = fn_ex.args[2]
+    for op in tape
+        if !isa(op, Input)
+            ex = to_expr(op)
+            push!(body.args, ex)
+        end
+    end
+    return Core.eval(@__MODULE__, fn_ex)
+end
+
+
+function compile!(tape::Tape)
+    tape.compiled = compile(tape)
+end
+
+
+function play!(tape::Tape, args...; use_compiled=true)
+    # TODO: set args
+    if use_compiled && tape.compiled != nothing
+        tape.compiled()
+    else        
+        for op in tape
+            exec!(tape, op)
+        end
+    end
+end
