@@ -1,6 +1,6 @@
 module Yota
 
-export grad
+export grad, update!
 
 include("core.jl")
 
