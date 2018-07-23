@@ -1,7 +1,9 @@
-name = "Gendo"
-uuid = "75c55192-876a-11e8-0f01-0fcedd69ab0f"
+name = "Yota"
+uuid = "f7b0de00-8e67-11e8-1ba4-09bec8501be6"
 authors = ["Andrei Zhabinski <andrei.zhabinski@pandadoc.com>"]
 version = "0.1.0"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"

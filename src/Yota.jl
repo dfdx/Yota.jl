@@ -1,5 +1,7 @@
 module Yota
 
-greet() = print("Hello World!")
+export grad
 
-end # module
+include("core.jl")
+
+end

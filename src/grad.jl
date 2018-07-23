@@ -109,7 +109,7 @@ function _grad(f::Function, args...)
     targs = make_tracked_args(tape, args...)
     # execute function to fill in the tape
     tres = f(targs...)
-    res_id = tape[end].var
+    tape.resultid = getid(tres)
     # backpropagate gradients
     back!(tape)
     # construct GradResult object that wraps tape and provide accessors for computed derivatives
@@ -124,7 +124,7 @@ function grad(f::Function, args...; static=true)
         if haskey(GRAD_CACHE, f)
             tape = GRAD_CACHE[f]
             play!(tape, args...)
-            return getvalue(tape[end]), GradResult(tape)
+            return getvalue(tape[tape.resultid]), GradResult(tape)
         else
             val, g = _grad(f, args...)            
             compile!(g.tape)

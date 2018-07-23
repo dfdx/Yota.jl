@@ -4,10 +4,11 @@ const MaybeFunction = Union{Function, Nothing}
 
 mutable struct Tape
     ops::Vector{<:AbstractOp}   # linearized execution graph
+    resultid::Int               # id of result variable
     derivs::Dict{Int,Int}       # derivs[var.id] == grad_var.id
     sfields::Dict{Int, Dict}    # mapping of argid -> Dict(struct field paths -> var id)
     compiled::MaybeFunction     # compiled tape or nothing
-    Tape() = new(AbstractOp[], Dict(), Dict(), nothing)
+    Tape() = new(AbstractOp[], -1, Dict(), Dict(), nothing)
 end
 
 function Base.show(io::IO, tape::Tape)

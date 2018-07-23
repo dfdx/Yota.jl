@@ -2,6 +2,8 @@
 for fn in (*, /, +, -)
     fns = Symbol(fn)
     @eval $fns(x::TReal, y::TReal) = record!(x.tape, Call, $fn, (x, y))
+    @eval $fns(x::Real, y::TReal) = record!(y.tape, Call, $fn, (x, y))
+    @eval $fns(x::TReal, y::Real) = record!(x.tape, Call, $fn, (x, y))
 end
     
 -(x::TReal) = record!(x.tape, Call, -, (x,))
