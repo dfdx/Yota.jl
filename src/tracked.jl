@@ -1,5 +1,9 @@
 ## data types to track execution and write operations to a tape
 
+## ways to create tracked variables:
+## 1. tracked(tape, val) - create var bound, but not written to tape
+## 2. record!(tape, Op, ...) - create var by executin Op, put resulting op onto the tape
+
 ## TRACKED REAL
 
 mutable struct TReal <: Real
@@ -30,7 +34,7 @@ tracked(tape::Tape, x::AbstractArray) =
     TArray(tape, -1, x)
 
 
-## PROMOTION
+## PROMOTION (recquires global default graph which isn't implemented yet)
 
 # Base.promote_rule(::Type{TReal}, ::Type{<:Real}) = TReal
 # function Base.convert(::Type{TReal}, x::R) where {R <: Real}

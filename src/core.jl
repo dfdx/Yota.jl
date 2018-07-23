@@ -8,14 +8,10 @@ include("utils.jl")
 include("tape.jl")
 include("tracked.jl")
 include("ops.jl")
-include("scalar.jl")
-include("tensor.jl")
-include("scalargrad.jl")
-include("tensorgrad.jl")
-include("back.jl")
+include("forward/scalar.jl")
+include("forward/tensor.jl")
+include("backward/scalar.jl")
+include("backward/tensor.jl")
+include("compile.jl")
+include("grad.jl")
 include("helpers.jl")
-
-
-## ways to create tracked variables:
-## 1. tracked(tape, val) - create var bound, but not written to tape
-## 2. record!(tape, Op, ...) - create var by executin Op, put resulting op onto the tape
