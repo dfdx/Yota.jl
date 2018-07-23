@@ -11,9 +11,6 @@ end
 Base.show(io::IO, x::TReal) = print(io, "%$(x.id) = $(x.val)")
 tracked(tape::Tape, x::Real) =
     TReal(tape, -1, x)
-# Base.zero(x::TReal) = tracked(x.tape, zero(x.val))
-getvalue(x::TReal) = x.val
-
 
 
 ## TRACKED ARRAY
@@ -31,8 +28,6 @@ Base.show(io::IO, ::MIME{Symbol("text/plain")}, x::TArray{T,N}) where {T,N} =
     print(io, "%$(x.id) = TArray{$T,$N}(size=$(size(x.val)))")
 tracked(tape::Tape, x::AbstractArray) =
     TArray(tape, -1, x)
-# Base.zero(x::TArray) = tracked(x.tape, zero(x.val))
-getvalue(x::TArray) = x.val
 
 
 ## PROMOTION
@@ -64,18 +59,12 @@ getvalue(x::TArray) = x.val
 const TAny = Union{TReal, TArray}
 tracked(x::TAny) = x
 
+getvalue(x::TAny) = x.val
 getvalue(x) = x
+setvalue!(x::TAny, val) = (x.val = val)
 
+gettape(x::TAny) = x.tape
+settape!(x::TAny, tape) = (x.tape = tape)
 
-# # TODO: finish
-# function tracked(tape::Tape, s; cont=nothing, field=nothing)
-#     if isstruct(s)
-#         tr_fields = Array{Any}(undef, length(fieldnames(typeof(s))))
-#         for (i, f) in enumerate(fieldnames(typeof(s)))
-#             tr_fields[i] = tracked(tape, getfield(s, f); cont=s, field=f)
-#         end
-#         return typeof(s)(tr_fields...)
-#     else
-#         return s
-#     end
-# end
+getid(x::TAny) = x.id
+setid!(x::TAny, id::Int) = (x.id = id)

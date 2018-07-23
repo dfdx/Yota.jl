@@ -131,22 +131,14 @@ function record!(tape::Tape, ::Type{Assign}, src::TAny)
     return var
 end
 
-## AddGrad
 
-# """
-# Addition of calculated gradient (stored in .data field of grad_var)
-# to .grad field of var
-# """
-# struct AddGrad <: AbstractOp
-#     var::TAny
-#     grad_var::TAny
-# end
+## COMMON UTILS
 
-# Base.show(io::IO, op::AddGrad) = print(io, "AddGrad(%$(op.var.id) ← %$(op.grad_var.id))")
+getvar(op::AbstractOp) = op.var
+setvar!(op::AbstractOp, var::TAny) = (op.var = var)
 
-# function exec!(tape::Tape, op::AddGrad)
-#     op.var.grad += op.grad_var.data
-# end
+getvalue(op::AbstractOp) = op |> getvar |> getvalue
+setvalue!(op::AbstractOp, val) = setvalue!(getvar(op), val) 
 
 
 ## mutable structs: writing all trackable fields to the tape

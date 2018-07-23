@@ -47,9 +47,7 @@ end
 ## high-level API
 
 
-function grad(f::Function, args...)
-    tape = Tape()
-    # wrap args into tracked data
+function make_tracked_args(tape::Tape, args...)
     targs = []
     for (argid, arg) in enumerate(args)
         if isstruct(arg)
@@ -63,6 +61,15 @@ function grad(f::Function, args...)
         end
         push!(targs, targ)
     end
+    return targs
+end
+
+
+
+function grad(f::Function, args...)
+    tape = Tape()
+    # wrap args into tracked data
+    targs = make_tracked_args(tape, args...)
     # execute function to fill in the tape
     tres = f(targs...)
     res_id = tape[end].var
@@ -119,7 +126,7 @@ end
 function to_expr(op::Call)
     if op.var.val isa AbstractArray
         return :($(op.var).val .= $(op.fn)(map(getvalue, $(op.args))...))
-    else
+    else 
         return :($(op.var).val = $(op.fn)(map(getvalue, $(op.args))...))
     end
 end
@@ -152,8 +159,18 @@ function compile!(tape::Tape)
 end
 
 
+function rerecord_inputs!(tape::Tape, args...)
+    minitape = Tape()
+    targs = make_tracked_args(minitape, args...)
+    for i=1:length(minitape)
+        val = getvalue(minitape[i])
+        setvalue!(tape[i], val)
+    end
+end
+
+
 function play!(tape::Tape, args...; use_compiled=true)
-    # TODO: set args
+    rerecord_inputs!(tape, args...)
     if use_compiled && tape.compiled != nothing
         tape.compiled()
     else        
