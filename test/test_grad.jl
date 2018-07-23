@@ -14,5 +14,9 @@ loss(m::Linear, X) = sum(forward(m, X))
     val, g = grad(loss, args...)
 
     @test val == loss(args...)
+
+    play!(g.tape)
+    val, g = grad(loss, args...)
+    @test val == loss(args...)
     
 end
