@@ -1,13 +1,13 @@
 
 function grad!(dy::TAny, ::Val{1},
-               op::Call{typeof(*), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
+               op::Call{typeof(*), Tuple{TArray{T1,N1}, TArray{T2,N2}}}) where {T1,N1,T2,N2}
     x, y = op.args
     yt = record!(dy.tape, Call, transpose, (y,))
     return record!(dy.tape, Call, *, (dy, yt))
 end
 
 function grad!(dy::TAny, ::Val{2},
-               op::Call{typeof(*), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
+               op::Call{typeof(*), Tuple{TArray{T1,N1}, TArray{T2,N2}}}) where {T1,N1,T2,N2}
     x, y = op.args
     xt = record!(dy.tape, Call, transpose, (x,))
     return record!(dy.tape, Call, *, (xt, dy))
@@ -18,7 +18,7 @@ function grad!(dy::TAny, ::Val{1}, op::Call{typeof(sum), Tuple{TArray{T,N}}}) wh
     return record!(dy.tape, Call, sum_grad, (op.args[1], dy); kwargs=op.kwargs)
 end
 function grad!(dy::TAny, ::Val{1}, op::Call{typeof(mean), Tuple{TArray{T,N}}}) where {T,N}
-    return record!(dy.tape, Call, sum_grad, (op.args[1], dy); kwargs=op.kwargs)
+    return record!(dy.tape, Call, mean_grad, (op.args[1], dy); kwargs=op.kwargs)
 end
 
 
@@ -31,53 +31,8 @@ grad!(dy::TAny, ::Val{1}, op::Call{typeof(transpose), Tuple{TArray{T,N}}}) where
 
 ## BROADCASTING
 
-getfirst(x::TArray) = first(x.val)
+getfirst(x::TAny) = first(x.val)
 getfirst(x) = first(x)
-
-# function record_bcast_as_calls(tape::Tape)
-#     new_tape = Tape()
-#     for op in tape.ops
-#         if op isa Call
-#             bcast_op = Bcast(op.var, op.fn, op.args)
-#             _record!(new_tape, bcast_op)
-#         else
-#             _record!(new_tape, op)
-#         end
-#     end
-#     return new_tape
-# end
-
-
-# function calls_to_bcast(tape::Tape)
-#     new_tape = Tape()
-#     for op in tape.ops
-#         if op isa Call
-#             bcast_op = Bcast(op.var, op.fn, op.args)
-#             _record!(new_tape, bcast_op)
-#         else
-#             _record!(new_tape, op)
-#         end
-#     end
-#     return new_tape
-# end
-
-# function replace_var!(tape::Tape, from::TAny, to::Any)
-#     for op in tape.ops
-#         println(op)
-#         if op isa Call || op isa Bcast
-#             if op.var === from
-#                 op.var = to
-#             end
-#             op.args = ([arg === from ? to : arg for arg in op.args]...,)
-#         end
-#     end
-# end
-
-# function replace_vars!(tape::Tape, from_to)
-#     for (from, to) in from_to
-#         replace_var(tape, from, to)
-#     end
-# end
 
 
 function merge_bcast_as_call!(tape::Tape, minitape::Tape, collect_from::Int, var_st::Dict)
@@ -89,8 +44,9 @@ function merge_bcast_as_call!(tape::Tape, minitape::Tape, collect_from::Int, var
         elseif op isa Constant
             # TODO: replace var and args in op if it makes sense for the op
             var = record!(tape, Constant, op.var.val)
-        elseif op isa Assign
-            var = record!(tape, Assign, var_st[op.var.id])
+        elseif op isa Assign            
+            src_id_in_tape = var_st[op.src.id]
+            var = record!(tape, Assign, tape[src_id_in_tape].var)
         else
             error("Unexpected operation in gradient minitape: $op")
         end
@@ -98,8 +54,8 @@ function merge_bcast_as_call!(tape::Tape, minitape::Tape, collect_from::Int, var
     end
 end
 
-function grad!(dy::Any, ::Val{Idx},
-               op::Bcast{FnType, Tuple{TArray{T,N}, TArray{T,N}}}) where {Idx,FnType,T,N}
+
+function grad!(dy::Any, ::Val{Idx}, op::Bcast{FnType, TT}) where {Idx,FnType,TT}
     # record derivatives of first elements onto a minitape
     minitape = Tape()
     el_args = map(arg -> record!(minitape, Input, getfirst(arg)), op.args)
@@ -109,19 +65,19 @@ function grad!(dy::Any, ::Val{Idx},
     el_op = minitape[el_y.id]
     collect_from = length(minitape) + 1
     el_dx = grad!(el_dy, Val(Idx), el_op)
+    # merge minitape into tape, replacing Calls with Bcasts and changing op ids
+    # initial variable substitution table (var_st) should contain mappings from
+    # minitape input vars to corresponding original vars
     var_st = Dict(el_a.id => a.id for (el_a, a) in zip(el_args, op.args))
-    var_st[el_dy.id] = y.id
+    var_st[el_dy.id] = dy.id
+    tape = dy.tape
     merge_bcast_as_call!(tape, minitape, collect_from, var_st)
     dx = tape[var_st[el_dx.id]].var
     return dx
 end
 
 
-# TODO: make single function to handle all broadcasting of arrays of the same size
-function grad!(dy::TAny, ::Val{1}, op::Bcast{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
-    return record!(dy.tape, Assign, dy)
-end
-
-function grad!(dy::TAny, ::Val{2}, op::Bcast{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
-    return record!(dy.tape, Assign, dy)
-end
+# function grad!(dy::Any, ::Val{Idx},
+#                op::Bcast{FnType, Tuple{TArray{T1,N1}, TArray{T2,N2}}}) where {Idx,FnType,T1,N1,T2,N2}
+# ...
+# end

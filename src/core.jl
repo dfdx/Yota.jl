@@ -1,4 +1,4 @@
-import Base: *, /, +, -, sin, cos, exp, log, abs, abs2, sign, tanh
+import Base: *, /, +, -, ^, sin, cos, exp, log, abs, abs2, sign, tanh
 import Base: sum, transpose, minimum, maximum, getindex, reshape
 import LinearAlgebra: mul!
 import Statistics: mean

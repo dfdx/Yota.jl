@@ -1,3 +1,6 @@
+
+# when overloading new functions, don't forget to import them first
+
 *(x::TArray, y::TArray) = record!(x.tape, Call, *, (x, y))
 sum(x::TArray; dims) = record!(x.tape, Call, sum, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
 sum(x::TArray) = record!(x.tape, Call, sum, (x,))
@@ -9,14 +12,17 @@ maximum(x::TArray) = record!(x.tape, Call, maximum, (x,))
 getindex(x::TArray, i...) = record!(x.tape, Call, getindex, (x, i...))
 reshape(x::TArray, dims::Vararg{Int64,N}) where N = record!(x.tape, Call, reshape, (x, dims))
 
-for fn in (*, /, +, -)
+for fn in (*, /, +, -, ^)
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::TArray) =
         record!(x.tape, Bcast, $fn, (x, y))
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::Real) =
-        record!(x.tape, Bcast, $fn, (x, y))
+        record!(x.tape, Bcast, $fn, (x, constant(x.tape, y)))
     @eval Broadcast.broadcasted(::typeof($fn), x::Real, y::TArray) =
-        record!(x.tape, Bcast, $fn, (x, y))
+        record!(y.tape, Bcast, $fn, (constant(y.tape, x), y))
+    # we may also easily handle constant arrays,
+    # but let's see if there's actually a use case for this
 end
+
 
 for fn in (sin, cos, log, exp, abs, abs2)
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray) =

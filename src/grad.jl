@@ -1,47 +1,5 @@
 ## gradient function defintions
 
-function back!(tape::Tape)
-    # z - final variable, y - resulting variable of current op, x - dependencies of y
-    # dy - derivative of z w.r.t. y
-    z = tape[end].var
-    dy = record!(tape, Constant, 1.0)
-    # set initial derivative value
-    tape.derivs[z.id] = dy.id
-    for op in reverse(tape.ops[1:end-1])
-        if op isa Call || op isa Bcast
-            for i=1:length(op.args)
-                # backpropagate only tracked vars
-                if op.args[i] isa TAny
-                    rev_step!(op, i)
-                end
-            end
-        end
-    end
-end
-
-
-getderiv(tape::Tape, id::Int) = tape[tape.derivs[id]].var
-getderiv(tape::Tape, var::TAny) = getderiv(tape, var.id)
-setderiv!(tape::Tape, var_id::Int, grad_var_id::Int) = (tape.derivs[var_id] = grad_var_id)
-setderiv!(tape::Tape, var::TAny, grad_var::TAny) = (tape.derivs[var.id] = grad_var.id)
-
-
-function rev_step!(op::Union{Call, Bcast}, i::Int)
-    tape = op.var.tape
-    y = op.var
-    x = op.args[i]
-    dy = getderiv(tape, y)
-    dx = grad!(dy, Val(i), op)
-    if !haskey(tape.derivs, x.id)
-        setderiv!(tape, x, dx)
-    else
-        old_dx = getderiv(tape, x)
-        new_dx = record!(tape, Call, +, (dx, old_dx))
-        setderiv!(tape, x, new_dx)
-    end
-end
-
-
 ## GRAD RESULT
 
 struct GradResult
@@ -83,6 +41,48 @@ end
 
 
 ## GRAD
+
+getderiv(tape::Tape, id::Int) = tape[tape.derivs[id]].var
+getderiv(tape::Tape, var::TAny) = getderiv(tape, var.id)
+setderiv!(tape::Tape, var_id::Int, grad_var_id::Int) = (tape.derivs[var_id] = grad_var_id)
+setderiv!(tape::Tape, var::TAny, grad_var::TAny) = (tape.derivs[var.id] = grad_var.id)
+
+
+function rev_step!(op::Union{Call, Bcast}, i::Int)
+    tape = op.var.tape
+    y = op.var
+    x = op.args[i]
+    dy = getderiv(tape, y)
+    dx = grad!(dy, Val(i), op)
+    if !haskey(tape.derivs, x.id)
+        setderiv!(tape, x, dx)
+    else
+        old_dx = getderiv(tape, x)
+        new_dx = record!(tape, Call, +, (dx, old_dx))
+        setderiv!(tape, x, new_dx)
+    end
+end
+
+
+function back!(tape::Tape)
+    # z - final variable, y - resulting variable of current op, x - dependencies of y
+    # dy - derivative of z w.r.t. y
+    z = tape[end].var
+    dy = record!(tape, Constant, 1.0)
+    # set initial derivative value
+    tape.derivs[z.id] = dy.id
+    for op in reverse(tape.ops[1:end-1])
+        if op isa Call || op isa Bcast
+            for i=1:length(op.args)
+                # backpropagate only tracked vars
+                arg_op = tape[getid(op.args[i])]
+                if op.args[i] isa TAny && !isa(arg_op, Constant)
+                    rev_step!(op, i)
+                end
+            end
+        end
+    end
+end
 
 
 function make_tracked_args(tape::Tape, args...)
@@ -126,7 +126,7 @@ function grad(f::Function, args...; static=true)
             play!(tape, args...)
             return getvalue(tape[tape.resultid]), GradResult(tape)
         else
-            val, g = _grad(f, args...)            
+            val, g = _grad(f, args...)
             compile!(g.tape)
             GRAD_CACHE[f] = g.tape
             return val, g

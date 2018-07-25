@@ -22,6 +22,9 @@ end
 struct Constant <: AbstractOp
     var::TAny
 end
+constant(tape::Tape, x::TAny) = x
+constant(tape::Tape, x) = record!(tape, Constant, x)
+
 
 @inline exec!(tape::Tape, op::Constant) = op.var
 

@@ -1,30 +1,39 @@
 
-
+## *
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(*), Tuple{TReal, TReal}}) = dy * op.args[2]
 grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TReal, TReal}}) = dy * op.args[1]
 
-
+## +
 function grad!(dy::TAny, ::Val{1}, op::Call{typeof(+), Tuple{TReal, TReal}})
     x, y = op.args
     return record!(dy.tape, Assign, dy)
 end
-
 function grad!(dy::TAny, ::Val{2}, op::Call{typeof(+), Tuple{TReal, TReal}})
     x, y = op.args
     return record!(dy.tape, Assign, dy)
 end
 
-
+## -
 function grad!(dy::TAny, ::Val{1}, op::Call{typeof(-), Tuple{TReal, TReal}})
     x, y = op.args
     return record!(dy.tape, Assign, dy)
 end
-
 function grad!(dy::TAny, ::Val{2}, op::Call{typeof(-), Tuple{TReal, TReal}})
     x, y = op.args
     return record!(dy.tape, Call, -, (dy,))
 end
 
+## ^
+function grad!(dy::TAny, ::Val{1}, op::Call{typeof(^), Tuple{TReal, TReal}})
+    x, y = op.args
+    return y * x ^ (y-1) * dy
+end
+function grad!(dy::TAny, ::Val{2}, op::Call{typeof(^), Tuple{TReal, TReal}})
+    x, y = op.args
+    return log(x) * x ^ y * dy  # this seems to be broken: log of negative number is undefined
+end
+
+## single arg functions
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(sin), Tuple{TReal}}) = cos(op.args[1]) * dy
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(cos), Tuple{TReal}}) = -sin(op.args[1]) * dy
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(log), Tuple{TReal}}) = dy / op.args[1]
