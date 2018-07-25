@@ -10,8 +10,16 @@ end
 function to_expr(op::Call{typeof(*), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}
     return :(mul!($(op.var).val, $(op.args[1]).val, $(op.args[2]).val))
 end
-to_expr(op::Bcast) = :($(op.var).val .= $(op.fn).(map(getvalue, $(op.args))...))
-to_expr(op::Assign) = :($(op.var).val = $(op.var).src)
+
+function to_expr(op::Bcast)
+    if op.var.val isa AbstractArray
+        return :($(op.var).val .= $(op.fn).(map(getvalue, $(op.args))...))
+    else
+        return :($(op.var).val = $(op.fn).(map(getvalue, $(op.args))...))
+    end
+end
+# to_expr(op::Bcast) = :($(op.var).val .= $(op.fn).(map(getvalue, $(op.args))...))
+to_expr(op::Assign) = :($(op.var).val = $(op.src).val)
 to_expr(op::Constant) = :()    # constants don't change anyway
 
 
