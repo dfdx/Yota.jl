@@ -2,6 +2,8 @@
 # when overloading new functions, don't forget to import them first
 
 *(x::TArray, y::TArray) = record!(x.tape, Call, *, (x, y))
++(x::TArray{T,N}, y::TArray{T,N}) where {T,N} = record!(x.tape, Call, +, (x, y))
+-(x::TArray{T,N}, y::TArray{T,N}) where {T,N} = record!(x.tape, Call, -, (x, y))
 sum(x::TArray; dims) = record!(x.tape, Call, sum, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
 sum(x::TArray) = record!(x.tape, Call, sum, (x,))
 mean(x::TArray; dims) = record!(x.tape, Call, mean, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))

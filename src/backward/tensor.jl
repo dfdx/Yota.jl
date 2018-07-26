@@ -14,6 +14,14 @@ function grad!(dy::TAny, ::Val{2},
 end
 
 
+grad!(dy::TAny, ::Val{1}, op::Call{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
+grad!(dy::TAny, ::Val{2}, op::Call{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
+
+grad!(dy::TAny, ::Val{1}, op::Call{typeof(-), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
+grad!(dy::TAny, ::Val{2}, op::Call{typeof(-), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = -dy
+
+
+
 function grad!(dy::TAny, ::Val{1}, op::Call{typeof(sum), Tuple{TArray{T,N}}}) where {T,N}
     return record!(dy.tape, Call, sum_grad, (op.args[1], dy); kwargs=op.kwargs)
 end
