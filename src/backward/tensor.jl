@@ -1,4 +1,5 @@
 
+## *
 function grad!(dy::TAny, ::Val{1},
                op::Call{typeof(*), Tuple{TArray{T1,N1}, TArray{T2,N2}}}) where {T1,N1,T2,N2}
     x, y = op.args
@@ -13,15 +14,15 @@ function grad!(dy::TAny, ::Val{2},
     return record!(dy.tape, Call, *, (xt, dy))
 end
 
-
+## +
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
 grad!(dy::TAny, ::Val{2}, op::Call{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
 
+## -
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(-), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
 grad!(dy::TAny, ::Val{2}, op::Call{typeof(-), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = -dy
 
-
-
+## sum, mean
 function grad!(dy::TAny, ::Val{1}, op::Call{typeof(sum), Tuple{TArray{T,N}}}) where {T,N}
     return record!(dy.tape, Call, sum_grad, (op.args[1], dy); kwargs=op.kwargs)
 end
@@ -29,7 +30,7 @@ function grad!(dy::TAny, ::Val{1}, op::Call{typeof(mean), Tuple{TArray{T,N}}}) w
     return record!(dy.tape, Call, mean_grad, (op.args[1], dy); kwargs=op.kwargs)
 end
 
-
+## transpose
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(transpose), Tuple{TArray{T,N}}}) where {T,N} =
     transpose(dy)
 # TODO: .==
