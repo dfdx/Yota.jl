@@ -4,8 +4,8 @@ grad!(dy::TAny, ::Val{1}, op::Call{typeof(*), Tuple{TReal, TReal}}) = dy * op.ar
 grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TReal, TReal}}) = dy * op.args[1]
 
 ## /
-grad!(dy::TAny, ::Val{1}, op::Call{typeof(*), Tuple{TReal, TReal}}) = dy / op.args[2]
-grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TReal, TReal}}) =
+grad!(dy::TAny, ::Val{1}, op::Call{typeof(/), Tuple{TReal, TReal}}) = dy / op.args[2]
+grad!(dy::TAny, ::Val{2}, op::Call{typeof(/), Tuple{TReal, TReal}}) =
     begin x, y = op.args; -x * dy / (y * y) end
 
 ## +
