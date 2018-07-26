@@ -6,7 +6,7 @@ grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TReal, TReal}}) = dy * op.ar
 ## /
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(*), Tuple{TReal, TReal}}) = dy / op.args[2]
 grad!(dy::TAny, ::Val{2}, op::Call{typeof(*), Tuple{TReal, TReal}}) =
-    (x, y = op.args; -x * dy / (y * y))
+    begin x, y = op.args; -x * dy / (y * y) end
 
 ## +
 function grad!(dy::TAny, ::Val{1}, op::Call{typeof(+), Tuple{TReal, TReal}})
