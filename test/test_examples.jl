@@ -30,3 +30,37 @@ obj(Y, X, b) = mean((Y .- X * b) .^ 2.0) # objective to minimize
     @test loss_last < loss_first / 10   # loss reduced at least 10 times
 
 end
+
+
+mutable struct Linear2{T}
+    W::AbstractMatrix{T}
+    b::AbstractVector{T}
+end
+
+linear_loss(m::Linear2, X, y) = mean((m.W * X .+ m.b .- y) .^ 2.0)
+
+@testset "linreg 2" begin
+    
+    n_vars = 10
+    n_out = 2
+    n_obs = 1000
+    X = randn(n_vars, n_obs)
+    W_true = rand(n_out, n_vars)
+    b_true = rand(n_out)
+    ϵ = randn(n_out, n_obs) * 0.1 # noise
+    Y = W_true * X .+ b_true .+ ϵ
+
+    m = Linear2(rand(n_out, n_vars), rand(n_out))
+
+    epochs = 100
+
+    for i in 1:epochs
+        val, g = grad(linear_loss, m, X, Y; static=false)
+        # println("Epoch: $i; loss = $val")
+        update!(m, g[1], (x, gx) -> x - 0.1 * gx)
+    end
+
+    @test isapprox(m.W, W_true; atol=0.1)
+    @test isapprox(m.b, b_true; atol=0.1)
+
+end

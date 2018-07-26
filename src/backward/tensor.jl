@@ -81,3 +81,13 @@ end
 #                op::Bcast{FnType, Tuple{TArray{T1,N1}, TArray{T2,N2}}}) where {Idx,FnType,T1,N1,T2,N2}
 # ...
 # end
+
+
+## SPECIAL BROADCASTING
+
+function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(+), Tuple{TArray{T,1}, TArray{T,2}}}) where T
+    return squeeze(sum(dy; dims=2); dims=2)
+end
+function grad!(dy::Any, ::Val{2}, op::Bcast{typeof(+), Tuple{TArray{T,2}, TArray{T,1}}}) where T
+    return squeeze(sum(dy; dims=2); dims=2)
+end
