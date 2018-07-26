@@ -29,3 +29,8 @@ for fn in (sin, cos, log, exp, abs, abs2)
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray) =
         record!(x.tape, Bcast, $fn, (x,))
 end
+
+
+# catchall - might replace previous definitions
+
+Broadcast.broadcasted(fn::Fn, x::TArray{T,N}) where {Fn,T,N} = record!(x.tape, Bcast, fn, (x,))
