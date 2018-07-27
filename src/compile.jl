@@ -2,9 +2,9 @@
 
 function to_expr(op::Call)
     if op.var.val isa AbstractArray
-        return :($(op.var).val .= $(op.fn)(map(getvalue, $(op.args))...))
+        return :($(op.var).val .= $(op.fn)(map(getvalue, $(op.args))...; $(op.kwargs)...))
     else
-        return :($(op.var).val = $(op.fn)(map(getvalue, $(op.args))...))
+        return :($(op.var).val = $(op.fn)(map(getvalue, $(op.args))...; $(op.kwargs)...))
     end
 end
 function to_expr(op::Call{typeof(*), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N}

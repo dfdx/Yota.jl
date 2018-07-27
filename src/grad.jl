@@ -74,7 +74,8 @@ function back!(tape::Tape)
     for op in reverse(tape.ops[1:end-1])
         if op isa Call || op isa Bcast
             for i=1:length(op.args)
-                # backpropagate only tracked vars
+                # println("op = $op; i = $i")
+                # backpropagate only non-constant tracked vars
                 arg_op = tape[getid(op.args[i])]
                 if op.args[i] isa TAny && !isa(arg_op, Constant)
                     rev_step!(op, i)
