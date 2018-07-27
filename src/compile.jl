@@ -54,7 +54,7 @@ end
 function play!(tape::Tape, args...; use_compiled=true)
     rerecord_inputs!(tape, args...)
     if use_compiled && tape.compiled != nothing
-        tape.compiled()  # TODO: Base.invokelatest?
+        Base.invokelatest(tape.compiled)
     else
         for op in tape
             exec!(tape, op)

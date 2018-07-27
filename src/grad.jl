@@ -118,18 +118,19 @@ function _grad(f::Function, args...)
 end
 
 
-const GRAD_CACHE = Dict{Function, Tape}()
+const GRAD_CACHE = Dict{Any, Tape}()
 
 function grad(f::Function, args...; static=true)
     if static
+        cache_key = (f, map(size, args))
         if haskey(GRAD_CACHE, f)
-            tape = GRAD_CACHE[f]
+            tape = GRAD_CACHE[cache_key]
             play!(tape, args...)
             return getvalue(tape[tape.resultid]), GradResult(tape)
         else
             val, g = _grad(f, args...)
             compile!(g.tape)
-            GRAD_CACHE[f] = g.tape
+            GRAD_CACHE[cache_key] = g.tape
             return val, g
         end
     else
