@@ -122,7 +122,8 @@ const GRAD_CACHE = Dict{Any, Tape}()
 
 function grad(f::Function, args...; static=true)
     if static
-        cache_key = (f, map(size, args))
+        # key conists of function type and type of argument (for structs) or its size
+        cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
         if haskey(GRAD_CACHE, f)
             tape = GRAD_CACHE[cache_key]
             play!(tape, args...)

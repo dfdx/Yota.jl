@@ -25,6 +25,13 @@ end
 function perf_test(f; ctx=Dict(), compile_tape=true, inputs...)
     vals = ([val for (name, val) in inputs]...,)
 
+    println("Compiling derivatives using Yota")
+    @time grad(f, vals...)
+    r2 = @benchmark grad($f, $(vals)...)
+    
+    show(stdout, MIME{Symbol("text/plain")}(), r2)
+    println("\n")
+    
     println("Compiling derivatives using XGrad")
     @time df = xdiff(f; ctx=ctx, inputs...)
     mem = Dict()
@@ -33,12 +40,7 @@ function perf_test(f; ctx=Dict(), compile_tape=true, inputs...)
     show(stdout, MIME{Symbol("text/plain")}(), r1)
     println("\n")
 
-    println("Compiling derivatives using Yota")
-    @time grad(f, vals...)
-    r2 = @benchmark grad($f, $(vals)...)
     
-    show(stdout, MIME{Symbol("text/plain")}(), r2)
-    println("\n")
 end
 
 
