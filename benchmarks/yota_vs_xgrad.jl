@@ -1,4 +1,3 @@
-
 using Yota
 import Yota: TReal, TAny, record!, Call, grad!
 using XGrad
@@ -23,14 +22,7 @@ end
 # runner
 
 function perf_test(f; ctx=Dict(), compile_tape=true, inputs...)
-    vals = ([val for (name, val) in inputs]...,)
-
-    println("Compiling derivatives using Yota")
-    @time grad(f, vals...)
-    r2 = @benchmark grad($f, $(vals)...)
-    
-    show(stdout, MIME{Symbol("text/plain")}(), r2)
-    println("\n")
+    vals = ([val for (name, val) in inputs]...,)    
     
     println("Compiling derivatives using XGrad")
     @time df = xdiff(f; ctx=ctx, inputs...)
@@ -38,6 +30,13 @@ function perf_test(f; ctx=Dict(), compile_tape=true, inputs...)
     println("Testing XGrad...")
     r1 = @benchmark $df($vals...; mem=$mem)
     show(stdout, MIME{Symbol("text/plain")}(), r1)
+    println("\n")
+
+    println("Compiling derivatives using Yota")
+    @time grad(f, vals...)
+    r2 = @benchmark grad($f, $(vals)...)
+    
+    show(stdout, MIME{Symbol("text/plain")}(), r2)
     println("\n")
 
     

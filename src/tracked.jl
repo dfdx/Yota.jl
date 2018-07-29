@@ -13,8 +13,8 @@ mutable struct TReal <: Real
 end
 
 Base.show(io::IO, x::TReal) = print(io, "%$(x.id) = $(x.val)")
-tracked(tape::Tape, x::Real) =
-    TReal(tape, -1, x)
+Base.show(io::IO, ::MIME{Symbol("text/plain")}, x::TReal) = print(io, "%$(x.id)")
+tracked(tape::Tape, x::Real) = TReal(tape, -1, x)
 
 
 ## TRACKED ARRAY
@@ -29,7 +29,7 @@ end
 Base.show(io::IO, x::TArray{T,N}) where {T,N} =
     print(io, "%$(x.id) = TArray{$T,$N}(size=$(size(x.val)))")
 Base.show(io::IO, ::MIME{Symbol("text/plain")}, x::TArray{T,N}) where {T,N} =
-    print(io, "%$(x.id) = TArray{$T,$N}(size=$(size(x.val)))")
+    print(io, "%$(x.id)")
 tracked(tape::Tape, x::AbstractArray) =
     TArray(tape, -1, x)
 

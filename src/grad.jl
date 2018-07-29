@@ -124,7 +124,7 @@ function grad(f::Function, args...; static=true)
     if static
         # key conists of function type and type of argument (for structs) or its size
         cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
-        if haskey(GRAD_CACHE, f)
+        if haskey(GRAD_CACHE, cache_key)
             tape = GRAD_CACHE[cache_key]
             play!(tape, args...)
             return getvalue(tape[tape.resultid]), GradResult(tape)
