@@ -1,4 +1,3 @@
-
 using Yota
 import Yota: TReal, TAny, record!, Call, grad!
 using XGrad

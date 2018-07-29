@@ -14,16 +14,16 @@ obj(Y, X, b) = mean((Y .- X * b) .^ 2.0) # objective to minimize
     b = randn(d)    # generated coefficients
     ϵ = randn(n) * 0.1 # noise
     Y = X * b + ϵ # observed outcome
-    
+
     epochs = 100 # number of epochs
-    
-    θ = randn(d) # initialize model parameters    
+
+    θ = randn(d) # initialize model parameters
 
     loss_first, g = grad(obj, Y, X, θ)
     loss_last = loss_first
     for i in 1:epochs
         loss_last, g = grad(obj, Y, X, θ)
-        println("Epoch: $i; loss = $loss_last")        
+        # println("Epoch: $i; loss = $loss_last")
         δ = 0.01 * g[3]
         θ -= δ
     end
@@ -40,7 +40,7 @@ end
 linear_loss(m::Linear2, X, y) = mean((m.W * X .+ m.b .- y) .^ 2.0)
 
 @testset "linreg 2" begin
-    
+
     n_vars = 10
     n_out = 2
     n_obs = 1000
@@ -56,7 +56,7 @@ linear_loss(m::Linear2, X, y) = mean((m.W * X .+ m.b .- y) .^ 2.0)
 
     for i in 1:epochs
         val, g = grad(linear_loss, m, X, Y; static=false)
-        println("Epoch: $i; loss = $val")
+        # println("Epoch: $i; loss = $val")
         update!(m, g[1], (x, gx) -> x - 0.1 * gx)
     end
 
