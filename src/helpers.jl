@@ -1,18 +1,27 @@
 
-function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i...)
-    dx[[i...]] .= ds
-    return dx
-end
+# function ungetindex!(dx::AbstractArray, x::AbstractArray, dy, ti...)
+#     i = map(getvalue, ti)
+#     dx[[i...]] .= ds
+#     return dx
+# end
 
-function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i::AbstractArray{Int})
-    dx[i] .= ds
-    return dx
-end
+# function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i::AbstractArray{Int})
+#     dx[i] .= ds
+#     return dx
+# end
 
 
-function ungetindex(x::AbstractArray, ds, i...)
+# function ungetindex(x::AbstractArray, ds, i...)
+#     dx = zero(x)
+#     return ungetindex!(dx, x, ds, i...)
+# end
+
+
+
+function ungetindex(dy, x::AbstractArray, i::Real)
     dx = zero(x)
-    return ungetindex!(dx, x, ds, i...)
+    dx[i] = dy
+    return dx
 end
 
 

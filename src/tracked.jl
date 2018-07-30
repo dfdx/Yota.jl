@@ -62,6 +62,8 @@ tracked(tape::Tape, x::AbstractArray) =
 
 const TAny = Union{TReal, TArray}
 tracked(x::TAny) = x
+Base.zero(x::TAny) = tracked(x.tape, zero(x.val))
+Base.one(x::TAny) = tracked(x.tape, one(x.val))
 
 getvalue(x::TAny) = x.val
 getvalue(x) = x

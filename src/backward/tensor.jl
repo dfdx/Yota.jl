@@ -37,6 +37,12 @@ grad!(dy::TAny, ::Val{1}, op::Call{typeof(transpose), Tuple{TArray{T,N}}}) where
 # TODO: minimum, maximum
 
 
+## getindex
+grad!(dy::TAny, ::Val{1}, op::Call{typeof(getindex), Tuple{TArray{T,N}, TReal}}) where {T,N} =
+    ungetindex(dy, op.args[1], op.args[2])
+grad!(dy::TAny, ::Val{2}, op::Call{typeof(getindex), Tuple{TArray{T,N}, TReal}}) where {T,N} =
+    record!(dy.tape, Constant, 0)
+
 
 ## BROADCASTING
 

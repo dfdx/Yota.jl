@@ -13,6 +13,8 @@ transpose(x::TArray) = record!(x.tape, Call, transpose, (x,))
 minimum(x::TArray) = record!(x.tape, Call, minimum, (x,))
 maximum(x::TArray) = record!(x.tape, Call, maximum, (x,))
 getindex(x::TArray, i...) = record!(x.tape, Call, getindex, (x, i...))
+setindex!(x::TArray, v::Real, i::Real) =
+    record!(x.tape, Call, setindex!, (x, constant(x.tape, v), constant(x.tape, i)))
 reshape(x::TArray, dims::Vararg{Int64,N}) where N = record!(x.tape, Call, reshape, (x, dims))
 
 for fn in (*, /, +, -, ^)
