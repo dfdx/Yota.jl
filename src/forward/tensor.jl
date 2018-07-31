@@ -13,8 +13,14 @@ transpose(x::TArray) = record!(x.tape, Call, transpose, (x,))
 minimum(x::TArray) = record!(x.tape, Call, minimum, (x,))
 maximum(x::TArray) = record!(x.tape, Call, maximum, (x,))
 getindex(x::TArray, i...) = record!(x.tape, Call, getindex, (x, i...))
-setindex!(x::TArray, v::Real, i::Real) =
-    record!(x.tape, Call, setindex!, (x, constant(x.tape, v), constant(x.tape, i)))
+# I'm not really sure we should write setindex! to the tape since it isn't proper op
+# and can be removed as unused op
+# setindex!(x::TArray, v::Real, I::Vararg{<:Real}) =
+#     record!(x.tape, Call, setindex!, (x, constant(x.tape, v), [constant(x.tape, i) for i in I]...))
+ungetindex(dy::TAny, x::TArray, i::Real) =
+    record!(x.tape, Call, ungetindex, (dy, x, constant(x.tape, i)))
+ungetindex(dy::TAny, x::TArray, i::Real, j::Real) =
+    record!(x.tape, Call, ungetindex, (dy, x, constant(x.tape, i), constant(x.tape, j)))
 reshape(x::TArray, dims::Vararg{Int64,N}) where N = record!(x.tape, Call, reshape, (x, dims))
 
 for fn in (*, /, +, -, ^)
