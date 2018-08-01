@@ -106,3 +106,17 @@ end
 function grad!(dy::Any, ::Val{2}, op::Bcast{typeof(+), Tuple{TArray{T,2}, TArray{T,1}}}) where T
     return squeeze(sum(dy; dims=2); dims=2)
 end
+
+function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(+), Tuple{TReal, TArray{T,N}}}) where {T,N}
+    return sum(dy)
+end
+function grad!(dy::Any, ::Val{2}, op::Bcast{typeof(+), Tuple{TArray{T,N}, TReal}}) where {T,N}
+    return sum(dy)
+end
+
+function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(-), Tuple{TReal, TArray{T,N}}}) where {T,N}
+    return sum(dy)
+end
+function grad!(dy::Any, ::Val{2}, op::Bcast{typeof(-), Tuple{TArray{T,N}, TReal}}) where {T,N}
+    return -sum(dy)
+end

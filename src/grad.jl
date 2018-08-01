@@ -104,6 +104,22 @@ function make_tracked_args(tape::Tape, args...)
 end
 
 
+"""
+For each input that has a derivative on this tape check if the derivative
+has the same size as the input.
+"""
+function check_deriv_sizes(tape::Tape)
+    for (var_id, grad_var_id) in tape.derivs
+        var_size = size(getvalue(tape[var_id]))
+        grad_var_size = size(getvalue(tape[grad_var_id]))
+        if  var_size != grad_var_size
+            @warn "Gradient %$grad_var_id has size $grad_var_size, " *
+                "but original variable %$var_id has size $var_size"
+        end
+    end
+end
+
+
 function _grad(f::Function, args...)
     tape = Tape()
     # wrap args into tracked data
@@ -113,6 +129,8 @@ function _grad(f::Function, args...)
     tape.resultid = getid(tres)
     # backpropagate gradients
     back!(tape)
+    # consistency check
+    check_deriv_sizes(tape)
     # construct GradResult object that wraps tape and provide accessors for computed derivatives
     return tres.val, GradResult(tape)
 end
@@ -120,6 +138,26 @@ end
 
 const GRAD_CACHE = Dict{Any, Tape}()
 
+
+"""
+Find gradient of `f` w.r.t. its arguments.
+Example:
+
+    val, g = grad(sum, rand(3))
+
+where:
+  - val is the value of `f` at this point
+  - g::GradResult is a collection of gradients
+
+GradResult is indexed by argument index and contains gradients
+in a format most suitable for that argument, namely:
+
+  - for arrays: arrays of the same type and size
+  - for reals: reals
+  - for mutable structs: dictionary of {(:field, :path) => value} pairs.
+
+All gradients can be applied to original variables using `update!()` function.
+"""
 function grad(f::Function, args...; static=true)
     if static
         # key conists of function type and type of argument (for structs) or its size
