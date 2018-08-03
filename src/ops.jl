@@ -143,6 +143,9 @@ setvar!(op::AbstractOp, var::TAny) = (op.var = var)
 getvalue(op::AbstractOp) = op |> getvar |> getvalue
 setvalue!(op::AbstractOp, val) = setvalue!(getvar(op), val) 
 
+@inline Base.getproperty(op::AbstractOp, name::Symbol) = _getproperty(op::AbstractOp, Val(name))
+@inline _getproperty(x::AbstractOp, ::Val{F}) where F = getfield(x, F)
+@inline _getproperty(x::AbstractOp, ::Val{:val}) = getvalue(x)
 
 ## mutable structs: writing all trackable fields to the tape
 

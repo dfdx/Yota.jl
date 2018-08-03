@@ -68,7 +68,8 @@ function back!(tape::Tape)
     # z - final variable, y - resulting variable of current op, x - dependencies of y
     # dy - derivative of z w.r.t. y
     z = tape[end].var
-    dy = record!(tape, Constant, 1.0)
+    # using Float32 for seed since for 64-bit args it will be expanded anyway
+    dy = record!(tape, Constant, 1.0f0)
     # set initial derivative value
     tape.derivs[z.id] = dy.id
     for op in reverse(tape.ops[1:end-1])

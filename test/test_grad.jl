@@ -1,3 +1,24 @@
+
+sum_bcast(x, y) = sum(x .+ y)
+
+@testset "special bcast" begin
+    for args in [
+        (rand(3, 4), rand(3)),
+        (rand(3, 4), rand(3, 1)),
+        (rand(3, 4), rand(1, 4)),
+        (rand(3), rand(3, 4)),
+        (rand(3, 1), rand(3, 4)),
+        (rand(1, 4), rand(3, 4)),
+    ]
+        val, g = grad(sum_bcast, args...; static=false)
+        for i=1:length(args)
+            @test size(g[i]) == size(args[i])
+        end
+    end
+end
+
+
+
 mutable struct Linear{T}
     W::AbstractArray{T,2}
     b::AbstractArray{T}
@@ -6,7 +27,6 @@ end
 forward(m::Linear, X) = m.W * X
 
 loss(m::Linear, X) = sum(forward(m, X))
-
 
 @testset "grad: structs" begin
 

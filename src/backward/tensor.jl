@@ -57,9 +57,9 @@ function merge_bcast_as_call!(tape::Tape, minitape::Tape, collect_from::Int, var
             tape_args = map(x -> tape[var_st[x.id]].var, op.args)
             var = record!(tape, Bcast, op.fn, tape_args)
         elseif op isa Constant
-            # TODO: replace var and args in op if it makes sense for the op
             var = record!(tape, Constant, op.var.val)
-        elseif op isa Assign            
+        elseif op isa Assign
+            # TODO: sometimes src size and dest size are different, e.g. in rand(3,4) .+ rand(3)
             src_id_in_tape = var_st[op.src.id]
             var = record!(tape, Assign, tape[src_id_in_tape].var)
         else
@@ -100,10 +100,48 @@ end
 
 ## SPECIAL BROADCASTING
 
-function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(+), Tuple{TArray{T,1}, TArray{T,2}}}) where T
+# handle the case of e.g. rand(3, 4) .+ rand(3, 1)
+function grad!(dy::Any, ::Val{1},
+               op::Bcast{typeof(+), Tuple{TArray{T1,2}, TArray{T2,2}}}) where {T1,T2}
+    x, y = op.args
+    xsz = size(x.val)
+    ysz = size(y.val)
+    if xsz == ysz
+         return record!(dy.tape, Assign, dy)
+    else
+        if xsz[1] == 1 && ysz[1] != 1
+            return sum(dy; dims=1)
+        elseif xsz[2] == 1 && ysz[2] != 1
+            return sum(dy; dims=2)
+        else
+            return record!(dy.tape, Assign, dy)
+        end
+    end
+end
+function grad!(dy::Any, ::Val{2},
+               op::Bcast{typeof(+), Tuple{TArray{T1,2}, TArray{T2,2}}}) where {T1,T2}
+    x, y = op.args
+    xsz = size(x.val)
+    ysz = size(y.val)
+    if xsz == ysz
+         return record!(dy.tape, Assign, dy)
+    else
+        if xsz[1] != 1 && ysz[1] == 1
+            return sum(dy; dims=1)
+        elseif xsz[2] != 1 && ysz[2] == 1
+            return sum(dy; dims=2)
+        else
+            return record!(dy.tape, Assign, dy)
+        end
+    end
+end
+
+function grad!(dy::Any, ::Val{1},
+               op::Bcast{typeof(+), Tuple{TArray{T1,1}, TArray{T2,2}}}) where {T1,T2}
     return squeeze(sum(dy; dims=2); dims=2)
 end
-function grad!(dy::Any, ::Val{2}, op::Bcast{typeof(+), Tuple{TArray{T,2}, TArray{T,1}}}) where T
+function grad!(dy::Any, ::Val{2},
+               op::Bcast{typeof(+), Tuple{TArray{T1,2}, TArray{T2,1}}}) where {T1,T2}
     return squeeze(sum(dy; dims=2); dims=2)
 end
 
