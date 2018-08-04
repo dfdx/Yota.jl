@@ -1,5 +1,5 @@
 import Base: *, /, +, -, ^, sin, cos, exp, log, abs, abs2, sign, tanh, sqrt
-import Base: sum, squeeze, transpose, minimum, maximum, getindex, setindex!, reshape
+import Base: sum, dropdims, transpose, minimum, maximum, getindex, setindex!, reshape
 import LinearAlgebra: mul!
 import Statistics: mean
 import Espresso: ExGraph, ExNode, rewrite_all

@@ -138,11 +138,11 @@ end
 
 function grad!(dy::Any, ::Val{1},
                op::Bcast{typeof(+), Tuple{TArray{T1,1}, TArray{T2,2}}}) where {T1,T2}
-    return squeeze(sum(dy; dims=2); dims=2)
+    return dropdims(sum(dy; dims=2); dims=2)
 end
 function grad!(dy::Any, ::Val{2},
                op::Bcast{typeof(+), Tuple{TArray{T1,2}, TArray{T2,1}}}) where {T1,T2}
-    return squeeze(sum(dy; dims=2); dims=2)
+    return dropdims(sum(dy; dims=2); dims=2)
 end
 
 function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(+), Tuple{TReal, TArray{T,N}}}) where {T,N}

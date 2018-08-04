@@ -8,7 +8,7 @@ sum(x::TArray; dims) = record!(x.tape, Call, sum, (x,); kwargs=Dict{Symbol,Any}(
 sum(x::TArray) = record!(x.tape, Call, sum, (x,))
 mean(x::TArray; dims) = record!(x.tape, Call, mean, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
 mean(x::TArray) = record!(x.tape, Call, mean, (x,))
-squeeze(x::TArray; dims) = record!(x.tape, Call, squeeze, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
+dropdims(x::TArray; dims) = record!(x.tape, Call, dropdims, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
 transpose(x::TArray) = record!(x.tape, Call, transpose, (x,))
 minimum(x::TArray) = record!(x.tape, Call, minimum, (x,))
 maximum(x::TArray) = record!(x.tape, Call, maximum, (x,))

@@ -7,7 +7,7 @@ obj(Y, X, b) = mean((Y .- X * b) .^ 2.0) # objective to minimize
 # modified example from GradDescent.jl documentation
 @testset "linreg" begin
 
-    srand(1) # set seed
+    Random.seed!(1) # set seed
     n = 1000 # number of observations
     d = 10   # number of covariates
     X = randn(n, d) # simulated covariates
