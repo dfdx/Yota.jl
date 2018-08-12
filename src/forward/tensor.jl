@@ -23,7 +23,7 @@ ungetindex(dy::TAny, x::TArray, i::Real, j::Real) =
     record!(x.tape, Call, ungetindex, (dy, x, constant(x.tape, i), constant(x.tape, j)))
 reshape(x::TArray, dims::Vararg{Int64,N}) where N = record!(x.tape, Call, reshape, (x, dims))
 
-for fn in (*, /, +, -, ^)
+for fn in (*, /, +, -)
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::TArray) =
         record!(x.tape, Bcast, $fn, (x, y))
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::Real) =
@@ -35,9 +35,35 @@ for fn in (*, /, +, -, ^)
 end
 
 
-for fn in (sin, cos, log, exp, abs, abs2)
+for fn in (sin, cos, abs, abs2)
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray) =
         record!(x.tape, Bcast, $fn, (x,))
+end
+
+# functions that require special treatment with CuArrays
+for fn in (Base.log, Base.exp, Base.sqrt)
+    @eval function Broadcast.broadcasted(::typeof($fn), x::TArray)
+        if is_cuarray(x.val)            
+            record!(x.tape, Bcast, cuda_op($fn), (x,))
+        else
+            record!(x.tape, Bcast, $fn, (x,))
+        end
+    end
+end
+
+
+# another CuArrays special case: ^
+function Broadcast.broadcasted(::typeof(^), x::TArray, y::TArray)
+    op = is_cuarray(x.val) ? cuda_op(^) : ^    
+    record!(x.tape, Bcast, op, (x, y))
+end
+function Broadcast.broadcasted(::typeof(^), x::TArray, y::Real)
+    op = is_cuarray(x.val) ? cuda_op(^) : ^    
+    record!(x.tape, Bcast, op, (x, constant(x.tape, y)))
+end
+function Broadcast.broadcasted(::typeof(^), x::Real, y::TArray)
+    op = is_cuarray(x.val) ? cuda_op(^) : ^    
+    record!(x.tape, Bcast, op, (constant(y.tape, x), y))
 end
 
 
