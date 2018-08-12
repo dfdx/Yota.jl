@@ -11,7 +11,7 @@ end
 ^(x::TReal, p::Integer) = record!(x.tape, Call, ^, (x, constant(x.tape, p)))
 -(x::TReal) = record!(x.tape, Call, -, (x,))
 
-for fn in (sin, cos, log, exp, abs, abs2, sign, tanh, sqrt)
+for fn in (sin, cos, Base.log, Base.exp, abs, abs2, sign, tanh, Base.sqrt)
     fns = Symbol(fn)
     @eval $fns(x::TReal) = record!(x.tape, Call, $fn, (x,))
 end

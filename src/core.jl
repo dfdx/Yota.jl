@@ -4,6 +4,7 @@ import LinearAlgebra: mul!
 import Statistics: mean
 import Espresso: ExGraph, ExNode, rewrite_all
 import Espresso
+using Requires
 
 include("fwddecl.jl")
 include("utils.jl")

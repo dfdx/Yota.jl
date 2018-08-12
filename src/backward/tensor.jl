@@ -158,3 +158,26 @@ end
 function grad!(dy::Any, ::Val{2}, op::Bcast{typeof(-), Tuple{TArray{T,N}, TReal}}) where {T,N}
     return -sum(dy)
 end
+
+
+@require CuArrays="3a865a2d-5b23-5a0f-bc46-62713ec82fae" begin
+    import CUDAnative
+
+    function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(CUDAnative.exp),
+                                                Tuple{TArray{T,N}}}) where {T,N}
+        w = record!(dy.tape, Bcast, CUDAnative.exp, (op.args[1],))
+        return record!(dy.tape, Bcast, *, (w,))
+    end
+
+    function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(CUDAnative.log),
+                                                Tuple{TArray{T,N}}}) where {T,N}
+        return record(dy.tape, Bcast, /, (op.args[1]))
+    end
+
+    function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(CUDAnative.sqrt),
+                                                Tuple{TArray{T,N}}}) where {T,N}
+        w = record!(dy.tape, Bcast, CUDAnative.pow, op.args[1], constant(dy.tape, -0.5))
+        return 0.5 .* w .* dy
+    end
+
+end

@@ -64,9 +64,6 @@ end
 Main part of generated function code
 """
 function generate_body(tape::Tape)
-    # ex = to_expr(tape)
-    # inputs = [Symbol("%$id") => getvalue(op) for (id, op) in enumerate(tape) if op isa Input]
-    # exg = ExGraph(ex; inputs...)
     ret_var_ids = vcat(values(tape.derivs) |> collect, [tape.resultid])
     ret_var_names = [Symbol("%$id") for id in ret_var_ids]
     exg = to_exgraph(tape)
