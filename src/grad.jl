@@ -91,11 +91,7 @@ function make_tracked_args(tape::Tape, args...)
     targs = []
     for (argid, arg) in enumerate(args)
         if isstruct(arg)
-            # we'd like to avoid deepcopy, but it's not clear yet how to make shallow one
-            # note: shallow copy will also require changes in record_struct!
-            arg = deepcopy(arg)
-            record_struct!(tape, arg, argid)
-            targ = arg  # we use the same (copy of) struct, but all fields are rewritten
+            targ = record_struct!(tape, arg, argid)
         else
             targ = record!(tape, Input, arg; argid=argid)
         end
