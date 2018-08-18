@@ -65,6 +65,9 @@ tracked(x::TAny) = x
 Base.zero(x::TAny) = tracked(x.tape, zero(x.val))
 Base.one(x::TAny) = tracked(x.tape, one(x.val))
 
+Base.size(x::TAny) = size(x.val)
+Base.length(x::TAny) = length(x.val)
+
 getvalue(x::TAny) = x.val
 getvalue(x) = x
 setvalue!(x::TAny, val) = (x.val = val)
