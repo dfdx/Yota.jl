@@ -4,10 +4,14 @@
 *(x::TArray, y::TArray) = record!(x.tape, Call, *, (x, y))
 +(x::TArray{T,N}, y::TArray{T,N}) where {T,N} = record!(x.tape, Call, +, (x, y))
 -(x::TArray{T,N}, y::TArray{T,N}) where {T,N} = record!(x.tape, Call, -, (x, y))
-sum(x::TArray; dims) = record!(x.tape, Call, sum, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
-sum(x::TArray) = record!(x.tape, Call, sum, (x,))
-mean(x::TArray; dims) = record!(x.tape, Call, mean, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
-mean(x::TArray) = record!(x.tape, Call, mean, (x,))
+sum(x::TArray, dims) = record!(x.tape, Call, sum, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
+sum(x::TArray; dims=nothing) = (dims == nothing ? record!(x.tape, Call, sum, (x,)) :
+                                record!(x.tape, Call, sum, (x,);
+                                        kwargs=Dict{Symbol,Any}(:dims=>dims)))
+mean(x::TArray, dims) = record!(x.tape, Call, mean, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
+mean(x::TArray; dims=nothing) = (dims == nothing ? record!(x.tape, Call, mean, (x,)) :
+                                record!(x.tape, Call, mean, (x,);
+                                        kwargs=Dict{Symbol,Any}(:dims=>dims)))
 dropdims(x::TArray; dims) = record!(x.tape, Call, dropdims, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
 transpose(x::TArray) = record!(x.tape, Call, transpose, (x,))
 minimum(x::TArray) = record!(x.tape, Call, minimum, (x,))
@@ -43,7 +47,7 @@ end
 # functions that require special treatment with CuArrays
 for fn in (Base.log, Base.exp, Base.sqrt)
     @eval function Broadcast.broadcasted(::typeof($fn), x::TArray)
-        if is_cuarray(x.val)            
+        if is_cuarray(x.val)
             record!(x.tape, Bcast, cuda_op($fn), (x,))
         else
             record!(x.tape, Bcast, $fn, (x,))
@@ -54,15 +58,15 @@ end
 
 # another CuArrays special case: ^
 function Broadcast.broadcasted(::typeof(^), x::TArray, y::TArray)
-    op = is_cuarray(x.val) ? cuda_op(^) : ^    
+    op = is_cuarray(x.val) ? cuda_op(^) : ^
     record!(x.tape, Bcast, op, (x, y))
 end
 function Broadcast.broadcasted(::typeof(^), x::TArray, y::Real)
-    op = is_cuarray(x.val) ? cuda_op(^) : ^    
+    op = is_cuarray(x.val) ? cuda_op(^) : (^)
     record!(x.tape, Bcast, op, (x, constant(x.tape, y)))
 end
 function Broadcast.broadcasted(::typeof(^), x::Real, y::TArray)
-    op = is_cuarray(x.val) ? cuda_op(^) : ^    
+    op = is_cuarray(x.val) ? cuda_op(^) : ^
     record!(x.tape, Bcast, op, (constant(y.tape, x), y))
 end
 

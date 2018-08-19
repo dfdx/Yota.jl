@@ -48,5 +48,5 @@ grad!(dy::TAny, ::Val{1}, op::Call{typeof(abs), Tuple{TReal}}) = sign(op.args[1]
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(abs2), Tuple{TReal}}) = 2 * op.args[1] * dy
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(sign), Tuple{TReal}}) = 0
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(tanh), Tuple{TReal}}) =
-    (x = op.args[1]; t = tanh(x); (1.0 - t * t)  * dy)
+    (x = op.args[1]; t = tanh(x); (1.0f0 - t * t)  * dy)
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(sqrt), Tuple{TReal}}) = 0.5 * op.args[1] ^ (-0.5) * dy

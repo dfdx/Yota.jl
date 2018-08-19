@@ -94,6 +94,7 @@ end
 
 function record!(tape::Tape, ::Type{Bcast}, fn::Fn, args::ARGS) where {Fn, ARGS<:Tuple}
     arg_vals = map(getvalue, args)
+    # println("**** $(fn). | $(map(typeof, arg_vals)) | $(map(size, arg_vals))")
     val = fn.(arg_vals...)
     var = tracked(tape, val)
     op = Bcast(var, fn, args)

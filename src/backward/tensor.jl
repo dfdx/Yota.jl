@@ -59,7 +59,8 @@ function merge_bcast_as_call!(tape::Tape, minitape::Tape, collect_from::Int, var
         elseif op isa Constant
             var = record!(tape, Constant, op.var.val)
         elseif op isa Assign
-            # TODO: sometimes src size and dest size are different, e.g. in rand(3,4) .+ rand(3)
+            # sometimes src size and dest size are different, e.g. in rand(3,4) .+ rand(3)
+            # but we handle it in specific methods of grad!
             src_id_in_tape = var_st[op.src.id]
             var = record!(tape, Assign, tape[src_id_in_tape].var)
         else
@@ -171,13 +172,24 @@ end
 
     function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(CUDAnative.log),
                                                 Tuple{TArray{T,N}}}) where {T,N}
-        return record(dy.tape, Bcast, /, (op.args[1]))
+        return record!(dy.tape, Bcast, /, (dy, op.args[1],))
     end
 
     function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(CUDAnative.sqrt),
                                                 Tuple{TArray{T,N}}}) where {T,N}
-        w = record!(dy.tape, Bcast, CUDAnative.pow, op.args[1], constant(dy.tape, -0.5))
+        # 0.5 .* x .^ (-0.5) .* dy
+        w = record!(dy.tape, Bcast, CUDAnative.pow, (op.args[1], constant(dy.tape, -0.5)))
         return 0.5 .* w .* dy
+    end
+
+    function grad!(dy::Any, ::Val{1}, op::Bcast{typeof(CUDAnative.pow),
+                                                Tuple{TArray{T,N}, R}}) where {T,N,R<:Real}
+        # y .* x .^ (y-1) .* dy
+        x, y = op.args
+        w1 = record!(dy.tape, Bcast, CUDAnative.pow, (x, y-1.0f0))
+        w2 = record!(dy.tape, Bcast, *, (y, w1))
+        w3 = record!(dy.tape, Bcast, *, (w2, dy))
+        return w3
     end
 
 end
