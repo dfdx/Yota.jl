@@ -1,5 +1,6 @@
 @testset "tracked: accessors" begin
 
+    # TODO: move to properties
     tape = Tape()
     r = rand()
     tr = tracked(tape, r)
@@ -39,4 +40,12 @@ end
     @test getvalue(z) == xv * yv .+ 1.0
     @test length(tape) == 3
 
+    # tracked * untracked
+    tape = Tape()
+    x = tracked(tape, rand(3,3))
+    y = rand(3,3)
+    z = x * y
+    @test length(tape) == 2
+    @test z.val == x.val * y
+    
 end

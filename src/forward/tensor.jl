@@ -1,9 +1,31 @@
 
 # when overloading new functions, don't forget to import them first
 
-*(x::TArray, y::TArray) = record!(x.tape, Call, *, (x, y))
+# *
+for (N1, N2) in [(1, 2), (2, 1), (2, 2)]
+    @eval *(x::TArray{T1,$N1}, y::TArray{T2,$N2}) where {T1,T2} =
+        record!(x.tape, Call, *, (x, y))
+    @eval *(x::TArray{T1, $N1}, y::AbstractArray{T2, $N2}) where {T1, T2} =
+        record!(x.tape, Call, *, (x, constant(x.tape, y)))
+    @eval *(x::AbstractArray{T1, $N1}, y::TArray{T2, $N2}) where {T1, T2} =
+        record!(y.tape, Call, *, (constant(y.tape, x), y))
+end
+
+# +
 +(x::TArray{T,N}, y::TArray{T,N}) where {T,N} = record!(x.tape, Call, +, (x, y))
++(x::TArray{T1, N}, y::AbstractArray{T2, N}) where {T1, T2, N} =
+    record!(x.tape, Call, +, (x, constant(x.tape, y)))
++(x::AbstractArray{T1, N}, y::TArray{T2, N}) where {T1, T2, N} =
+    record!(y.tape, Call, +, (constant(y.tape, x), y))
+
+# -
 -(x::TArray{T,N}, y::TArray{T,N}) where {T,N} = record!(x.tape, Call, -, (x, y))
+-(x::TArray{T1, N}, y::AbstractArray{T2, N}) where {T1, T2, N} =
+    record!(x.tape, Call, -, (x, constant(x.tape, y)))
+-(x::AbstractArray{T1, N}, y::TArray{T2, N}) where {T1, T2, N} =
+    record!(y.tape, Call, -, (constant(y.tape, x), y))
+
+
 sum(x::TArray, dims) = record!(x.tape, Call, sum, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
 sum(x::TArray; dims=nothing) = (dims == nothing ? record!(x.tape, Call, sum, (x,)) :
                                 record!(x.tape, Call, sum, (x,);

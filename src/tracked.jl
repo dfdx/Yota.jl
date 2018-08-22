@@ -48,14 +48,20 @@ tracked(tape::Tape, x::AbstractArray) =
 # Base.convert(::Type{R}, x::TReal) where {R <: Real} = x.val
 
 
-# Base.promote_rule(::Type{TArray}, ::Type{<:AbstractArray}) = TArray
-# function Base.convert(::Type{TArray}, x::A) where {A <: AbstractArray}
-#     var = genname()
-#     g = get_default_graph()
-#     push!(g, ExNode{:constant}(var, x; val=x))
-#     return TArray(g, var, x)
+Base.promote_rule(::Type{TArray}, ::Type{<:AbstractArray}) = (println("promote_rule"); TArray)
+function Base.convert(::Type{TArray}, x::A) where {A <: AbstractArray}
+    println("calling convert")
+end
+Base.convert(::Type{TArray}, x::TArray) = x
+
+
+# ## PROMOTE
+
+# Base.promote(x::TArray, y::Array) = begin
+#     println("calling promote")
+#     (x, constant(x.tape, y))
 # end
-# Base.convert(::Type{TArray}, x::TArray) = x
+
 
 
 ## OTHER TYPES AND UTILS
