@@ -36,6 +36,8 @@ mean(x::TArray; dims=nothing) = (dims == nothing ? record!(x.tape, Call, mean, (
                                         kwargs=Dict{Symbol,Any}(:dims=>dims)))
 dropdims(x::TArray; dims) = record!(x.tape, Call, dropdims, (x,); kwargs=Dict{Symbol,Any}(:dims=>dims))
 transpose(x::TArray) = record!(x.tape, Call, transpose, (x,))
+# is it correct to replace x' with transpose(x)? please ping me if you believe it's wrong
+adjoint(x::TArray) = record!(x.tape, Call, transpose, (x,))
 minimum(x::TArray) = record!(x.tape, Call, minimum, (x,))
 maximum(x::TArray) = record!(x.tape, Call, maximum, (x,))
 getindex(x::TArray, i...) = record!(x.tape, Call, getindex, (x, i...))
