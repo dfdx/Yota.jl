@@ -40,11 +40,24 @@ end
 
 ## CODE GENERATION
 
-const INPLACE_RULES = [
-    :(Z = $*($transpose(X), Y)) => :($mul!(Z, $transpose(X), Y)),
-    :(Z = $*(X, $transpose(Y))) => :($mul!(Z, X, $transpose(Y))),
-    :(Z = $*(X, Y)) => :($mul!(Z, X, Y)),
-]
+"""
+Rewrite :(Z = X * Y) into :(mul!(Z, X, Y)),  but only if X and Y are arrays
+"""
+function rewrite_mul(tape::Tape, ex::Expr)
+    @assert ex.head == :block
+    new_ex = Expr(:block)
+    for subex in ex.args
+        if (matchingex(:(_R = $*(_X, _Y)), subex)
+            && tape[subex.args[1]].val isa AbstractArray
+            && all(tape[subex.args[2].args[i]].val isa AbstractArray for i=2:3))
+            new_subex = rewrite(subex, :(_Z = $*(_X, _Y)), :($mul!(_Z, _X, _Y)))
+            push!(new_ex.args, new_subex)
+        else
+            push!(new_ex.args, subex)
+        end
+    end
+    return new_ex
+end
 
 
 """
@@ -71,7 +84,8 @@ function generate_body(tape::Tape)
     exg = Espresso.fuse_assigned(exg; outvars=ret_var_names)
     exg = Espresso.eliminate_common(exg)
     ex = Espresso.to_expr_kw(exg)
-    ex = rewrite_all(ex, INPLACE_RULES; phs=Set([:X, :Y, :Z]))
+    # ex = rewrite_all(ex, INPLACE_RULES; phs=Set([:X, :Y, :Z]))
+    ex = rewrite_mul(tape, ex)
     return ex
 end
 

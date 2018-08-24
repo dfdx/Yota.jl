@@ -23,7 +23,10 @@ function Base.show(io::IO, tape::Tape)
     end
 end
 
-Base.getindex(tape::Tape, i...) = getindex(tape.ops, i...)
+Base.getindex(tape::Tape, i::Integer...) = getindex(tape.ops, i...)
+Base.getindex(tape::Tape, i::String...) =
+    getindex(tape.ops, [parse(Int, s[2:end]) for s in i]...)
+Base.getindex(tape::Tape, i::Symbol...) = getindex(tape, map(string, i)...)
 Base.lastindex(tape::Tape) = lastindex(tape.ops)
 Base.length(tape::Tape) = length(tape.ops)
 Base.iterate(tape::Tape) = iterate(tape.ops)

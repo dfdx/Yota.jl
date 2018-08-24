@@ -41,6 +41,8 @@ loss(m::Linear, X) = sum(forward(m, X))
     
 end
 
+HESS = randn(3,3)
+hessian_fun(x) = x'*(HESS*x)
 
 @testset "grad: compiled" begin
 
@@ -64,6 +66,13 @@ end
     last_val2 = getvalue(tape[end])
 
     @test last_val1 == last_val2
+
+    # (* -> mul!) for mixed array-scalar vars    
+    x = rand(3)
+    val1, g1 = grad(hessian_fun, x)  # interpreted
+    val2, g2 = grad(hessian_fun, x)  # compiled
+    @test val1 == val2
+    @test g1[1] == g2[1]
     
 end
 
