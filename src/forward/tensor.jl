@@ -51,13 +51,26 @@ ungetindex(dy::TAny, x::TArray, i::Real, j::Real) =
     record!(x.tape, Call, ungetindex, (dy, x, constant(x.tape, i), constant(x.tape, j)))
 reshape(x::TArray, dims::Vararg{Int64,N}) where N = record!(x.tape, Call, reshape, (x, dims))
 
-for fn in (*, /, +, -)
+for fn in (+, -)
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::TArray) =
         record!(x.tape, Bcast, $fn, (x, y))
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::Real) =
         record!(x.tape, Bcast, $fn, (x, constant(x.tape, y)))
     @eval Broadcast.broadcasted(::typeof($fn), x::Real, y::TArray) =
         record!(y.tape, Bcast, $fn, (constant(y.tape, x), y))
+    # we may also easily handle constant arrays,
+    # but let's see if there's actually a use case for this
+end
+
+for fn in (*, /)
+    @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::TArray) =
+        record!(x.tape, Bcast, $fn, (x, y))
+    # Julia automatically translates `a * x`, where a::Real and x::AbstractArray, into `a .* x`
+    # but if write it as Bcast, it breaks Transpose and Adjoint
+    @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::Real) =
+        record!(x.tape, Call, $fn, (x, constant(x.tape, y)))
+    @eval Broadcast.broadcasted(::typeof($fn), x::Real, y::TArray) =
+        record!(y.tape, Call, $fn, (constant(y.tape, x), y))
     # we may also easily handle constant arrays,
     # but let's see if there's actually a use case for this
 end

@@ -1,4 +1,4 @@
-@testset "tape: record ops" begin
+@testset "tape: record" begin
 
     tape = Tape()
     xv = rand(3,4)
@@ -18,7 +18,7 @@
 end
 
 
-@testset "tape: overloaded ops" begin
+@testset "tape: ops" begin
 
     tape = Tape()
     xv = rand(3,4)

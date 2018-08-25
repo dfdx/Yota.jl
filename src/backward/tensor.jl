@@ -14,6 +14,31 @@ function grad!(dy::TAny, ::Val{2},
     return record!(dy.tape, Call, *, (xt, dy))
 end
 
+## * with scalars
+function grad!(dy::TAny, ::Val{1},
+               op::Call{typeof(*), Tuple{TReal, TArray{T,N}}}) where {T,N}
+    x, y = op.args
+    return sum(y .* dy)
+end
+function grad!(dy::TAny, ::Val{2},
+               op::Call{typeof(*), Tuple{TReal, TArray{T,N}}}) where {T,N}
+    x, y = op.args
+    return x .* dy
+end
+
+function grad!(dy::TAny, ::Val{1},
+               op::Call{typeof(*), Tuple{TArray{T,N}, TReal}}) where {T,N}
+    x, y = op.args
+    return y .* dy
+end
+function grad!(dy::TAny, ::Val{2},
+               op::Call{typeof(*), Tuple{TArray{T,N}, TReal}}) where {T,N}
+    x, y = op.args
+    return sum(x .* dy)
+end
+
+
+
 ## +
 grad!(dy::TAny, ::Val{1}, op::Call{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
 grad!(dy::TAny, ::Val{2}, op::Call{typeof(+), Tuple{TArray{T,N}, TArray{T,N}}}) where {T,N} = dy
