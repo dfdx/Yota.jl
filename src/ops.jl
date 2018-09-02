@@ -59,7 +59,7 @@ end
 function record!(tape::Tape, ::Type{Call}, fn::Fn, args::ARGS;
                  kwargs=Dict{Symbol,Any}()) where {Fn, ARGS<:Tuple}
     arg_vals = map(getvalue, args)
-    val = fn(arg_vals...; kwargs...)
+    val = to_device(tape.device, fn(arg_vals...; kwargs...))
     var = tracked(tape, val)
     op = Call(var, fn, args, kwargs)
     _record!(tape, op)

@@ -5,7 +5,7 @@ Reverse-mode automatic differentiation for static and dynamic graphs.
 
 ## Usage
 
-```
+```julia
 mutable struct Linear{T}
     W::AbstractArray{T,2}
     b::AbstractArray{T}
@@ -25,7 +25,7 @@ val, g = grad(loss, m, X)
 and tensors it returns gradient value, for structs it returns dictionary of
 (field path → gradient) pairs:
 
-```
+```julia
 julia> g[1]
 Dict{Tuple{Symbol},Array{Float64,2}} with 1 entry:
   (:W,) => [3.38128 2.97142 2.39706 1.55525; 3.38128 2.97142 2.39706 1.55525; 3.38128 2.97142 2.39706 1.55525]   # gradient w.r.t. m.W

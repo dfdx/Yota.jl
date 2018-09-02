@@ -1,26 +1,19 @@
-# CUDA specific parts; doesn't require any CUDA package
+import CUDAnative
+using CuArrays
 
-const NON_DISPATCHED_OPS = [log, exp, sqrt, ^, ones]
+# const NON_DISPATCHED_OPS = [log, exp, sqrt, ^, ones]
+# const CUDA_NATIVE_OPS = Dict{Function,Function}(op => op for op in NON_DISPATCHED_OPS)
+const CUDA_NATIVE_OPS = Dict{Function,Function}()
 
-const CUDA_NATIVE_OPS = Dict{Function,Function}(op => op for op in NON_DISPATCHED_OPS)
-
-@require CuArrays="3a865a2d-5b23-5a0f-bc46-62713ec82fae" begin
-    import CUDAnative
-    
-    CUDA_NATIVE_OPS[log] = CUDAnative.log
-    CUDA_NATIVE_OPS[exp] = CUDAnative.exp
-    CUDA_NATIVE_OPS[sqrt] = CUDAnative.sqrt
-    CUDA_NATIVE_OPS[^] = CUDAnative.pow
-    CUDA_NATIVE_OPS[ones] = CUDAnative.ones
-end
+CUDA_NATIVE_OPS[log] = CUDAnative.log
+CUDA_NATIVE_OPS[exp] = CUDAnative.exp
+CUDA_NATIVE_OPS[sqrt] = CUDAnative.sqrt
+CUDA_NATIVE_OPS[^] = CUDAnative.pow
+CUDA_NATIVE_OPS[ones] = CUDAnative.ones
 
 
-cuda_op(op) = get(CUDA_NATIVE_OPS, op, op)
-
-"""
-Check if the argument is of type CuArray. Doesn't require CuArrays.jl to be loaded
-"""
-is_cuarray(x) = startswith(string(typeof(x)), "CuArray")
+to_device(device::GPU, x) = cu(x)
+device_op(device::GPU, op) = get(CUDA_NATIVE_OPS, op, op)
 
 
 # import Espresso: rewrite, rewrite_all

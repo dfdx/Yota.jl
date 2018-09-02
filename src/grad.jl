@@ -118,7 +118,7 @@ end
 
 
 function _grad(f::Function, args...)
-    tape = Tape()
+    tape = Tape(guess_device(args))
     # wrap args into tracked data
     targs = make_tracked_args(tape, args...)
     # execute function to fill in the tape

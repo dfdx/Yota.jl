@@ -84,26 +84,29 @@ end
 # functions that require special treatment with CuArrays
 for fn in (Base.log, Base.exp, Base.sqrt)
     @eval function Broadcast.broadcasted(::typeof($fn), x::TArray)
-        if is_cuarray(x.val)
-            record!(x.tape, Bcast, cuda_op($fn), (x,))
-        else
-            record!(x.tape, Bcast, $fn, (x,))
-        end
+        record!(x.tape, Bcast, device_op(x.tape.device, $fn), (x,))        
     end
+    # @eval function Broadcast.broadcasted(::typeof($fn), x::TArray)
+    #     if is_cuarray(x.val)
+    #         record!(x.tape, Bcast, cuda_op($fn), (x,))
+    #     else
+    #         record!(x.tape, Bcast, $fn, (x,))
+    #     end
+    # end
 end
 
 
 # another CuArrays special case: ^
 function Broadcast.broadcasted(::typeof(^), x::TArray, y::TArray)
-    op = is_cuarray(x.val) ? cuda_op(^) : ^
+    op = device_op(x.tape.devide, ^)
     record!(x.tape, Bcast, op, (x, y))
 end
 function Broadcast.broadcasted(::typeof(^), x::TArray, y::Real)
-    op = is_cuarray(x.val) ? cuda_op(^) : (^)
+    op = device_op(x.tape.device, ^)
     record!(x.tape, Bcast, op, (x, constant(x.tape, y)))
 end
 function Broadcast.broadcasted(::typeof(^), x::Real, y::TArray)
-    op = is_cuarray(x.val) ? cuda_op(^) : ^
+    op = device_op(x.tape.device, ^)
     record!(x.tape, Bcast, op, (constant(y.tape, x), y))
 end
 

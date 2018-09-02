@@ -1,6 +1,6 @@
-include("../src/core.jl")
-# using Yota
-# import Yota: TReal, TAny, record!, Call, grad!
+# include("../src/core.jl")
+using Yota
+import Yota: TReal, TAny, record!, Call, grad!
 using XGrad
 using BenchmarkTools
 using CuArrays
