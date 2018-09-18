@@ -8,7 +8,9 @@ mutable struct Tape
     derivs::Dict{Int,Int}       # derivs[var.id] == grad_var.id
     sfields::Dict{Int, Dict}    # mapping of argid -> Dict(struct field paths -> var id)
     compiled::MaybeFunction     # compiled tape or nothing
-    Tape() = new(AbstractOp[], -1, Dict(), Dict(), nothing)
+    device::AbstractDevice      # function to use for moving intermediate results to device    
+    Tape(device::AbstractDevice) = new(AbstractOp[], -1, Dict(), Dict(), nothing, device)
+    Tape() = Tape(CPU())
 end
 
 function Base.show(io::IO, tape::Tape)

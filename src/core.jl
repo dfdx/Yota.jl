@@ -16,7 +16,12 @@ include("forward/tensor.jl")
 include("backward/scalar.jl")
 include("backward/tensor.jl")
 include("compile.jl")
+include("devices.jl")
 include("grad.jl")
 include("update.jl")
 include("helpers.jl")
-include("cuda.jl")
+
+
+function __init__()
+    @require CuArrays="3a865a2d-5b23-5a0f-bc46-62713ec82fae" include("cuda.jl")
+end
