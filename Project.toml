@@ -1,6 +1,6 @@
 name = "Yota"
 uuid = "f7b0de00-8e67-11e8-1ba4-09bec8501be6"
-authors = ["Andrei Zhabinski <andrei.zhabinski@pandadoc.com>"]
+authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
 version = "0.1.0"
 
 [deps]
