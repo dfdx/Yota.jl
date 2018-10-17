@@ -15,3 +15,11 @@ for fn in (sin, cos, Base.log, Base.exp, abs, abs2, sign, tanh, Base.sqrt)
     fns = Symbol(fn)
     @eval $fns(x::TReal) = record!(x.tape, Call, $fn, (x,))
 end
+
+
+# non-tracked ops
+
+for fn in (>, >=, <, <=, ==, !=)
+    fns = Symbol(fn)
+    @eval Base.$fns(x::TReal, y::TReal) = $fn(x.val, y.val)
+end
