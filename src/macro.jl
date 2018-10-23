@@ -33,5 +33,5 @@ function _primitive(sig)
 end
 
 macro primitive(sig)
-    return _primitive(sig)
+    return esc(_primitive(sig))
 end

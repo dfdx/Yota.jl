@@ -1,4 +1,5 @@
 using Test
+using Yota
 using Yota: Tape, tracked, record!, exec!, play!, grad, grad!, update!, setfield_nested!
 using Yota: gettape, getid, getvalue, setvalue!
 using Yota: Input, Constant, Call, Bcast, Assign
