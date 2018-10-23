@@ -1,6 +1,6 @@
 module Yota
 
-export grad, update!
+export grad, update!, @primitive
 
 include("core.jl")
 

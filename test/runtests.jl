@@ -5,6 +5,7 @@ using Yota: Input, Constant, Call, Bcast, Assign
 
 include("test_tracked.jl")
 include("test_tape.jl")
+include("test_macro.jl")
 include("test_grad.jl")
 include("test_update.jl")
 include("test_examples.jl")
