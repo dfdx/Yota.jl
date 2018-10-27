@@ -28,7 +28,7 @@ end
 function _primitive(sig)
     @assert sig.head == :call
     p_sig, fn, vnames = primitive_sig(sig)
-    ex = :($p_sig = record!($(vnames[1]).tape, $Call, $fn, ($(vnames...),)))
+    ex = :($p_sig = $record!($(vnames[1]).tape, $Call, $fn, ($(vnames...),)))
     return ex
 end
 
@@ -44,6 +44,7 @@ function grad_sig(sig, idx)
     targs = Array{Any}(undef, length(args))
     type_params = Symbol[]
     type_param_idx = 1
+    vnames = Array{Symbol}(undef, length(args))
     for i=1:length(args)
         if args[i] isa Expr
             name, typ_ex = args[i].args
@@ -52,18 +53,20 @@ function grad_sig(sig, idx)
                 T, N = Symbol("T$type_param_idx"), Symbol("N$type_param_idx")
                 type_param_idx += 1
                 push!(type_params, T, N)
-                ttyp = Expr(:curly, TArray, T, N)
+                ttyp = Expr(:curly, TArray, T, N)                
             else
                 ttyp = TReal
             end
-            targs[i] = ttyp
+            vnames[i] = name
+            targs[i] = ttyp            
         elseif args[i] isa Symbol
             name = args[i]
+            vnames[i] = name
             targs[i] = TAny
         else
             error("Unexpected signature in @primitive: $(sig)")
         end
-    end
+    end    
     grad_fn = Expr(:., Symbol(@__MODULE__), QuoteNode(:grad!))
     if isempty(type_params)
         tsig = :($grad_fn(dy::$TAny, ::Val{$idx}, op::$Call{typeof($fn), Tuple{$(targs...)}}))
@@ -71,13 +74,22 @@ function grad_sig(sig, idx)
         tsig = :($grad_fn(dy::$TAny, ::Val{$idx}, op::$Call{typeof($fn), Tuple{$(targs...)}})
                  where {$(type_params...)})
     end
-    return tsig
+    return tsig, vnames
+end
+
+
+function grad_body(vnames, body)
+    tbody = (body isa Expr && body.head == :block) ? body : :(begin $body end)
+    init_vars_ex = :(($(vnames...),) = op.args)
+    pushfirst!(tbody.args, init_vars_ex)
+    return tbody
 end
 
 
 function _grad(sig, idx, body)
-    tsig = grad_sig(sig, idx)
-    ex = :($tsig = $body)
+    tsig, vnames = grad_sig(sig, idx)
+    tbody = grad_body(vnames, body)
+    ex = :($tsig = $tbody)
     return ex
 end
 
