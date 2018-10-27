@@ -1,6 +1,6 @@
 
 relu(x::AbstractArray) = max.(x, 0)
-relu_grad(x::AbstractArray) = (x .> 0)
+relu_grad(x::AbstractArray) = float(x .> 0)
 
 @primitive relu(x::AbstractArray)
 @primitive relu_grad(x::AbstractArray)
