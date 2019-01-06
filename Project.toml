@@ -1,0 +1,7 @@
+name = "Zen"
+uuid = "cd973670-0ae0-11e9-22c6-cdac2b6c7034"
+authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Cassette = "7057c7e9-c182-5462-911a-8362d720325c"
