@@ -14,6 +14,7 @@ Cassette.hastagging(::Type{<:TraceCtx}) = true
 
 
 function trace(f, args...)
+    println(args)
     # create tape
     tape = Tape()
     ctx = enabletagging(TraceCtx(metadata=tape), f)
@@ -24,11 +25,12 @@ function trace(f, args...)
     end
     # trace f with tagged arguments
     val = overdub(ctx, f, tagged_args...)
+    # TODO: ret_id = metadata(val, ctx)   -- ID of returned value, write as Return(ret_id) to tape?
     return val, tape
 end
 
 
-const PRIMITIVES = Set([*, /, +, -, Base.getproperty])
+const PRIMITIVES = Set([*, /, +, -, Base.getproperty, println, sin, cos, broadcast])
 
 
 function with_free_args_as_constants(ctx::TraceCtx, tape::Tape, args)
@@ -47,14 +49,18 @@ end
 
 
 function Cassette.overdub(ctx::TraceCtx, f, args...)
-    println("!!!!!!!!!!!! $f")
+    args_str = join([a isa Nothing ? "nothing" : a for a in args], ", ")
+    @info("@@@ $f($args_str)")
     tape = ctx.metadata
-    args = with_free_args_as_constants(ctx, tape, args)
     if f in PRIMITIVES
+        args = with_free_args_as_constants(ctx, tape, args)
         arg_ids = [metadata(x, ctx) for x in args]
+        arg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in arg_ids]
         # execute call
         retval = fallback(ctx, f, [untag(x, ctx) for x in args]...)
         # record to the tape and tag with a newly created ID
+        retval_str = repr(retval)
+        @info("~~~ $retval_str <- $f($args_str)")
         ret_id = record!(tape, Call, typeof(retval), f, arg_ids)
         retval = tag(retval, ctx, ret_id)
     elseif canrecurse(ctx, f, args...)
