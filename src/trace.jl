@@ -10,7 +10,7 @@ Cassette.hastagging(::Type{<:TraceCtx}) = true
 
 
 const PRIMITIVES = Set([
-    *, /, +, -, sin, cos, sum,
+    *, /, +, -, sin, cos, sum, Base._sum,
     println,
     Base.getproperty, Base.getfield,
     broadcast, Broadcast.materialize, Broadcast.broadcasted])
@@ -65,6 +65,7 @@ end
 function Cassette.overdub(ctx::TraceCtx, f, args...)
     args_str = join([a isa Nothing ? "nothing" : a for a in args], ", ")
     tape = ctx.metadata
+    # @info "$f($args...)"
     if f in PRIMITIVES
         args = with_free_args_as_constants(ctx, tape, args)
         arg_ids = [metadata(x, ctx) for x in args]

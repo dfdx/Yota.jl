@@ -4,15 +4,19 @@
 
 abstract type AbstractOp end
 
+Base.getproperty(op::AbstractOp, f::Symbol) = f == :typ ? typeof(op.val) : getfield(op, f)
+
+## Input
 
 struct Input <: AbstractOp
     id::Int
     val::Any
 end
 
-Base.getproperty(op::Input, f::Symbol) = f == :typ ? typeof(op.val) : getfield(op, f)
-
 Base.show(io::IO, op::Input) = print(io, "inp %$(op.id)::$(op.typ)")
+
+
+## Constant
 
 struct Constant <: AbstractOp
     id::Int
@@ -20,10 +24,23 @@ struct Constant <: AbstractOp
     val
 end
 
-Constant(id::Int, val) = Constant(id, typeof(val), val)
 
+Constant(id::Int, val) = Constant(id, typeof(val), val)
 Base.show(io::IO, op::Constant) = print(io, "const %$(op.id) = $(op.val)::$(op.typ)")
 
+
+## Assign
+
+struct Assign <: AbstractOp
+    id::Int
+    src_id::Int
+    val
+end
+
+Base.show(io::IO, op::Assign) = print(io, "%$(op.id) = %$(op.src_id)::$(op.typ)")
+
+
+## Call
 
 struct Call <: AbstractOp
     id::Int
@@ -35,8 +52,7 @@ end
 
 Call(id::Int, val::Any, fn::Function, args::Vector{Int}; kwargs=Dict()) =
     Call(id, val, fn, args, kwargs)
-
-Base.getproperty(op::Call, f::Symbol) = f == :typ ? typeof(op.val) : getfield(op, f)
+Base.getproperty(op::Input, f::Call) = f == :typ ? typeof(op.val) : getfield(op, f)
 
 
 function Base.show(io::IO, op::Call)
@@ -71,7 +87,7 @@ mutable struct Tape
     derivs::Dict{Int,Int}       # derivs[var_id] == grad_id
     # sfields::Dict{Int, Dict}    # mapping of argid -> Dict(struct field paths -> var id)
     compiled::MaybeFunction     # compiled tape or nothing
-    device::AbstractDevice      # function to use for moving intermediate results to device    
+    device::AbstractDevice      # function to use for moving intermediate results to device
 end
 
 Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device)
@@ -114,7 +130,7 @@ Parse a complex call expression and record corresponding operations to a tape.
 Optionally takes substitution table (st parameter) to replace known symbols with
 provided values.
 """
-function record_expr!(tape::Tape, ex::Expr; st=Dict())
+function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
     @assert Meta.isexpr(ex, :call) "Expression isn't a call"
     # TODO: handle kw args
     new_op_args = Vector{Int}(undef, length(ex.args) - 1)
@@ -125,7 +141,7 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict())
         elseif Meta.isexpr(x, :call)
             # recursively record arg expression
             arg_id = record_expr!(tape, x; st=st)
-            new_op_args[i] = arg_id            
+            new_op_args[i] = arg_id
         else
             # treat as constant
             arg_id = record!(tape, Constant, x)
@@ -133,9 +149,28 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict())
         end
     end
     fn = ex.args[1]
-    retval = fn([tape[id].val for id in new_op_args]...)
-    return record!(tape, Call, retval, fn, new_op_args)
+    if !bcast
+        retval = fn([tape[id].val for id in new_op_args]...)
+        return record!(tape, Call, retval, fn, new_op_args)
+    else
+        retval = broadcast(fn, [tape[id].val for id in new_op_args]...)
+        fn_id = record!(tape, Constant, fn)
+        return record!(tape, Call, retval, broadcast, [fn_id; new_op_args])
+    end
 end
+
+
+function record_expr!(tape::Tape, x::Symbol; st=Dict(), bcast=false)
+    ds_id = st[:ds]
+    return record!(tape, Assign, ds_id, tape[ds_id].val)
+end
+
+
+function record_expr!(tape::Tape, x; st, bcast=false)
+    return record!(tape, Constant, x)
+end
+
+
 
 
 ########################################################################
@@ -165,14 +200,17 @@ function squash_broadcast(tape::Tape)
     st = Dict()
     for (id, op) in enumerate(tape)
         if op isa Call && op.fn === Broadcast.broadcasted
-            # skip this op
+            # replace Broadcast.broadcasted with just broadcast & materialize value
+            val = Broadcast.materialize(op.val)
+            new_id = length(new_tape) + 1
+            push!(new_tape.ops, copy_with(op; fn=broadcast, val=val))
+            st[id] = length(new_tape)
         elseif op isa Call && op.fn === Broadcast.materialize
-            # squash broadcasting
-            broadcasted_op_id = op.args[1]
-            broadcasted_args = tape[broadcasted_op_id].args
-            new_id = record!(new_tape, Call, op.val, broadcast, broadcasted_args)
+            # materialize becomes just assignment
+            new_id = record!(new_tape, Assign, op.args[1], op.val)
             st[id] = new_id
         else
+            # record any other operations as is
             new_id = length(new_tape) + 1
             push!(new_tape.ops, copy_with(op; id=new_id))
             st[id] = length(new_tape)
@@ -183,6 +221,26 @@ function squash_broadcast(tape::Tape)
     return new_tape
 end
 
+
+
 function simplify(tape::Tape)
     return squash_broadcast(tape)
 end
+
+
+########################################################################
+#                              EXECUTION                               #
+########################################################################
+
+function play!(tape::Tape)
+    vals = Vector{Any}(undef, length(tape))
+    for (i, op) in enumerate(tape)
+        vals[i] = exec(vals, op)
+    end
+    return vals[tape.resultid]
+end
+
+exec(vals::Vector, op::Input) = op.val
+exec(vals::Vector, op::Constant) = op.val
+exec(vals::Vector, op::Assign) = vals[op.src_id]
+exec(vals::Vector, op::Call) = op.fn([vals[id] for id in op.args]...)

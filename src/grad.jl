@@ -55,6 +55,9 @@ Espresso.to_expr(tape::Tape, op::Call) = begin
     Expr(:call, op.fn, [Symbol("%$i") for i in op.args]...)
 end
 
+to_unbroadcast_expr(tape::Tape, op::Call) =
+    Expr(:call, tape[op.args[1]].val, [Symbol("%$i") for i in op.args[2:end]]...)
+
 
 function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     ex = to_expr(tape, op)
@@ -67,11 +70,27 @@ function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
 end
 
 
+function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
+    # 1. take basic elements (see in Yota, presumably just first())
+    # 2. find rule for basic elements
+    # 3. record_expr_broadcast!() - record `broadcast` and execute immediately
+    ex = to_unbroadcast_expr(tape, op)
+    dep_eltypes = [eltype(tape[arg].typ) for arg in op.args[2:end]]
+    dex = deriv_expr(ex, dep_eltypes, i)
+    st = Dict(Symbol("%$i") => i for i in op.args)
+    st[:ds] = dy.id
+    ret_id = record_expr!(tape, dex; st=st, bcast=true)
+    return tape[ret_id]
+end
+
+
 function step_back!(tape::Tape, op::Union{Call}, i::Int)
     y = op
     x = tape[op.args[i]]
     dy = getderiv(tape, y)
-    dx = deriv!(tape, op, i, dy)
+    dx = (op.fn == broadcast ?
+          deriv_broadcast!(tape, op, i, dy) :
+          deriv!(tape, op, i, dy))
     if !haskey(tape.derivs, x.id)
         setderiv!(tape, x, dx)
     else
