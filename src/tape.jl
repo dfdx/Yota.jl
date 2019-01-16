@@ -140,7 +140,7 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
             new_op_args[i] = st[x]
         elseif Meta.isexpr(x, :call)
             # recursively record arg expression
-            arg_id = record_expr!(tape, x; st=st)
+            arg_id = record_expr!(tape, x; st=st, bcast=bcast)
             new_op_args[i] = arg_id
         else
             # treat as constant
@@ -160,9 +160,9 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
 end
 
 
-function record_expr!(tape::Tape, x::Symbol; st=Dict(), bcast=false)
-    ds_id = st[:ds]
-    return record!(tape, Assign, ds_id, tape[ds_id].val)
+function record_expr!(tape::Tape, x::Symbol; st=Dict(), bcast=false)    
+    id = st[x]
+    return record!(tape, Assign, id, tape[id].val)
 end
 
 
@@ -193,10 +193,12 @@ end
 
 
 """
-Replace a sequence of `broadcasted()` => `materizalize()` calls with a single `broadcast()`
+Recover broadcast operation from Broadcast.broadcasted and Broadcast.materialize
 """
-function squash_broadcast(tape::Tape)
+function recover_broadcast(tape::Tape)
     new_tape = copy_with(tape; ops=AbstractOp[])
+    # TODO: seems like we don't need subs table any more
+    # remove after squash_assigned is implemented
     st = Dict()
     for (id, op) in enumerate(tape)
         if op isa Call && op.fn === Broadcast.broadcasted
@@ -222,9 +224,29 @@ function squash_broadcast(tape::Tape)
 end
 
 
+function squash_assigned(tape::Tape)
+    new_tape = copy_with(tape; ops=AbstractOp[])    
+    st = Dict()
+    for (id, op) in enumerate(tape)
+        if op isa Assign            
+            st[id] = op.src_id        
+        else
+            # record any other operations as is
+            new_id = length(new_tape) + 1
+            push!(new_tape.ops, copy_with(op; id=new_id))
+            st[id] = length(new_tape)
+        end
+    end
+    replace_in_args!(new_tape, st)
+    new_tape.resultid = get(st, tape.resultid, tape.resultid)
+    return new_tape
+end
+
 
 function simplify(tape::Tape)
-    return squash_broadcast(tape)
+    tape = recover_broadcast(tape)
+    tape = squash_assigned(tape)
+    return tape
 end
 
 

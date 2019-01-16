@@ -76,8 +76,8 @@ function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     # 3. record_expr_broadcast!() - record `broadcast` and execute immediately
     ex = to_unbroadcast_expr(tape, op)
     dep_eltypes = [eltype(tape[arg].typ) for arg in op.args[2:end]]
-    dex = deriv_expr(ex, dep_eltypes, i)
-    st = Dict(Symbol("%$i") => i for i in op.args)
+    dex = deriv_expr(ex, dep_eltypes, i-1)
+    st = Dict(Symbol("%$id") => id for id in op.args)
     st[:ds] = dy.id
     ret_id = record_expr!(tape, dex; st=st, bcast=true)
     return tape[ret_id]
@@ -105,7 +105,9 @@ end
 
 
 function back!(tape::Tape)
-    # z - final variable, y - resulting variable of current op, x - dependencies of y
+    # z - final variable (usually a loss)
+    # y - resulting variable of current op
+    # x - dependencies of y
     # dy - derivative of z w.r.t. y
     z = tape[tape.resultid]
     # using Float32 for seed since for 64-bit args it will be expanded anyway
@@ -118,6 +120,7 @@ function back!(tape::Tape)
         if op isa Call # || op isa Bcast
             for i=1:length(op.args)
                 # backpropagate only non-constant vars
+                # note that it also prevents backprop on 1st param of broadcast
                 arg_op = tape[op.args[i]]
                 if !isa(arg_op, Constant)
                     step_back!(tape, op, i)
