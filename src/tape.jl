@@ -82,15 +82,21 @@ end
 const MaybeFunction = Union{Function, Nothing}
 
 mutable struct Tape
-    ops::Vector{<:AbstractOp}   # linearized execution graph
-    resultid::Int               # id of result variable
-    derivs::Dict{Int,Int}       # derivs[var_id] == grad_id
-    # sfields::Dict{Int, Dict}    # mapping of argid -> Dict(struct field paths -> var id)
-    compiled::MaybeFunction     # compiled tape or nothing
-    device::AbstractDevice      # function to use for moving intermediate results to device
+    # linearized execution graph
+    ops::Vector{<:AbstractOp}
+    # id of result variable
+    resultid::Int
+    # derivs[var_id] == grad_id
+    derivs::Dict{Int,Int}
+    # mapping of argid -> Dict(struct field paths -> var id)
+    fieldpaths::Dict{Int, Dict}
+    # compiled tape or nothing
+    compiled::MaybeFunction
+    # function to use for moving intermediate results to device
+    device::AbstractDevice
 end
 
-Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device)
+Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), Dict(), nothing, device)
 Tape() = Tape(CPU())
 
 
@@ -160,7 +166,7 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
 end
 
 
-function record_expr!(tape::Tape, x::Symbol; st=Dict(), bcast=false)    
+function record_expr!(tape::Tape, x::Symbol; st=Dict(), bcast=false)
     id = st[x]
     return record!(tape, Assign, id, tape[id].val)
 end
@@ -225,11 +231,11 @@ end
 
 
 function squash_assigned(tape::Tape)
-    new_tape = copy_with(tape; ops=AbstractOp[])    
+    new_tape = copy_with(tape; ops=AbstractOp[])
     st = Dict()
     for (id, op) in enumerate(tape)
-        if op isa Assign            
-            st[id] = op.src_id        
+        if op isa Assign
+            st[id] = op.src_id
         else
             # record any other operations as is
             new_id = length(new_tape) + 1
