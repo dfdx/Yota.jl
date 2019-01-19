@@ -173,11 +173,48 @@ end
 
 function _grad(f::Function, args...)
     val, tape = trace(f, args...)
-    tape = simplify(tape)
     # backpropagate gradients
     back!(tape)
     # consistency check
     check_deriv_sizes(tape)
     # construct GradResult object that wraps tape and provide accessors for computed derivatives
     return val, GradResult(tape)
+end
+
+
+const GRAD_CACHE = Dict{Any, Tape}()
+
+
+"""
+Find gradient of `f` w.r.t. its arguments.
+Example:
+
+    val, g = grad(sum, rand(3))
+
+where:
+  - val is the value of `f` at this point
+  - g::GradResult is a collection of gradients
+
+GradResult is indexed by argument index and contains gradients
+in a format most suitable for that argument, namely:
+
+  - for arrays: arrays of the same type and size
+  - for reals: reals
+  - for mutable structs: dictionary of {(:field, :path) => value} pairs.
+
+All gradients can be applied to original variables using `update!()` function.
+"""
+function grad(f::Function, args...)
+    # key conists of function type and type of argument (for structs) or its size
+    cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
+    if haskey(GRAD_CACHE, cache_key)
+        tape = GRAD_CACHE[cache_key]
+        play!(tape, args...)
+        return getvalue(tape[tape.resultid]), GradResult(tape)
+    else
+        val, g = _grad(f, args...)
+        compile!(g.tape)
+        GRAD_CACHE[cache_key] = g.tape
+        return val, g
+    end
 end

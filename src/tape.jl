@@ -8,7 +8,7 @@ Base.getproperty(op::AbstractOp, f::Symbol) = f == :typ ? typeof(op.val) : getfi
 
 ## Input
 
-struct Input <: AbstractOp
+mutable struct Input <: AbstractOp
     id::Int
     val::Any
 end
@@ -18,7 +18,7 @@ Base.show(io::IO, op::Input) = print(io, "inp %$(op.id)::$(op.typ)")
 
 ## Constant
 
-struct Constant <: AbstractOp
+mutable struct Constant <: AbstractOp
     id::Int
     typ::Type
     val
@@ -31,7 +31,7 @@ Base.show(io::IO, op::Constant) = print(io, "const %$(op.id) = $(op.val)::$(op.t
 
 ## Assign
 
-struct Assign <: AbstractOp
+mutable struct Assign <: AbstractOp
     id::Int
     src_id::Int
     val
@@ -42,7 +42,7 @@ Base.show(io::IO, op::Assign) = print(io, "%$(op.id) = %$(op.src_id)::$(op.typ)"
 
 ## Call
 
-struct Call <: AbstractOp
+mutable struct Call <: AbstractOp
     id::Int
     val::Any
     fn::Function
@@ -260,15 +260,32 @@ end
 #                              EXECUTION                               #
 ########################################################################
 
-function play!(tape::Tape)
-    vals = Vector{Any}(undef, length(tape))
-    for (i, op) in enumerate(tape)
-        vals[i] = exec(vals, op)
-    end
-    return vals[tape.resultid]
-end
+# function play!(tape::Tape)
+#     vals = Vector{Any}(undef, length(tape))
+#     for (i, op) in enumerate(tape)
+#         vals[i] = exec(vals, op)
+#     end
+#     return vals[tape.resultid]
+# end
 
-exec(vals::Vector, op::Input) = op.val
-exec(vals::Vector, op::Constant) = op.val
-exec(vals::Vector, op::Assign) = vals[op.src_id]
-exec(vals::Vector, op::Call) = op.fn([vals[id] for id in op.args]...)
+exec!(tape::Tape, op::Input) = ()
+exec!(tape::Tape, op::Constant) = ()
+exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
+exec!(tape::Tape, op::Call) = (op.val = op.fn([tape[id].val for id in op.args]...))
+
+
+
+function play!(tape::Tape, args...; use_compiled=true)
+    for (i, val) in enumerate(args)
+        @assert(tape[i] isa Input, "More arguments than the original function had")
+        tape[i].val = val
+    end
+    if use_compiled && tape.compiled != nothing
+        Base.invokelatest(tape.compiled)
+    else
+        for op in tape
+            exec!(tape, op)
+        end
+    end
+    return tape[tape.resultid].val
+end

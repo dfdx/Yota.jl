@@ -43,6 +43,7 @@ function trace(f, args...)
     tagged_val = overdub(ctx, f, tagged_args...)
     val = untag(tagged_val, ctx)
     tape.resultid = metadata(tagged_val, ctx)
+    tape = simplify(tape)
     return val, tape
 end
 

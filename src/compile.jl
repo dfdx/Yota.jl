@@ -2,12 +2,14 @@
 #                         CONVERSION TO EXGRAPH                        #
 ########################################################################
 
-make_name(op::AbstractOp) = Symbol("%$(getid(getvar(op)))")
-make_name(var::TAny) = Symbol("%$(getid(var))")
+make_name(id::Int) = Symbol("%$id")
+make_name(op::AbstractOp) = Symbol("%$(op.id)")
 
-to_exnode(op::Input) = ExNode{:input}(make_name(op), make_name(op); val=getvalue(op))
-to_exnode(op::Constant) = ExNode{:constant}(make_name(op), getvalue(op); val=getvalue(op))
-to_exnode(op::Assign) = ExNode{:(=)}(make_name(op), make_name(op.src); val=getvalue(op))
+unmake_name(x::Symbol) = parse(Int, string(x)[2:end])
+
+to_exnode(op::Input) = ExNode{:input}(make_name(op), make_name(op); val=op.val)
+to_exnode(op::Constant) = ExNode{:constant}(make_name(op), op.val; val=op.val)
+to_exnode(op::Assign) = ExNode{:(=)}(make_name(op), make_name(op.src_id); val=op.val)
 
 
 function to_exnode(op::Call)
@@ -18,14 +20,7 @@ function to_exnode(op::Call)
     else
         ex = Expr(:call, op.fn, Espresso.make_kw_params(op.kwargs), arg_names...)
     end
-    return ExNode{:call}(make_name(op), ex; val=getvalue(op))
-end
-
-function to_exnode(op::Bcast)
-    arg_names = map(make_name, op.args)
-    #  fns = maybe_to_symbol(op.fn)
-    ex = Expr(:., op.fn, Expr(:tuple, arg_names...))
-    ExNode{:bcast}(make_name(op), ex; val=getvalue(op))
+    return ExNode{:call}(make_name(op), ex; val=op.val)
 end
 
 
@@ -43,15 +38,15 @@ end
 ########################################################################
 
 """
-Rewrite :(Z = X * Y) into :(mul!(Z, X, Y)),  but only if X and Y are arrays
+Rewrite :(Z = X * Y) into :(mul!(Z, X, Y)), but only if X and Y are arrays
 """
 function rewrite_mul(tape::Tape, ex::Expr)
     @assert ex.head == :block
     new_ex = Expr(:block)
     for subex in ex.args
         if (matchingex(:(_R = $*(_X, _Y)), subex)
-            && tape[subex.args[1]].val isa AbstractArray
-            && all(tape[subex.args[2].args[i]].val isa AbstractArray for i=2:3))
+            && tape[unmake_name(subex.args[1])].val isa AbstractArray
+            && all(tape[unmake_name(subex.args[2].args[i])].val isa AbstractArray for i=2:3))
             new_subex = rewrite(subex, :(_Z = $*(_X, _Y)), :($mul!(_Z, _X, _Y)))
             push!(new_ex.args, new_subex)
         else
@@ -69,7 +64,7 @@ function generate_prologue(tape::Tape)
     ex = Expr(:body)
     for op in tape
         name = make_name(op)
-        push!(ex.args, :($name = $(op.var).val))
+        push!(ex.args, :($name = $(op).val))
     end
     return ex
 end
@@ -99,7 +94,7 @@ function generate_epilogue(tape::Tape)
     ex = Expr(:body)
     for op in tape
         name = make_name(op)
-        push!(ex.args, :($(op.var).val = $name))
+        push!(ex.args, :($(op).val = $name))
     end
     return ex
 end
@@ -136,25 +131,3 @@ end
 function compile!(tape::Tape)
     tape.compiled = compile(tape)
 end
-
-
-# function rerecord_inputs!(tape::Tape, args...)
-#     minitape = Tape()
-#     targs = make_tracked_args(minitape, args...)
-#     for i=1:length(minitape)
-#         val = getvalue(minitape[i])
-#         setvalue!(tape[i], val)
-#     end
-# end
-
-
-# function play!(tape::Tape, args...; use_compiled=true)
-#     rerecord_inputs!(tape, args...)
-#     if use_compiled && tape.compiled != nothing
-#         Base.invokelatest(tape.compiled)
-#     else
-#         for op in tape
-#             exec!(tape, op)
-#         end
-#     end
-# end
