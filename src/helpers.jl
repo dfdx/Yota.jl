@@ -18,3 +18,8 @@ end
 function sum_grad(x::AbstractArray, ds; opts...)
     return ones(size(x)) .* ds
 end
+
+
+function mean_grad(x::AbstractArray, ds)
+    return ones(size(x)) ./ length(x) .* ds
+end

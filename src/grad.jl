@@ -2,48 +2,6 @@
 #                            GRAD RESULT                               #
 ########################################################################
 
-# """
-# Fill `fieldmap` property of a tape. `fieldmap` contains a dict of dicts
-# (op_id -> field_name -> field_op_id). So `tape.fieldmap[x][:fld]` points
-# to a variable representing `x.fld`.
-# """
-# function map_fields!(tape::Tape)
-#     fm = Dict{Int, Dict{Symbol, Int}}()
-#     for op in tape
-#         if op isa Call && op.fn == Base.getproperty
-#             op_id = op.args[1]
-#             field_name = tape[op.args[2]].val
-#             field_op_id = op.id
-#             if !haskey(fm, op_id)
-#                 fm[op_id] = Dict()
-#             end
-#             fm[op_id][field_name] = field_op_id
-#         end
-#     end
-#     tape.fieldmap = fm
-# end
-
-
-# """
-# Flatten field paths in a fieldmap
-# """
-# function field_paths(fm::Dict{Int, Dict{Symbol, Int}}; current_path=[], result=Dict())
-#     for (struct_id, dct) in fm
-#         # path = [current_path; struct_id]
-#         for (fld, fld_id) in dct
-#             path = [current_path; fld]
-#             # struct field is also a struct
-#             if haskey(fm, fld_id)
-#                 field_paths(fm; current_path=path, result=result)
-#             else
-#                 result[tuple(path...)] = fld_id
-#             end
-#         end
-#     end
-#     return result
-# end
-
-
 function field_paths(tape::Tape)
     paths = Dict()
     for op in reverse(tape.ops)

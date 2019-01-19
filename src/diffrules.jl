@@ -262,13 +262,15 @@ end
 # sum() and mean()
 @diffrule sum(x::Real)                              x     ds
 @diffrule sum(x::AbstractArray)                     x     sum_grad(x, ds)
-@diffrule sum(x::AbstractArray, y::Int)             x     ones(size(x)) .* ds
-@diffrule sum(x::AbstractArray, y::Int)             y     0.0
+@diffrule Base._sum(x::AbstractArray, y::Int)             x     ones(size(x)) .* ds
+@diffrule Base._sum(x::AbstractArray, y::Int)             y     0.0
 
 @diffrule Statistics.mean(x::Real)                         x     ds
 @diffrule Statistics.mean(x::AbstractArray)                x     ones(size(x)) ./ length(x) .* ds
-@diffrule Statistics.mean(x::AbstractArray, y::Int)        x     ones(size(x)) ./ length(x) .* ds
-@diffrule Statistics.mean(x::AbstractArray, y::Int)        y     0.0
+# @diffrule Statistics.mean(x::AbstractArray, y::Int)        x     ones(size(x)) ./ length(x) .* ds
+# @diffrule Statistics.mean(x::AbstractArray, y::Int)        y     0.0
+@diffrule Statistics._mean(x::AbstractArray, y::Int)       x     mean_grad(x, ds)
+@diffrule Statistics._mean(x::AbstractArray, y::Int)       y     0.0
 
 # dot()
 @diffrule dot(x::Real, y::Real)                     x     y * ds
