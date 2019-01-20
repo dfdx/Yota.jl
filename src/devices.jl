@@ -1,3 +1,4 @@
+abstract type AbstractDevice end
 
 struct CPU <: AbstractDevice
 end
@@ -33,5 +34,4 @@ to_device(device::CPU, x) = x
 # also see cuda.jl
 device_op(device::CPU, op) = op
 
-deviceof(x::TAny) = x.device
 deviceof(x) = is_cuarray(x) ? GPU(1) : CPU()
