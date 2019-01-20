@@ -142,7 +142,7 @@ getvar(op::AbstractOp) = op.var
 setvar!(op::AbstractOp, var::TAny) = (op.var = var)
 
 getvalue(op::AbstractOp) = op |> getvar |> getvalue
-setvalue!(op::AbstractOp, val) = setvalue!(getvar(op), val) 
+setvalue!(op::AbstractOp, val) = setvalue!(getvar(op), val)
 
 @inline Base.getproperty(op::AbstractOp, name::Symbol) = _getproperty(op::AbstractOp, Val(name))
 @inline _getproperty(x::AbstractOp, ::Val{F}) where F = getfield(x, F)
@@ -155,12 +155,15 @@ Traverse mutable struct and write all trackable fields to the tape,
 keeping mapping from field paths to tracked vars.
 """
 function record_struct!(tape::Tape, s, argid::Int; field_path=[])
-    S = typeof(s)
+    # S = typeof(s)
+    S = Core.eval(Main, Symbol(typeof(s).name))  # parameter-free type of 
     new_fields = []
     for name in fieldnames(S)
         full_field_path = vcat(field_path, name)
-        field = getfield(s, name)        
-        if (field isa Real && !isa(field, Bool)) || field isa AbstractArray
+        field = getfield(s, name)
+        is_trackable = (field isa Real && !isa(field, Bool)) || field isa AbstractArray
+        is_concrete = fieldtype(S, name) |> isconcretetype
+        if is_trackable && !is_concrete
             var = record!(tape, Input, field; argid=argid)
             push!(new_fields, var)
             # save mapping field_path -> var
@@ -180,27 +183,3 @@ function record_struct!(tape::Tape, s, argid::Int; field_path=[])
     # assuming default constuctor
     return S(new_fields...)
 end
-
-
-# """
-# Traverse mutable struct and write all trackable fields to the tape,
-# keeping mapping from field paths to tracked vars.
-# """
-# function record_struct!(tape::Tape, s, argid::Int; field_path=[])
-#     for name in fieldnames(typeof(s))
-#         full_field_path = vcat(field_path, name)
-#         field = getfield(s, name)
-#         if (field isa Real && !isa(field, Bool)) || field isa AbstractArray
-#             var = record!(tape, Input, field; argid=argid)
-#             setfield!(s, name, var)
-#             # save mapping field_path -> var
-#             if !haskey(tape.sfields, argid)
-#                 tape.sfields[argid] = Dict{Any,Any}()
-#             end
-#             full_field_path_tuple = (full_field_path...,)
-#             tape.sfields[argid][full_field_path_tuple] = var.id
-#         elseif isstruct(field)
-#             record_struct!(tape, field, argid; field_path=full_field_path)
-#         end
-#     end
-# end

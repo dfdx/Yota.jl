@@ -51,6 +51,8 @@ ungetindex(dy::TAny, x::TArray, i::Real, j::Real) =
     record!(x.tape, Call, ungetindex, (dy, x, constant(x.tape, i), constant(x.tape, j)))
 reshape(x::TArray, dims::Vararg{Int64,N}) where N = record!(x.tape, Call, reshape, (x, dims))
 
+include("linalg.jl")
+
 for fn in (+, -)
     @eval Broadcast.broadcasted(::typeof($fn), x::TArray, y::TArray) =
         record!(x.tape, Bcast, $fn, (x, y))
