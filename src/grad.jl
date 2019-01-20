@@ -7,7 +7,7 @@ function field_paths(tape::Tape)
     for op in reverse(tape.ops)
         _op = op
         path = []
-        while _op isa Call && _op.fn == Base.getproperty            
+        while _op isa Call && _op.fn == Base.getproperty
             field_name = tape[_op.args[2]].val
             push!(path, field_name)
             _op_id = _op.args[1]
@@ -18,7 +18,7 @@ function field_paths(tape::Tape)
             if !haskey(paths, struct_id)
                 paths[struct_id] = Dict()
             end
-            paths[struct_id][(reverse(path)...)] = op.id
+            paths[struct_id][(reverse(path)...,)] = op.id
         end
     end
     return paths
@@ -109,9 +109,10 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     y = op
     x = tape[op.args[i]]
     dy = getderiv(tape, y)
-    dx = (op.fn == broadcast ?
-          deriv_broadcast!(tape, op, i, dy) :
-          deriv!(tape, op, i, dy))
+    # we handle broadcasting for + like normal derivatives
+    # all other cases are handled by a generic bcast mechanism
+    use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+]))
+    dx = use_bcast_rules ? deriv_broadcast!(tape, op, i, dy) : deriv!(tape, op, i, dy)
     if !haskey(tape.derivs, x.id)
         setderiv!(tape, x, dx)
     else
@@ -209,8 +210,8 @@ function grad(f::Function, args...)
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
     if haskey(GRAD_CACHE, cache_key)
         tape = GRAD_CACHE[cache_key]
-        play!(tape, args...)
-        return getvalue(tape[tape.resultid]), GradResult(tape)
+        val = play!(tape, args...)
+        return val, GradResult(tape)
     else
         val, g = _grad(f, args...)
         compile!(g.tape)

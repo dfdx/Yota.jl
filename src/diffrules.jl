@@ -227,6 +227,17 @@ end
 # @diffrule .+(x::AbstractVector, y::AbstractMatrix)  x     squeeze_sum(ds, 2)
 # @diffrule .+(x::AbstractArray, y::AbstractArray)    x     ds
 
+@diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) x sum(ds)
+@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) x ds
+@diffrule broadcast(_fn::typeof(+), x::AbstractVector, y::AbstractMatrix) x sum_dropdims(ds, 2)
+@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) x ds
+
+
+@diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) y ds
+@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) y sum(ds)
+@diffrule broadcast(_fn::typeof(+), x::AbstractMatrix, y::AbstractVector) y sum_dropdims(ds, 2)
+@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) y ds
+
 # @diffrule .+(x::Real, y::Real)                      y     ds
 # @diffrule .+(x::Real, y::AbstractArray)             y     ds
 # @diffrule .+(x::AbstractArray, y::Real)             y     sum(ds)
@@ -260,15 +271,13 @@ end
 # @diffrule .-(x::AbstractArray, y::AbstractArray)    y     -ds
 
 # sum() and mean()
-@diffrule sum(x::Real)                              x     ds
+# @diffrule sum(x::Real)                              x     ds
 @diffrule sum(x::AbstractArray)                     x     sum_grad(x, ds)
 @diffrule Base._sum(x::AbstractArray, y::Int)             x     ones(size(x)) .* ds
 @diffrule Base._sum(x::AbstractArray, y::Int)             y     0.0
 
-@diffrule Statistics.mean(x::Real)                         x     ds
-@diffrule Statistics.mean(x::AbstractArray)                x     ones(size(x)) ./ length(x) .* ds
-# @diffrule Statistics.mean(x::AbstractArray, y::Int)        x     ones(size(x)) ./ length(x) .* ds
-# @diffrule Statistics.mean(x::AbstractArray, y::Int)        y     0.0
+# @diffrule Statistics.mean(x::Real)                         x     ds
+@diffrule Statistics.mean(x::AbstractArray)                x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       y     0.0
 
@@ -396,9 +405,9 @@ end
 # @diffrule .*(x::AbstractMatrix, y::AbstractVector) y     squeeze_sum(ds .* x, 2) # ?
 # @diffrule .*(x::AbstractArray, y::AbstractArray)   y     x .* ds
 
-# # power  (both args reals)
-# @diffrule ^(x::Real, y::Real)                      x     y * x ^ (y-1) * ds
-# @diffrule ^(x::Real, y::Real)                      y     log(x) * x ^ y * ds
+# power  (both args reals)
+@diffrule ^(x::Real, y::Real)                      x     y * x ^ (y-1) * ds
+@diffrule ^(x::Real, y::Real)                      y     log(x) * x ^ y * ds
 
 # # dot power
 # @diffrule .^(x::Real         , y::Real )           x     y * x ^ (y-1) * ds

@@ -1,9 +1,9 @@
 module Yota
 
-export grad, update!, @primitive, @grad
+export grad, update!, @diffrule
 
 include("core.jl")
 
-version() = v"0.1.0-2"
+version() = v"0.2.0"
 
 end

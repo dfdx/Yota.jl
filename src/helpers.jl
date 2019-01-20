@@ -23,3 +23,8 @@ end
 function mean_grad(x::AbstractArray, ds)
     return ones(size(x)) ./ length(x) .* ds
 end
+
+
+function sum_dropdims(x::AbstractArray, dims)
+    return dropdims(sum(x; dims=dims); dims=dims)
+end

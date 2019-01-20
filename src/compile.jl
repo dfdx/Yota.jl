@@ -8,8 +8,12 @@ make_name(op::AbstractOp) = Symbol("%$(op.id)")
 unmake_name(x::Symbol) = parse(Int, string(x)[2:end])
 
 to_exnode(op::Input) = ExNode{:input}(make_name(op), make_name(op); val=op.val)
-to_exnode(op::Constant) = ExNode{:constant}(make_name(op), op.val; val=op.val)
 to_exnode(op::Assign) = ExNode{:(=)}(make_name(op), make_name(op.src_id); val=op.val)
+
+function to_exnode(op::Constant)
+    val = op.val isa Symbol ? QuoteNode(op.val) : op.val
+    return ExNode{:constant}(make_name(op), val; val=val)
+end
 
 
 function to_exnode(op::Call)

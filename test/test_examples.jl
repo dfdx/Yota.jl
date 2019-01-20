@@ -55,7 +55,7 @@ linear_loss(m::Linear2, X, y) = mean((m.W * X .+ m.b .- y) .^ 2.0)
     epochs = 100
 
     for i in 1:epochs
-        val, g = grad(linear_loss, m, X, Y; static=false)
+        val, g = grad(linear_loss, m, X, Y)
         # println("Epoch: $i; loss = $val")
         update!(m, g[1], (x, gx) -> x - 0.1 * gx)
     end
