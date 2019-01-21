@@ -107,7 +107,7 @@ function Base.show(io::IO, tape::Tape)
     end
 end
 
-Base.getindex(tape::Tape, i::Integer...) = getindex(tape.ops, i...)
+Base.getindex(tape::Tape, i...) = getindex(tape.ops, i...)
 # Base.getindex(tape::Tape, i::String...) =
 #     getindex(tape.ops, [parse(Int, s[2:end]) for s in i]...)
 # Base.getindex(tape::Tape, i::Symbol...) = getindex(tape, map(string, i)...)
@@ -231,20 +231,37 @@ end
 
 
 function squash_assigned(tape::Tape)
-    new_tape = copy_with(tape; ops=AbstractOp[])
-    st = Dict()
+    tape = copy_with(tape; ops=deepcopy(tape.ops))
+    # 1. compute subs table for chains of assignment operations
+    # and replace equivalent op ids
+    assign_st = Dict()
     for (id, op) in enumerate(tape)
         if op isa Assign
-            st[id] = op.src_id
-        else
+            # propagate replacement through known st
+            src_id = op.src_id
+            while haskey(assign_st, src_id)
+                src_id = assign_st[src_id]
+            end
+            assign_st[id] = src_id
+        end
+    end
+    replace_in_args!(tape, assign_st)
+    tape.resultid = get(assign_st, tape.resultid, tape.resultid)
+    # 2. create new ops w/o assignments
+    new_tape = copy_with(tape; ops=AbstractOp[])
+    reindex_st = Dict()
+    for (id, op) in enumerate(tape)
+        if !isa(op, Assign)
             # record any other operations as is
             new_id = length(new_tape) + 1
             push!(new_tape.ops, copy_with(op; id=new_id))
-            st[id] = length(new_tape)
+            if id != new_id
+                reindex_st[id] = new_id
+            end
         end
     end
-    replace_in_args!(new_tape, st)
-    new_tape.resultid = get(st, tape.resultid, tape.resultid)
+    replace_in_args!(new_tape, reindex_st)
+    new_tape.resultid = get(reindex_st, tape.resultid, tape.resultid)
     return new_tape
 end
 
@@ -260,19 +277,11 @@ end
 #                              EXECUTION                               #
 ########################################################################
 
-# function play!(tape::Tape)
-#     vals = Vector{Any}(undef, length(tape))
-#     for (i, op) in enumerate(tape)
-#         vals[i] = exec(vals, op)
-#     end
-#     return vals[tape.resultid]
-# end
 
 exec!(tape::Tape, op::Input) = ()
 exec!(tape::Tape, op::Constant) = ()
 exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
 exec!(tape::Tape, op::Call) = (op.val = op.fn([tape[id].val for id in op.args]...))
-
 
 
 function play!(tape::Tape, args...; use_compiled=true)

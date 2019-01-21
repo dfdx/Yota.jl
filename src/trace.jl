@@ -30,7 +30,7 @@ foo(x) = 2.0x + 1.0
 val, tape = trace(foo, 4.0)
 ```
 """
-function trace(f, args...)
+function trace(f, args...; optimize=true)
     # create tape
     tape = Tape()
     ctx = enabletagging(TraceCtx(metadata=tape), f)
@@ -43,7 +43,9 @@ function trace(f, args...)
     tagged_val = overdub(ctx, f, tagged_args...)
     val = untag(tagged_val, ctx)
     tape.resultid = metadata(tagged_val, ctx)
-    tape = simplify(tape)
+    if optimize
+        tape = simplify(tape)
+    end
     return val, tape
 end
 

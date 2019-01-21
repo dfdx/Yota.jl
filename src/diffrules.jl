@@ -6,34 +6,45 @@ const DIFF_RULES = Vector{Tuple}()
 const DIFF_PHS = Set([:w, :x, :y, :z, :i, :j, :k,])
 
 
-function resolve_functions_and_types!(ex)
+function resolve_functions_and_types!(mod::Module, ex)
     if Meta.isexpr(ex, :call)
         # replace function symbol with actual function reference and
         # recursively call on function args
-        if string(ex.args[1])[1] != '.'  # .*, .+, etc.            
-            ex.args[1] = Core.eval(@__MODULE__, ex.args[1])
+        if string(ex.args[1])[1] != '.'  # .*, .+, etc.
+            ex.args[1] = Core.eval(mod, ex.args[1])
         end
         for x in ex.args[2:end]
-            resolve_functions_and_types!(x)
+            resolve_functions_and_types!(mod, x)
         end
     elseif Meta.isexpr(ex, :(::))
-        ex.args[2] = Core.eval(@__MODULE__, ex.args[2])
+        ex.args[2] = Core.eval(mod, ex.args[2])
     elseif ex isa Vector
         for x in ex
-            resolve_functions_and_types!(x)
+            resolve_functions_and_types!(mod, x)
         end
     end
     return ex
 end
 
 
-macro diffrule(pat, var, rpat)
+function add_diff_rule(mod, pat, var, rpat)
     pat, rpat = map(Espresso.sanitize, (pat, rpat))
-    resolve_functions_and_types!(pat)
-    resolve_functions_and_types!(rpat)
+    resolve_functions_and_types!(mod, pat)
+    resolve_functions_and_types!(mod, rpat)
     push!(DIFF_RULES, (pat, var, rpat))
     push!(PRIMITIVES, pat.args[1])
-    nothing
+end
+
+macro diffrule(pat, var, rpat)
+    esc(quote
+        mod = @__MODULE__
+        local pat, rpat = map($Espresso.sanitize, ($(QuoteNode(pat)), $(QuoteNode(rpat))))
+        $resolve_functions_and_types!(mod, pat)
+        $resolve_functions_and_types!(mod, rpat)
+        push!($DIFF_RULES, (pat, $(QuoteNode(var)), rpat))
+        push!($PRIMITIVES, pat.args[1])
+        nothing
+        end)
 end
 
 
@@ -421,10 +432,10 @@ end
 # @diffrule .^(x::AbstractArray, y::AbstractArray)   y     log(x) .* x .^ y .* ds
 
 # # division
-# @diffrule /(x::Real          , y::Real )           x     ds / y
+@diffrule /(x::Real          , y::Real )           x     ds / y
 # @diffrule /(x::AbstractArray , y::Real )           x     ds ./ y
 
-# @diffrule /(x::Real          , y::Real )           y     -x * ds / (y * y)
+@diffrule /(x::Real          , y::Real )           y     -x * ds / (y * y)
 # @diffrule /(x::AbstractArray , y::Real )           y     sum(-x .* ds) / (y * y)
 
 # # dot division
@@ -438,9 +449,9 @@ end
 # @diffrule ./(x::AbstractArray, y::Real )           y     -sum(x .* ds) / (y * y)
 # @diffrule ./(x::AbstractArray, y::AbstractArray)   y     -x .* ds ./ (y .* y)
 
-# # transpose
+# transpose
 # @diffrule transpose(x::Real )                      x     ds
-# @diffrule transpose(x::AbstractArray)              x     transpose(ds)
+@diffrule transpose(x::AbstractArray)              x     transpose(ds)
 
 # # erf, erfc, gamma, beta, lbeta, lgamma
 # @diffrule erf(x::Real)                       x     2.0/sqrt(π) * exp(-x  * x)  * ds

@@ -1,5 +1,8 @@
+import Yota: @diffrule
 
 logistic(x) = 1 / (1 + exp(-x))
+@diffrule logistic(x::Number) x (logistic(x) * (1 - logistic(x)) * ds)
+
 
 function autoencoder_cost(We1, We2, Wd, b1, b2, x)
     firstLayer = logistic.(We1 * x .+ b1)
