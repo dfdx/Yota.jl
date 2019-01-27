@@ -63,10 +63,17 @@ function Base.getindex(g::GradResult, argid::Int)
     end
 end
 
+Base.length(g::GradResult) = length(g.gvars)
+Base.iterate(g::GradResult) = length(g) > 0 ? (g[1], 2) : nothing
+Base.iterate(g::GradResult, state) = length(g) >= state ? (g[state], state + 1) : nothing
+
 
 ########################################################################
 #                              GRAD                                    #
 ########################################################################
+
+const DEBUG_STATE = Any[]
+
 
 getderiv(tape::Tape, id::Int) = tape[tape.derivs[id]]
 getderiv(tape::Tape, op::AbstractOp) = getderiv(tape, op.id)
@@ -112,11 +119,18 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     # we handle broadcasting for + like normal derivatives
     # all other cases are handled by a generic bcast mechanism
     use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+]))
-    dx = use_bcast_rules ? deriv_broadcast!(tape, op, i, dy) : deriv!(tape, op, i, dy)
+    dx = try
+        use_bcast_rules ? deriv_broadcast!(tape, op, i, dy) : deriv!(tape, op, i, dy)
+    catch
+        @error("Failed to find a derivative for $op at position $i, " *
+               "current state of backpropagation saved to Yota.DEBUG_STATE")
+        push!(DEBUG_STATE, (tape, op, i))
+        rethrow()
+    end
     if !haskey(tape.derivs, x.id)
         setderiv!(tape, x, dx)
     else
-        @warn "This branch hasn't been tested yet"
+        # @warn "This branch hasn't been tested yet"
         old_dx = getderiv(tape, x)
         val = dx.val + old_dx.val
         new_dx_id = record!(tape, Call, val, +, [dx.id, old_dx.id])
@@ -147,6 +161,7 @@ function back!(tape::Tape)
                 # note that it also prevents backprop on 1st param of broadcast
                 arg_op = tape[op.args[i]]
                 if !isa(arg_op, Constant)
+                    # println(op, " ", i)
                     step_back!(tape, op, i)
                 end
             end
