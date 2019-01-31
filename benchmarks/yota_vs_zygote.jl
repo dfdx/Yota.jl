@@ -3,18 +3,19 @@ using Zygote
 using Zygote: @adjoint
 using BenchmarkTools
 using Distributions
+import NNlib
 
 
-logistic(x) = 1 ./ (1 + exp.(-x))
+logistic(x) = 1 / (1 + exp(-x))
 softplus(x) = log(exp(x) + 1)
 
 # Yota diff rules
-@diffrule logistic(x::Number) x (logistic(x) .* (1 .- logistic(x)) .* ds)
-@diffrule softplus(x::Number) x logistic(x) .* ds
+@diffrule logistic(x::Number) x (logistic(x) * (1 - logistic(x)) * ds)
+@diffrule softplus(x::Number) x logistic(x) * ds
 
 # Zygote diff rules
-@adjoint logistic(x) = logistic(x), Δ -> ((logistic(x) .* (1 .- logistic(x)) .* Δ),)
-@adjoint softplus(x) = softplus(x), Δ -> ((logistic(x) .* Δ),)
+@adjoint logistic(x) = logistic(x), Δ -> ((logistic(x) * (1 - logistic(x)) * Δ),)
+@adjoint softplus(x) = softplus(x), Δ -> ((logistic(x) * Δ),)
 
 
 function perf_test(f, args...)
@@ -23,12 +24,12 @@ function perf_test(f, args...)
     r1 = @benchmark Yota.grad($f, $(args)...)
     show(stdout, MIME{Symbol("text/plain")}(), r1)
     println("\n")
-    
+
     println("Compiling derivatives using Zygote")
     @time Zygote.gradient(f, args...)
-    r2 = @benchmark Zygote.gradient($f, $(args)...)    
+    r2 = @benchmark Zygote.gradient($f, $(args)...)
     show(stdout, MIME{Symbol("text/plain")}(), r2)
-    println("\n")    
+    println("\n")
 end
 
 
@@ -65,8 +66,9 @@ function vae_cost(We1, be1, We2, be2, We3, be3, We4, be4,
     x_rec = decode(Wd1, bd1, Wd2, bd2, Wd3, bd3, z)
     # loss
     rec_loss = -sum(x .* log.(1e-10 .+ x_rec) .+ (1 .- x) .* log.(1e-10 + 1.0 .- x_rec); dims=1)
-    KLD = -0.5 .* sum(1 .+ log_sigma2 .- mu .^ 2.0f0 - exp.(log_sigma2); dims=1)
-    cost = mean(rec_loss .+ KLD)
+    # KLD = -0.5 .* sum(1 .+ log_sigma2 .- mu .^ 2.0f0 - exp.(log_sigma2); dims=1)
+    # cost = mean(rec_loss .+ KLD)
+    cost = mean(rec_loss)
 end
 
 
