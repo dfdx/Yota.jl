@@ -6,7 +6,21 @@ const DIFF_RULES = Vector{Tuple}()
 const DIFF_PHS = Set([:w, :x, :y, :z, :i, :j, :k,])
 
 
-function resolve_functions_and_types!(mod::Module, ex)
+function resolve_old_broadcast(ex)
+    # rewrite dot op symbols like .*, .+, etc. into broadcasting
+    for (pat, rpat) in [
+        :(.+(_xs...)) => :($broadcast($+, _xs...)),
+        :(.-(_xs...)) => :($broadcast($-, _xs...)),
+        :(.*(_xs...)) => :($broadcast($*, _xs...)),
+        :(./(_xs...)) => :($broadcast($/, _xs...)),
+    ]
+        ex = Espresso.rewrite_all(ex, pat, rpat)
+    end
+    return ex
+end
+    
+
+function resolve_functions_and_types!(mod::Module, ex)    
     if Meta.isexpr(ex, :call)
         # replace function symbol with actual function reference and
         # recursively call on function args
@@ -39,6 +53,7 @@ macro diffrule(pat, var, rpat)
     esc(quote
         mod = @__MODULE__
         local pat, rpat = map($Espresso.sanitize, ($(QuoteNode(pat)), $(QuoteNode(rpat))))
+        pat, rpat = map($resolve_old_broadcast, (pat, rpat))
         $resolve_functions_and_types!(mod, pat)
         $resolve_functions_and_types!(mod, rpat)
         push!($DIFF_RULES, (pat, $(QuoteNode(var)), rpat))
@@ -419,6 +434,7 @@ end
 # power  (both args reals)
 @diffrule ^(x::Real, y::Real)                      x     y * x ^ (y-1) * ds
 @diffrule ^(x::Real, y::Real)                      y     log(x) * x ^ y * ds
+# @diffrule Base.literal_pow(_fn::typeof(^), x::Real, ::Val{y}) x (y * x ^ (y-1) * ds)
 
 # # dot power
 # @diffrule .^(x::Real         , y::Real )           x     y * x ^ (y-1) * ds
@@ -475,3 +491,7 @@ end
 # @diffrule lbeta(x::AbstractArray, y::AbstractArray)   x   (polygamma(0,x)-polygamma(0,x+y)) .* ds
 # @diffrule lbeta(x::Real         , y::Real)            y   (polygamma(0,y)-polygamma(0,x+y))  * ds
 # @diffrule lbeta(x::AbstractArray, y::AbstractArray)   y   (polygamma(0,y)-polygamma(0,x+y)) .* ds
+
+
+# should be something like @nodiff instead
+@diffrule rand(x) x 0.0f

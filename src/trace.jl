@@ -76,7 +76,6 @@ function Cassette.overdub(ctx::TraceCtx, f, args...)
         # execute call
         retval = fallback(ctx, f, [untag(x, ctx) for x in args]...)
         # record to the tape and tag with a newly created ID
-        # TODO: typeof(retval) -> retval, getproperty(op, p) for .typ
         ret_id = record!(tape, Call, retval, f, arg_ids)
         retval = tag(retval, ctx, ret_id)
     elseif canrecurse(ctx, f, args...)

@@ -7,17 +7,13 @@ loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 
 @testset "grad: basic" begin
     args = (rand(3, 4), rand(3), rand(4))
-
-    val, g = grad(loss_simple, args...)
-    @test val == loss_simple(args...)
-    @test g[2] == ones(3)
-
-    val, g = grad(loss_double_broadcast, args...)
-    @test val == loss_double_broadcast(args...)
+    @test gradcheck(loss_simple, args...)
+    @test gradcheck(loss_double_broadcast, args...)
 
     val, g = grad(loss_kw_mean, args...)
     @test val == loss_kw_mean(args...)
     @test any(op isa Call && op.fn == mean_grad for op in g.tape)
+    @test gradcheck(loss_kw_mean, args...)
 end
 
 

@@ -135,6 +135,11 @@ Parse a complex call expression and record corresponding operations to a tape.
 
 Optionally takes substitution table (st parameter) to replace known symbols with
 provided values.
+
+Keyword params:
+
+ * st::Dict - substitution table, used to replace symbols in ex with tape op ids
+ * bcast::Bool - replace all function calls with corresponding broadcasting
 """
 function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
     @assert Meta.isexpr(ex, :call) "Expression isn't a call"
@@ -155,13 +160,18 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
         end
     end
     fn = ex.args[1]
-    if !bcast
-        retval = fn([tape[id].val for id in new_op_args]...)
-        return record!(tape, Call, retval, fn, new_op_args)
-    else
+    if bcast
         retval = broadcast(fn, [tape[id].val for id in new_op_args]...)
         fn_id = record!(tape, Constant, fn)
         return record!(tape, Call, retval, broadcast, [fn_id; new_op_args])
+    elseif fn isa Symbol && fn in Set([:.+, :.*, :.-, :./, :.^])
+        _fn = eval(Symbol(string(fn)[2:end]))
+        retval = broadcast(_fn, [tape[id].val for id in new_op_args]...)
+        fn_id = record!(tape, Constant, _fn)
+        return record!(tape, Call, retval, broadcast, [fn_id; new_op_args])
+    else
+        retval = fn([tape[id].val for id in new_op_args]...)
+        return record!(tape, Call, retval, fn, new_op_args)
     end
 end
 
