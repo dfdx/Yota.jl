@@ -40,7 +40,7 @@ julia> g[2]  # gradient w.r.t. X
 
 `GradientResult` can be used in conjunction with `update!()` function to modify tensors and fields of (mutable) structs. To continue out previous example:
 
-```
+```julia
 for i=1:100
     val, g = grad(loss, m, X)
     println("Loss value in $(i)th epoch: $val")
@@ -67,10 +67,6 @@ val, g = grad(L, rand(5))
 
 ## Tracer and the Tape
 
-<aside class="notice">
-Previous version of Yota used tracked arrays. That version can still be found at [YotaTracked.jl](https://github.com/dfdx/YotaTracked.jl).
-</aside>
-
 Being a reverse-mode AD package, Yota works in 2 steps:
 
 1. Record all primitive operations onto a "tape".
@@ -78,7 +74,7 @@ Being a reverse-mode AD package, Yota works in 2 steps:
 
 "Tape" here is simply a list of operations. You can get the tape as a `.tape` field of `GradientResult` or construct it directly using `trace` function:
 
-```
+```julia
 import Yota: trace
 
 val, tape = trace(L, rand(5))
@@ -97,7 +93,7 @@ print(tape)
 
 Tape can also be executed and compiled:
 
-```
+```julia
 using BenchmarkTools
 import Yota: play!, compile!
 
@@ -116,7 +112,7 @@ compile!(tape)
 
 Tracer records operations as they are executed the first time with given arguments. For example, for a loop like this:
 
-```
+```julia
 function iterative(x, n)
     for i=1:n
         x = 2x
