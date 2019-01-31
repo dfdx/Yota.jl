@@ -38,34 +38,90 @@ julia> g[2]  # gradient w.r.t. X
  2.31594   2.31594   2.31594   2.31594   2.31594
 ```
 
-## Primitives and their gradients
+`GradientResult` can be used in conjunction with `update!()` function to modify tensors and fields of (mutable) structs. To continue out previous example:
 
-Internally, Yota uses operator overloading and a "tape" to record function calls during first function execution (forward pass) and propagate derivatives back to function arguments (backward pass). Some functions such as `*`, `sum()` or `reshape()` are recorded to the tape as is. We call them primitives and define gradients for each of them. Others, say, `my_own_function()` are recursively broken down into simpler ones until only primitives are left.
-
-We can mark a function as primitive using `@primitive` macro. Consider the following example:
-
-```julia
-relu(x::AbstractArray) = max.(x, 0)
-@primitive relu(x::AbstractArray)
 ```
-Now `relu()` will be written to the tape as is instead of being decomposed into simpler elements. To make differentiation possible, we also must define gradient function for it:
-
-
-```julia
-relu_grad(x::AbstractArray) = float(x .> 0)
-@primitive relu_grad(x::AbstractArray)
+for i=1:100
+    val, g = grad(loss, m, X)
+    println("Loss value in $(i)th epoch: $val")
+    update!(m, g[1], (x, gx) -> x .- 0.01gx)    
+end
 ```
 
-and map one to the other:
+(Note that our simplified loss function doesn't actually represent an error to be minimized, so loss value quickly goes below zero. For more realistic and much more complex examples see [vae.jl](https://github.com/dfdx/Yota.jl/blob/master/examples/vae.jl).)
+
+## Custom derivatives
+
+You can add custom derivatives using `@diffrule` macro. 
 
 ```julia
-@grad relu(x::AbstractArray) 1 relu_grad(x)
+logistic(x) = 1 / (1 + exp(-x))
+# for an expression like `logistic(x)` where x is a Number
+# gradient w.r.t. x
+# is `(logistic(x) * (1 - logistic(x)) * ds)` where "ds" stands for derivative "dL/dy"
+@diffrule logistic(x::Number) x (logistic(x) * (1 - logistic(x)) * ds)
+
+L(x) = sum(logistic.(x))
+val, g = grad(L, rand(5))
 ```
 
-Now we can calculate gradient of a function involving `relu`:
+## Tracer and the Tape
 
-```julia
-relu_test(x) = sum(relu(x))
+<aside class="notice">
+Previous version of Yota used tracked arrays. That version can still be found at [YotaTracked.jl](https://github.com/dfdx/YotaTracked.jl).
+</aside>
 
-grad(relu_test, rand(5))
+Being a reverse-mode AD package, Yota works in 2 steps:
+
+1. Record all primitive operations onto a "tape".
+2. Go back trough the tape, recording derivatives for each operation.
+
+"Tape" here is simply a list of operations. You can get the tape as a `.tape` field of `GradientResult` or construct it directly using `trace` function:
+
 ```
+import Yota: trace
+
+val, tape = trace(L, rand(5))
+print(tape)
+
+# Tape
+#   inp %1::Array{Float64,1}
+#   const %2 = logistic::typeof(logistic)
+#   %3 = broadcast(%2, %1)::Array{Float64,1}
+#   %4 = sum(%3)::Float64
+```
+`trace` uses [Cassette.jl](https://github.com/jrevels/Cassette.jl/) to collect function calls during execution. Functions are divided into 2 groups:
+
+ * primitive, such as `*`, `sum`, `sin`, etc. or any function for which `@diffrule` is defined. These are recorded to the tape;
+ * non-primitive, which are traced-through down to primitive ones.  
+
+Tape can also be executed and compiled:
+
+```
+using BenchmarkTools
+import Yota: play!, compile!
+
+x = rand(5)
+
+@btime play!(tape, x)
+# 3.526 μs (13 allocations: 640 bytes)
+
+compile!(tape)
+@btime play!(tape, x)
+# 492.063 ns (2 allocations: 144 bytes)
+```
+
+
+## Loops, conditions, etc.
+
+Tracer records operations as they are executed the first time with given arguments. For example, for a loop like this:
+
+```
+function iterative(x, n)
+    for i=1:n
+        x = 2x
+    end
+    return x
+end
+```
+exactly `n` iterations will be recorded to the tape and all future values of `n` will make no effect.  
