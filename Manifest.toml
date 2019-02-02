@@ -3,9 +3,11 @@ uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
 [[Cassette]]
 deps = ["InteractiveUtils", "LinearAlgebra", "Test"]
-git-tree-sha1 = "6eab7f863acb75eecec5f9df3d5bb0551a63fddc"
+git-tree-sha1 = "1d00c35118babf85c4a9a72c3d3550d498b64a03"
+repo-rev = "45a4f68c304c5ac39543338f7281812a689adf35"
+repo-url = "https://github.com/jrevels/Cassette.jl.git"
 uuid = "7057c7e9-c182-5462-911a-8362d720325c"
-version = "0.2.1"
+version = "0.2.2+"
 
 [[Distributed]]
 deps = ["LinearAlgebra", "Random", "Serialization", "Sockets"]
@@ -13,11 +15,11 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[Espresso]]
 deps = ["LinearAlgebra", "Statistics", "Test"]
-git-tree-sha1 = "88b61077760d2320e1ec1e56b178a3611411db9a"
-repo-rev = "master"
-repo-url = "/home/slipslop/.julia/dev/Espresso"
+git-tree-sha1 = "cde61b7c72023d15e2aaae8d4eb3e2c94f5bdb7b"
+repo-rev = "91f95f2c81fb105dba37a43f4521f72e5baefd18"
+repo-url = "https://github.com/dfdx/Espresso.jl.git"
 uuid = "6912e4f1-e036-58b0-9138-08d1e6358ea9"
-version = "0.5.0"
+version = "0.6.0"
 
 [[InteractiveUtils]]
 deps = ["LinearAlgebra", "Markdown"]
