@@ -13,8 +13,23 @@ CUDA_NATIVE_OPS[ones] = CUDAnative.ones
 
 
 to_device(device::GPU, x) = cu(x)
-device_op(device::GPU, op) = get(CUDA_NATIVE_OPS, op, op)
+device_func(device::GPU, op) = get(CUDA_NATIVE_OPS, op, op)
 
+
+function to_cuda(x)
+    T = typeof(x)    
+    flds = fieldnames(T)
+    if is_cuarray(x)
+        return x
+    elseif isempty(flds)
+        # primitive or array
+        return cu(x)
+    else
+        # struct, recursively convert and construct type from fields
+        fld_vals = [to_cuda(getfield(x, fld)) for fld in flds]
+        return T(fld_vals...)
+    end
+end
 
 # import Espresso: rewrite, rewrite_all
 

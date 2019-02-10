@@ -32,7 +32,7 @@ val, tape = trace(foo, 4.0)
 """
 function trace(f, args...; optimize=true)
     # create tape
-    tape = Tape()
+    tape = Tape(guess_device(args))
     ctx = enabletagging(TraceCtx(metadata=tape), f)
     tagged_args = Vector(undef, length(args))
     for (i, x) in enumerate(args)

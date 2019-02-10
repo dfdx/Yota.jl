@@ -92,7 +92,7 @@ mutable struct Tape
     fieldpaths::Dict{Int, Dict}
     # compiled tape or nothing
     compiled::MaybeFunction
-    # function to use for moving intermediate results to device
+    # device of the tape
     device::AbstractDevice
 end
 
@@ -142,8 +142,7 @@ Keyword params:
  * bcast::Bool - replace all function calls with corresponding broadcasting
 """
 function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
-    @assert Meta.isexpr(ex, :call) "Expression isn't a call"
-    # TODO: handle kw args
+    @assert Meta.isexpr(ex, :call) "Expression isn't a call"    
     new_op_args = Vector{Int}(undef, length(ex.args) - 1)
     for (i, x) in enumerate(ex.args[2:end])
         if haskey(st, x)
