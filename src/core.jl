@@ -15,6 +15,7 @@ include("diffrules.jl")
 include("grad.jl")
 include("compile.jl")
 include("update.jl")
+include("transform.jl")
 
 
 function __init__()

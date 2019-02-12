@@ -104,6 +104,10 @@ function generate_epilogue(tape::Tape)
 end
 
 
+"""
+Generate function expression from the tape, binding all variables to tape's buffers
+and optimizing code.
+"""
 function generate_function_expr(tape::Tape)
     fn_ex = :(function $(gensym("tape_fn"))() end)
     fn_ex_body = fn_ex.args[2]
@@ -121,13 +125,32 @@ function generate_function_expr(tape::Tape)
 end
 
 
+"""
+Generate function expression from the tape without any optimizations or binding to
+tape's buffers.
+"""
+function generate_function_expr_unbound(tape::Tape)
+    fn_args = [Expr(:(::), make_name(inp), typeof(inp.val)) for inp in tape if isa(inp, Input)]
+    fn_ex = :(function $(gensym("tape_fn"))($(fn_args...)) end)
+    fn_ex_body = fn_ex.args[2]
+    for op in tape
+        if !isa(op, Input)
+            ex = op |> to_exnode |> to_expr
+            push!(fn_ex_body.args, ex)
+        end
+    end
+    push!(fn_ex_body.args, :(return $(make_name(tape[tape.resultid]))))
+    return fn_ex
+end
+
+
 ########################################################################
 #                            COMPILATION                               #
 ########################################################################
 
 
-function compile(tape::Tape)
-    fn_ex = generate_function_expr(tape)
+function compile(tape::Tape; bind=true)
+    fn_ex = bind ? generate_function_expr(tape) : generate_function_expr_unbound(tape)
     return Core.eval(@__MODULE__, fn_ex)
 end
 

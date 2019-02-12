@@ -15,13 +15,17 @@ function ungetindex(x::AbstractArray, ds, i...)
 end
 
 
-function sum_grad(x::AbstractArray, ds; opts...)
-    return ones(typeof(x), size(x)) .* ds
+function sum_grad(x::AbstractArray, ds)
+    dx = similar(x)
+    fill!(dx, ds)
+    return dx
 end
 
 
 function mean_grad(x::AbstractArray, ds)
-    return ones(typeof(x), size(x)) ./ length(x) .* ds
+    dx = similar(x)
+    dx .= ds ./ length(x)
+    return dx
 end
 
 

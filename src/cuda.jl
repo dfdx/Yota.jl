@@ -17,7 +17,7 @@ device_func(device::GPU, op) = get(CUDA_NATIVE_OPS, op, op)
 
 
 function to_cuda(x)
-    T = typeof(x)    
+    T = typeof(x)
     flds = fieldnames(T)
     if is_cuarray(x)
         return x
@@ -63,3 +63,11 @@ end
 #         return res
 #     end
 # end
+
+
+"""
+Trace function and replace all intrinsic function invocations with
+"""
+function to_cuda_function(f, args)
+
+end

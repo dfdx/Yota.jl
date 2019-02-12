@@ -98,6 +98,8 @@ end
 
 Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), Dict(), nothing, device)
 Tape() = Tape(CPU())
+Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs, tape.fieldpaths,
+                                tape.compiled, tape.device)
 
 
 function Base.show(io::IO, tape::Tape)
@@ -142,7 +144,7 @@ Keyword params:
  * bcast::Bool - replace all function calls with corresponding broadcasting
 """
 function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
-    @assert Meta.isexpr(ex, :call) "Expression isn't a call"    
+    @assert Meta.isexpr(ex, :call) "Expression isn't a call"
     new_op_args = Vector{Int}(undef, length(ex.args) - 1)
     for (i, x) in enumerate(ex.args[2:end])
         if haskey(st, x)
