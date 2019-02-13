@@ -17,7 +17,7 @@ end
 
 function sum_grad(x::AbstractArray, ds)
     dx = similar(x)
-    fill!(dx, ds)
+    dx .= ds
     return dx
 end
 

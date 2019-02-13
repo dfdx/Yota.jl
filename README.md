@@ -90,8 +90,11 @@ print(tape)
 ```
 `trace` uses [Cassette.jl](https://github.com/jrevels/Cassette.jl/) to collect function calls during execution. Functions are divided into 2 groups:
 
- * primitive, such as `*`, `sum`, `sin`, etc. or any function for which `@diffrule` is defined. These are recorded to the tape;
+ * primitive, which are recorded to the tape;
  * non-primitive, which are traced-through down to primitive ones.  
+
+By default, set of primitive functions is defined in `Yota.PRIMITIVES` and includes such beasts as `*`, `broadcast`, `getproperty` as well as all functions for which `@diffrule` is defined. You can also specify custom primitives using `primitive=Set([...])` keyword to `trace()`.
+
 
 Tape can also be executed and compiled:
 
@@ -123,3 +126,55 @@ function iterative(x, n)
 end
 ```
 exactly `n` iterations will be recorded to the tape and all future values of `n` will make no effect.  
+
+## Tape transformations & function rewriting
+
+One can use `trace()` to record function execution, transform the resulting tape and recompile it back to a function. Yota provides a convenient function `transform(tform, f, args)` for it. As a use case, consider the following example: 
+
+```julia
+using CuArrays
+using CUDAnative
+
+logistic(x) = 1 / (1 + exp(-x))
+
+logistic.(cu(rand(10)))
+# ┌ Warning: calls to Base intrinsics might be GPU incompatible
+# │   exception =
+# │    You called exp(x::T) where T<:Union{Float32, Float64} in Base.Math at special/exp.jl:75, maybe you intended to call exp(x::Float32) in CUDAnative at /home/username/.julia/packages/CUDAnative/Mdd3w/src/device/libdevice.jl:90 instead?
+# │    Stacktrace:
+# │     [1] exp at special/exp.jl:75
+# │     [2] #23 at /home/username/.julia/packages/GPUArrays/t8tJB/src/broadcast.jl:49
+# └ @ CUDAnative ~/.julia/packages/CUDAnative/Mdd3w/src/compiler/irgen.jl:68
+# 10-element CuArray{Float32,1}:
+# ...
+```
+
+CuArrays require functions to use `CUDAnative` primitives such as `CUDAnative.exp` instead of Julia intrinsics like `Base.exp`, hence the warning. We can fix it using the following transformation:
+
+
+```julia
+import Yota: transform, copy_with, Tape, Call
+
+function to_cudanative_tform(tape::Tape)
+    new_tape = similar(tape)
+    changed = false
+    for op in tape
+        if op isa Call && op.fn == exp
+            changed = true
+            push!(new_tape, copy_with(op, fn=CUDAnative.exp))
+        else
+            push!(new_tape, op)
+        end
+    end
+    return new_tape, changed
+end
+
+cu_logistic = transform(to_cudanative_tform, logistic, 1.0)
+cu_logistic.(cu(rand(10)))
+# 10-element CuArray{Float32,1}:
+#  0.72035646
+#  0.5303562 
+#  0.7136526 
+```
+
+See `@doc Yota.transform` for parameter and return value explanation.

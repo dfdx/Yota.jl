@@ -130,7 +130,8 @@ Generate function expression from the tape without any optimizations or binding 
 tape's buffers.
 """
 function generate_function_expr_unbound(tape::Tape)
-    fn_args = [Expr(:(::), make_name(inp), typeof(inp.val)) for inp in tape if isa(inp, Input)]
+    # fn_args = [Expr(:(::), make_name(inp), typeof(inp.val)) for inp in tape if isa(inp, Input)]
+    fn_args = [make_name(inp) for inp in tape if isa(inp, Input)]
     fn_ex = :(function $(gensym("tape_fn"))($(fn_args...)) end)
     fn_ex_body = fn_ex.args[2]
     for op in tape
