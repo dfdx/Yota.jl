@@ -28,10 +28,24 @@ is_cuarray(x) = startswith(string(typeof(x)), "CuArray")
 # currently GPU's ID is just a placeholder
 guess_device(args) = any(is_cuarray, args) ? GPU(1) : CPU()
 
-# also see cuda.jl
+"""
+Retrieve function compatible with specified device
+
+See also: to_device(device, f)
+"""
+device_function(device::CPU, f) = f
+
+
+"""
+Convert object to a compatible with the specified device.
+
+For CPU it's usually no-op. For GPU behavior differs between object types:
+
+ * Arrays are converted to CuArrays
+ * structs are converted recursively
+ * functions are looked up using `device_function()` or transformed using tracer
+ * all other objects are returned as is
+"""
 to_device(device::CPU, x) = x
-
-# also see cuda.jl
-device_op(device::CPU, op) = op
-
-deviceof(x) = is_cuarray(x) ? GPU(1) : CPU()
+to_device(device::CPU, f::Function, args) = f
+# see also cuda.jl

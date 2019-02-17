@@ -159,8 +159,9 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
             arg_id = record!(tape, Constant, x)
             new_op_args[i] = arg_id
         end
-    end
+    end    
     fn = ex.args[1]
+    fn = device_function(tape.device, fn)
     if bcast
         retval = broadcast(fn, [tape[id].val for id in new_op_args]...)
         fn_id = record!(tape, Constant, fn)
