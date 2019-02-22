@@ -1,8 +1,18 @@
 import CUDAnative
 using CuArrays
 
-# const NON_DISPATCHED_OPS = [log, exp, sqrt, ^, ones]
-# const CUDA_NATIVE_OPS = Dict{Function,Function}(op => op for op in NON_DISPATCHED_OPS)
+
+CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
+
+@diffrule CUDAnative.exp(x::Real) x CUDAnative.exp(x) * ds
+@diffrule CUDAnative.pow(x::Real, y::Real) x (y * CUDAnative.pow(x, (y-1)) * ds)
+@diffrule CUDAnative.pow(x::Real, y::Real) y CUDAnative.log(x) * CUDAnative.pow(x, y) * ds
+@diffrule CUDAnative.log(x::Real) x ds / x
+@diffrule CUDAnative.sqrt(x::Real) x (0.5f0 * CUDAnative.pow(x, -0.5f0) * ds)
+
+
+# # const NON_DISPATCHED_OPS = [log, exp, sqrt, ^, ones]
+# # const CUDA_NATIVE_OPS = Dict{Function,Function}(op => op for op in NON_DISPATCHED_OPS)
 const CUDANATIVE_OPS = Dict{Function,Function}()
 
 CUDANATIVE_OPS[log] = CUDAnative.log
@@ -12,6 +22,8 @@ CUDANATIVE_OPS[^] = CUDAnative.pow
 CUDANATIVE_OPS[ones] = CUDAnative.ones
 
 device_function(device::GPU, f::Function) = get(CUDANATIVE_OPS, f, f)
+# device_function(::GPU, f::Function) = CuArrays.cufunc(f)
+to_device(device::GPU, x) = cu(x)
 
 
 function to_cuda(x)
@@ -30,32 +42,29 @@ function to_cuda(x)
 end
 
 
-function cuarray_compatible_tform(tape::Tape)
-    new_tape = similar(tape)
-    changed = false
-    for op in tape
-        if op isa Call && haskey(CUDANATIVE_OPS, op.fn)
-            changed = true
-            push!(new_tape, copy_with(op, fn=CUDANATIVE_OPS[op.fn]))
-        else
-            push!(new_tape, op)
-        end
-    end
-    return new_tape, changed
-end
+# function cuarray_compatible_tform(tape::Tape)
+#     new_tape = similar(tape)
+#     changed = false
+#     for op in tape
+#         if op isa Call && haskey(CUDANATIVE_OPS, op.fn)
+#             changed = true
+#             push!(new_tape, copy_with(op, fn=CUDANATIVE_OPS[op.fn]))
+#         else
+#             push!(new_tape, op)
+#         end
+#     end
+#     return new_tape, changed
+# end
 
 
-"""
-Transform function to CuArrays compatible.
-"""
-function cuda_compatible(f, args)
-    if haskey(CUDANATIVE_OPS, f)
-        return CUDANATIVE_OPS[f]
-    else
-        return transform(cuarray_compatible_tform, f, args)
-    end
-end
-
-
-to_device(device::GPU, x) = cu(x)
-to_device(device::GPU, f::Function, args) = cuda_compatible(f, args)
+# """
+# Transform function to CuArrays compatible.
+# """
+# function cuda_compatible(f, args)
+#     cf = CuArrays.cufunc(f)
+#     if f === cf
+#         return cf
+#     else
+#         return transform(cuarray_compatible_tform, f, args)
+#     end
+# end

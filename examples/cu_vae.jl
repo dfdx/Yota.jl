@@ -17,18 +17,16 @@ function xavier_init(dim_in, dim_out; c=1)
 end
 
 
-# NOTE: not a generic function, we will work it out later
-logistic(x) = 1f0 ./ (1f0 .+ CUDAnative.exp.(-x))
-@diffrule logistic(x) x (logistic(x) .* (1f0 .- logistic(x)) .* ds)
+# CPU functions
+logistic(x::Number) = one(x) / (one(x) + exp(-x))
+CuArrays.@cufunc logistic(x::Number) = one(x) / (one(x) + exp(-x))
+@diffrule logistic(x) x (logistic(x) * (one(x) - logistic(x)) * ds)
 
-softplus(x) = CUDAnative.log.(CUDAnative.exp.(x) .+ 1f0)
-@diffrule softplus(x) x logistic(x) .* ds
+softplus(x::Number) = log.(exp.(x) .+ one(x))
+CuArrays.@cufunc softplus(x::Number) = log(exp(x) + one(x))
+@diffrule softplus(x) x (logistic(x) * ds)
 
-@diffrule CUDAnative.exp(x::Real) x CUDAnative.exp(x) * ds
-@diffrule CUDAnative.pow(x::Real, y::Real) x (y * CUDAnative.pow(x, (y-1)) * ds)
-@diffrule CUDAnative.pow(x::Real, y::Real) y CUDAnative.log(x) * CUDAnative.pow(x, y) * ds
-@diffrule CUDAnative.log(x::Real) x ds / x
-@diffrule CUDAnative.sqrt(x::Real) x (0.5f0 * CUDAnative.pow(x, -0.5f0) * ds)
+
 
 
 # variational autoencoder with Gaussian observed and latent variables
@@ -80,17 +78,17 @@ VAE{T}(n_inp, n_he1, n_he2, n_z, n_hd1, n_hd2, n_out) where T =
 
 
 function encode(m::VAE, x)
-    he1 = softplus(m.We1 * x .+ m.be1)
-    he2 = softplus(m.We2 * he1 .+ m.be2)
+    he1 = softplus.(m.We1 * x .+ m.be1)
+    he2 = softplus.(m.We2 * he1 .+ m.be2)
     mu = m.We3 * he2 .+ m.be3
     log_sigma2 = m.We4 * he2 .+ m.be4
     return mu, log_sigma2
 end
 
 function decode(m::VAE, z)
-    hd1 = softplus(m.Wd1 * z .+ m.bd1)
-    hd2 = softplus(m.Wd2 * hd1 .+ m.bd2)
-    x_rec = logistic(m.Wd3 * hd2 .+ m.bd3)
+    hd1 = softplus.(m.Wd1 * z .+ m.bd1)
+    hd2 = softplus.(m.Wd2 * hd1 .+ m.bd2)
+    x_rec = logistic.(m.Wd3 * hd2 .+ m.bd3)
     return x_rec
 end
 
@@ -98,11 +96,11 @@ end
 
 function vae_cost(m::VAE, eps, x)
     mu, log_sigma2 = encode(m, x)
-    z = mu .+ CUDAnative.sqrt.(CUDAnative.exp.(log_sigma2)) .* eps
+    z = mu .+ sqrt.(exp.(log_sigma2)) .* eps
     x_rec = decode(m, z)
     # loss
-    rec_loss = -sum(x .* CUDAnative.log.(1f-10 .+ x_rec) .+ (1 .- x) .* CUDAnative.log.(1f-10 + 1f0 .- x_rec); dims=1)
-    KLD = -0.5f0 .* sum(1f0 .+ log_sigma2 .- CUDAnative.pow.(mu, 2.0f0) - CUDAnative.exp.(log_sigma2); dims=1)
+    rec_loss = -sum(x .* log.(1f-10 .+ x_rec) .+ (1 .- x) .* log.(1f-10 + 1f0 .- x_rec); dims=1)
+    KLD = -0.5f0 .* sum(1f0 .+ log_sigma2 .- mu .^ 2f0 - exp.(log_sigma2); dims=1)
     cost = mean(rec_loss .+ KLD)
 end
 
@@ -139,6 +137,7 @@ function show_pic(x)
 end
 
 
+
 function show_recon(m, x)
     x_ = reconstruct(m, x)
     show_pic(x)
@@ -150,11 +149,11 @@ function main()
     m = VAE{Float32}(784, 500, 500, 20, 500, 500, 784) |> to_cuda
 
     X, _ = MNIST.traindata()
-    X = convert(Matrix{Float32}, reshape(X, 784, 60000)) |> to_cuda
+    X = convert(Matrix{Float32}, reshape(X, 784, 60000))
     @time m = fit!(m, X)
 
     # check reconstructed image
     for i=1:2:10
-        show_recon(m, X[:, i])
+        show_recon(m, X[:, i] |> to_cuda)
     end
 end

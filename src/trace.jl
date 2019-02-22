@@ -63,7 +63,7 @@ function with_free_args_as_constants(ctx::TraceCtx, tape::Tape, args)
         if istagged(x, ctx)
             push!(new_args, x)
         else
-            x = x isa Function ? device_function(ctx.metadata.tape.device, x) : x
+            # x = x isa Function ? device_function(ctx.metadata.tape.device, x) : x
             id = record!(tape, Constant, x)
             x = tag(x, ctx, id)
             push!(new_args, x)
@@ -82,8 +82,6 @@ function Cassette.overdub(ctx::TraceCtx, f, args...)
         args = with_free_args_as_constants(ctx, tape, args)
         arg_ids = [metadata(x, ctx) for x in args]
         arg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in arg_ids]
-        # make compatible with device
-        f = device_function(tape.device, f)
         # execute call
         retval = fallback(ctx, f, [untag(x, ctx) for x in args]...)
         # record to the tape and tag with a newly created ID
