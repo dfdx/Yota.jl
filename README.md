@@ -1,4 +1,3 @@
-
 # Yötä
 
 [![Build Status](https://travis-ci.org/dfdx/Yota.jl.svg?branch=master)](https://travis-ci.org/dfdx/Yota.jl)
@@ -35,8 +34,8 @@ Dict{Tuple{Symbol},Array{Float64,2}} with 1 entry:
 julia> g[2]  # gradient w.r.t. X
 4×5 Array{Float64,2}:
  0.910691  0.910691  0.910691  0.910691  0.910691
- 1.64994   1.64994   1.64994   1.64994   1.64994 
- 1.81215   1.81215   1.81215   1.81215   1.81215 
+ 1.64994   1.64994   1.64994   1.64994   1.64994
+ 1.81215   1.81215   1.81215   1.81215   1.81215
  2.31594   2.31594   2.31594   2.31594   2.31594
 ```
 
@@ -46,7 +45,7 @@ julia> g[2]  # gradient w.r.t. X
 for i=1:100
     val, g = grad(loss, m, X)
     println("Loss value in $(i)th epoch: $val")
-    update!(m, g[1], (x, gx) -> x .- 0.01gx)    
+    update!(m, g[1], (x, gx) -> x .- 0.01gx)
 end
 ```
 
@@ -54,7 +53,7 @@ end
 
 ## Custom derivatives
 
-You can add custom derivatives using `@diffrule` macro. 
+You can add custom derivatives using `@diffrule` macro.
 
 ```julia
 logistic(x) = 1 / (1 + exp(-x))
@@ -90,8 +89,11 @@ print(tape)
 ```
 `trace` uses [Cassette.jl](https://github.com/jrevels/Cassette.jl/) to collect function calls during execution. Functions are divided into 2 groups:
 
- * primitive, such as `*`, `sum`, `sin`, etc. or any function for which `@diffrule` is defined. These are recorded to the tape;
- * non-primitive, which are traced-through down to primitive ones.  
+ * primitive, which are recorded to the tape;
+ * non-primitive, which are traced-through down to primitive ones.
+
+By default, set of primitive functions is defined in `Yota.PRIMITIVES` and includes such beasts as `*`, `broadcast`, `getproperty` as well as all functions for which `@diffrule` is defined. You can also specify custom primitives using `primitive=Set([...])` keyword to `trace()`.
+
 
 Tape can also be executed and compiled:
 
@@ -122,4 +124,10 @@ function iterative(x, n)
     return x
 end
 ```
-exactly `n` iterations will be recorded to the tape and all future values of `n` will make no effect.  
+exactly `n` iterations will be recorded to the tape and all future values of `n` will make no effect.
+
+## CuArrays support (experimental)
+
+Yota should work with CuArrays out of the box, although integration is not well tested yet.
+
+In addition, you can use function `to_cuda()` to transform arrays and structs into CUDA-compatible, see [cu_vae.jl](https://github.com/dfdx/Yota.jl/blob/master/examples/cu_vae.jl) for an example. Note that this API is highly experimental and will most likely change to something more device-agnostic.

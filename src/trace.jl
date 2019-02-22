@@ -21,6 +21,12 @@ const PRIMITIVES = Set([
 #                               TRACE                                  #
 ########################################################################
 
+struct TapeBox
+    tape::Tape
+    primitives::Set{Any}
+end
+
+
 """
 Trace function execution using provided arguments.
 Returns calculated value and a tape.
@@ -30,10 +36,11 @@ foo(x) = 2.0x + 1.0
 val, tape = trace(foo, 4.0)
 ```
 """
-function trace(f, args...; optimize=true)
+function trace(f, args...; primitives=PRIMITIVES, optimize=true)
     # create tape
-    tape = Tape()
-    ctx = enabletagging(TraceCtx(metadata=tape), f)
+    tape = Tape(guess_device(args))
+    box = TapeBox(tape, primitives)
+    ctx = enabletagging(TraceCtx(metadata=box), f)
     tagged_args = Vector(undef, length(args))
     for (i, x) in enumerate(args)
         id = record!(tape, Input, x)
@@ -56,6 +63,7 @@ function with_free_args_as_constants(ctx::TraceCtx, tape::Tape, args)
         if istagged(x, ctx)
             push!(new_args, x)
         else
+            # x = x isa Function ? device_function(ctx.metadata.tape.device, x) : x
             id = record!(tape, Constant, x)
             x = tag(x, ctx, id)
             push!(new_args, x)
@@ -67,9 +75,10 @@ end
 
 function Cassette.overdub(ctx::TraceCtx, f, args...)
     args_str = join([a isa Nothing ? "nothing" : a for a in args], ", ")
-    tape = ctx.metadata
+    tape = ctx.metadata.tape
+    primitives = ctx.metadata.primitives
     # @info "$f($args...)"
-    if f in PRIMITIVES
+    if f in primitives
         args = with_free_args_as_constants(ctx, tape, args)
         arg_ids = [metadata(x, ctx) for x in args]
         arg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in arg_ids]

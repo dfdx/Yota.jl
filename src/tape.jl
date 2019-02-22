@@ -92,12 +92,14 @@ mutable struct Tape
     fieldpaths::Dict{Int, Dict}
     # compiled tape or nothing
     compiled::MaybeFunction
-    # function to use for moving intermediate results to device
+    # device of the tape
     device::AbstractDevice
 end
 
 Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), Dict(), nothing, device)
 Tape() = Tape(CPU())
+Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs, tape.fieldpaths,
+                                tape.compiled, tape.device)
 
 
 function Base.show(io::IO, tape::Tape)
@@ -143,7 +145,6 @@ Keyword params:
 """
 function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
     @assert Meta.isexpr(ex, :call) "Expression isn't a call"
-    # TODO: handle kw args
     new_op_args = Vector{Int}(undef, length(ex.args) - 1)
     for (i, x) in enumerate(ex.args[2:end])
         if haskey(st, x)
@@ -158,8 +159,9 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
             arg_id = record!(tape, Constant, x)
             new_op_args[i] = arg_id
         end
-    end
+    end    
     fn = ex.args[1]
+    fn = device_function(tape.device, fn)
     if bcast
         retval = broadcast(fn, [tape[id].val for id in new_op_args]...)
         fn_id = record!(tape, Constant, fn)

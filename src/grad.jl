@@ -221,7 +221,7 @@ in a format most suitable for that argument, namely:
 All gradients can be applied to original variables using `update!()` function.
 """
 function grad(f::Function, args...)
-    # key conists of function type and type of argument (for structs) or its size
+    # key consists of function type and type of argument (for structs) or its size
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
     if haskey(GRAD_CACHE, cache_key)
         tape = GRAD_CACHE[cache_key]

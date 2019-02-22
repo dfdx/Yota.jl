@@ -231,8 +231,7 @@ end
 
 
 # square root
-@diffrule sqrt(x::Real)              x     0.5 * x ^ (-0.5) * ds
-# @diffrule sqrt(x::AbstractVector)    x     0.5 .* x .^ (-0.5) .* ds
+@diffrule sqrt(x::Real)              x     0.5f0 * x ^ (-0.5f0) * ds
 
 # addition
 @diffrule +(x::Real         , y::Real )            x     ds
@@ -299,7 +298,7 @@ end
 # sum() and mean()
 # @diffrule sum(x::Real)                              x     ds
 @diffrule sum(x::AbstractArray)                     x     sum_grad(x, ds)
-@diffrule Base._sum(x::AbstractArray, y::Int)             x     ones(size(x)) .* ds
+@diffrule Base._sum(x::AbstractArray, y::Int)             x     sum_grad(x, ds)
 @diffrule Base._sum(x::AbstractArray, y::Int)             y     0.0
 
 # @diffrule Statistics.mean(x::Real)                         x     ds
