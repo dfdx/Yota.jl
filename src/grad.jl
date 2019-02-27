@@ -131,9 +131,10 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
         setderiv!(tape, x, dx)
     else
         # @warn "This branch hasn't been tested yet"
-        old_dx = getderiv(tape, x)
-        val = dx.val + old_dx.val
-        new_dx_id = record!(tape, Call, val, +, [dx.id, old_dx.id])
+        old_dx = getderiv(tape, x)        
+        val = dx.val .+ old_dx.val
+        dot_add_id = record!(tape, Constant, +)
+        new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
         new_dx = tape[new_dx_id]
         setderiv!(tape, x, new_dx)
     end

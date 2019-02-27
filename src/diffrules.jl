@@ -218,6 +218,8 @@ end
 @diffrule reshape(x::AbstractArray, _d::Tuple)      x    reshape(ds, size(x))
 @diffrule reshape(x::AbstractArray, _d::Tuple)     _d    0.0
 
+@diffrule vec(x::AbstractArray)    x    reshape(ds, size(x))
+
 
 @diffrule getindex(x::AbstractArray, i)         x    ungetindex(x, ds, i)
 @diffrule getindex(x::AbstractArray, i, j)      x    ungetindex(x, ds, i, j)
@@ -305,6 +307,9 @@ end
 @diffrule Statistics.mean(x::AbstractArray)                x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       y     0.0
+
+# diag
+@diffrule diag(x::AbstractMatrix)    x    Diagonal(ds)
 
 # dot()
 @diffrule dot(x::Real, y::Real)                     x     y * ds

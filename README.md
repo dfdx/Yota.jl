@@ -94,6 +94,7 @@ print(tape)
 
 By default, set of primitive functions is defined in `Yota.PRIMITIVES` and includes such beasts as `*`, `broadcast`, `getproperty` as well as all functions for which `@diffrule` is defined. You can also specify custom primitives using `primitive=Set([...])` keyword to `trace()`.
 
+Also note that `broadcast`'s first argument is always considered a primitive and recorded to the tape as is, so backpropagation will only work if there's a `@diffrule` for it.
 
 Tape can also be executed and compiled:
 
