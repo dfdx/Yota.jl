@@ -189,10 +189,14 @@ end
 
 function _grad(f::Function, args...)
     val, tape = trace(f, args...)
+    # apply preprocessing transformations
+    tape = preprocess(tape)
     # backpropagate gradients
     back!(tape)
     # consistency check
     check_deriv_sizes(tape)
+    # apply postprocessing transformations
+    tape = postprocess(tape)
     # construct GradResult object that wraps tape and provide accessors for computed derivatives
     return val, GradResult(tape)
 end

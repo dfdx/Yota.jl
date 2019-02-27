@@ -10,6 +10,7 @@ using Requires
 include("helpers.jl")
 include("devices.jl")
 include("tape.jl")
+include("tapeutils.jl")
 include("trace.jl")
 include("diffrules.jl")
 include("grad.jl")

@@ -1,6 +1,6 @@
 using Test
 using Yota
-using Yota: Tape, Input, Call, Constant, trace, play!, transform
+using Yota: Tape, Input, Call, Constant, trace, play!, transform, binarize_ops
 using Yota: mean_grad, setfield_nested!, copy_with
 
 include("test_tracer.jl")
