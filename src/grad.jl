@@ -130,7 +130,6 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     if !haskey(tape.derivs, x.id)
         setderiv!(tape, x, dx)
     else
-        # @warn "This branch hasn't been tested yet"
         old_dx = getderiv(tape, x)        
         val = dx.val .+ old_dx.val
         dot_add_id = record!(tape, Constant, +)

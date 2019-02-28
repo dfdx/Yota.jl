@@ -241,35 +241,19 @@ end
 @diffrule +(x::Real         , y::Real )            y     ds
 @diffrule +(x::AbstractArray, y::AbstractArray)    y     ds
 
-# deprecated
-# @diffrule +(x::Real         , y::AbstractArray)    x     sum(ds)
-# @diffrule +(x::AbstractArray, y       )            x     ds
-# @diffrule +(x::AbstractArray, y::Real )            y     sum(ds)
-# @diffrule +(x               , y::AbstractArray)    y     ds
-
-# dot addition
-# @diffrule .+(x::Real, y::Real)                      x     ds
-# @diffrule .+(x::Real, y::AbstractArray)             x     sum(ds)
-# @diffrule .+(x::AbstractArray, y::Real)             x     ds
-# @diffrule .+(x::AbstractVector, y::AbstractMatrix)  x     squeeze_sum(ds, 2)
-# @diffrule .+(x::AbstractArray, y::AbstractArray)    x     ds
-
-@diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) x sum(ds)
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) x ds
-@diffrule broadcast(_fn::typeof(+), x::AbstractVector, y::AbstractMatrix) x sum_dropdims(ds, 2)
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) x ds
+@diffrule broadcast(_fn::typeof(+), x, y) x sum!(similar(x), ds)
+@diffrule broadcast(_fn::typeof(+), x, y) y sum!(similar(y), ds)
+# @diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) x sum(ds)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) x ds
+# @diffrule broadcast(_fn::typeof(+), x::AbstractVector, y::AbstractMatrix) x sum_dropdims(ds, 2)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) x ds
 
 
-@diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) y ds
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) y sum(ds)
-@diffrule broadcast(_fn::typeof(+), x::AbstractMatrix, y::AbstractVector) y sum_dropdims(ds, 2)
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) y ds
+# @diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) y ds
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) y sum(ds)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractMatrix, y::AbstractVector) y sum_dropdims(ds, 2)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) y ds
 
-# @diffrule .+(x::Real, y::Real)                      y     ds
-# @diffrule .+(x::Real, y::AbstractArray)             y     ds
-# @diffrule .+(x::AbstractArray, y::Real)             y     sum(ds)
-# @diffrule .+(x::AbstractMatrix, y::AbstractVector)  y     squeeze_sum(ds, 2)
-# @diffrule .+(x::AbstractArray, y::AbstractArray)    y     ds
 
 # unary substraction
 @diffrule -(x::Real )                               x     -ds
