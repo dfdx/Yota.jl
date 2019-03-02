@@ -36,6 +36,15 @@ sum_bcast(x, y) = sum(x .+ y)
 end
 
 
+@testset "grad: transpose" begin
+    a = rand(5)
+    b = rand(2, 3)
+    @test grad(x -> sum(transpose(x)), a)[2][1] == ones(size(a))
+    @test grad(x -> sum(adjoint(x)), a)[2][1] == ones(size(a))
+    @test grad(x -> sum(transpose(x)), b)[2][1] == ones(size(b))
+    @test grad(x -> sum(adjoint(x)), b)[2][1] == ones(size(b))
+end
+
 
 mutable struct Linear{T}
     W::AbstractArray{T,2}

@@ -382,6 +382,8 @@ end
 # transpose
 @diffrule transpose(x::AbstractVector)             x     untranspose_vec(ds)
 @diffrule transpose(x::AbstractArray)              x     transpose(ds)
+@diffrule adjoint(x::AbstractVector)             x     untranspose_vec(ds)
+@diffrule adjoint(x::AbstractArray)              x     adjoint(ds)
 
 # # erf, erfc, gamma, beta, lbeta, lgamma
 # @diffrule erf(x::Real)                       x     2.0/sqrt(π) * exp(-x  * x)  * ds

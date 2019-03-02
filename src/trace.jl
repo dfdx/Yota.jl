@@ -74,7 +74,6 @@ end
 
 
 function Cassette.overdub(ctx::TraceCtx, f, args...)
-    args_str = join([a isa Nothing ? "nothing" : a for a in args], ", ")
     tape = ctx.metadata.tape
     primitives = ctx.metadata.primitives
     # @info "$f($args...)"

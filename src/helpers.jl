@@ -48,4 +48,6 @@ unbroadcast(x::AbstractArray, Δ) =
 unbroadcast(x::Number, Δ) = sum(Δ)
 
 
+untranspose_vec(ds::Transpose{T, <:AbstractVector{T}}) where T = transpose(ds)
+untranspose_vec(ds::Adjoint{T, <:AbstractVector{T}}) where T = adjoint(ds)
 untranspose_vec(ds::AbstractMatrix) = dropdims(transpose(ds); dims=2)
