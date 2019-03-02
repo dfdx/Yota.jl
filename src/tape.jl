@@ -45,12 +45,12 @@ Base.show(io::IO, op::Assign) = print(io, "%$(op.id) = %$(op.src_id)::$(op.typ)"
 mutable struct Call <: AbstractOp
     id::Int
     val::Any
-    fn::Function
+    fn::Union{Function, Type}
     args::Vector{Int}
     kwargs::Dict          # currently not used
 end
 
-Call(id::Int, val::Any, fn::Function, args::Vector{Int}; kwargs=Dict()) =
+Call(id::Int, val::Any, fn::Union{Function, Type}, args::Vector{Int}; kwargs=Dict()) =
     Call(id, val, fn, args, kwargs)
 Base.getproperty(op::Input, f::Call) = f == :typ ? typeof(op.val) : getfield(op, f)
 

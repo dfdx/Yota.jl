@@ -22,13 +22,11 @@ sum_bcast(x, y) = sum(x .+ y)
 @testset "special bcast" begin
     for args in [
         (rand(3, 4), rand(3)),
-        # TODO: these are rare, but valid cases
-        # we can design grad_dot_add to handle them later
-        # (rand(3, 4), rand(3, 1)),
-        # (rand(3, 4), rand(1, 4)),
+        (rand(3, 4), rand(3, 1)),
+        (rand(3, 4), rand(1, 4)),
         (rand(3), rand(3, 4)),
-        # (rand(3, 1), rand(3, 4)),
-        # (rand(1, 4), rand(3, 4)),
+        (rand(3, 1), rand(3, 4)),
+        (rand(1, 4), rand(3, 4)),
     ]
         val, g = grad(sum_bcast, args...)
         for i=1:length(args)
@@ -37,6 +35,15 @@ sum_bcast(x, y) = sum(x .+ y)
     end
 end
 
+
+@testset "grad: transpose" begin
+    a = rand(5)
+    b = rand(2, 3)
+    @test grad(x -> sum(transpose(x)), a)[2][1] == ones(size(a))
+    @test grad(x -> sum(adjoint(x)), a)[2][1] == ones(size(a))
+    @test grad(x -> sum(transpose(x)), b)[2][1] == ones(size(b))
+    @test grad(x -> sum(adjoint(x)), b)[2][1] == ones(size(b))
+end
 
 
 mutable struct Linear{T}

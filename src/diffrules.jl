@@ -218,6 +218,8 @@ end
 @diffrule reshape(x::AbstractArray, _d::Tuple)      x    reshape(ds, size(x))
 @diffrule reshape(x::AbstractArray, _d::Tuple)     _d    0.0
 
+@diffrule vec(x::AbstractArray)    x    reshape(ds, size(x))
+
 
 @diffrule getindex(x::AbstractArray, i)         x    ungetindex(x, ds, i)
 @diffrule getindex(x::AbstractArray, i, j)      x    ungetindex(x, ds, i, j)
@@ -239,35 +241,19 @@ end
 @diffrule +(x::Real         , y::Real )            y     ds
 @diffrule +(x::AbstractArray, y::AbstractArray)    y     ds
 
-# deprecated
-# @diffrule +(x::Real         , y::AbstractArray)    x     sum(ds)
-# @diffrule +(x::AbstractArray, y       )            x     ds
-# @diffrule +(x::AbstractArray, y::Real )            y     sum(ds)
-# @diffrule +(x               , y::AbstractArray)    y     ds
-
-# dot addition
-# @diffrule .+(x::Real, y::Real)                      x     ds
-# @diffrule .+(x::Real, y::AbstractArray)             x     sum(ds)
-# @diffrule .+(x::AbstractArray, y::Real)             x     ds
-# @diffrule .+(x::AbstractVector, y::AbstractMatrix)  x     squeeze_sum(ds, 2)
-# @diffrule .+(x::AbstractArray, y::AbstractArray)    x     ds
-
-@diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) x sum(ds)
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) x ds
-@diffrule broadcast(_fn::typeof(+), x::AbstractVector, y::AbstractMatrix) x sum_dropdims(ds, 2)
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) x ds
+@diffrule broadcast(_fn::typeof(+), x, y) x unbroadcast(x, ds)
+@diffrule broadcast(_fn::typeof(+), x, y) y unbroadcast(y, ds)
+# @diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) x sum(ds)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) x ds
+# @diffrule broadcast(_fn::typeof(+), x::AbstractVector, y::AbstractMatrix) x sum_dropdims(ds, 2)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) x ds
 
 
-@diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) y ds
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) y sum(ds)
-@diffrule broadcast(_fn::typeof(+), x::AbstractMatrix, y::AbstractVector) y sum_dropdims(ds, 2)
-@diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) y ds
+# @diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) y ds
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) y sum(ds)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractMatrix, y::AbstractVector) y sum_dropdims(ds, 2)
+# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) y ds
 
-# @diffrule .+(x::Real, y::Real)                      y     ds
-# @diffrule .+(x::Real, y::AbstractArray)             y     ds
-# @diffrule .+(x::AbstractArray, y::Real)             y     sum(ds)
-# @diffrule .+(x::AbstractMatrix, y::AbstractVector)  y     squeeze_sum(ds, 2)
-# @diffrule .+(x::AbstractArray, y::AbstractArray)    y     ds
 
 # unary substraction
 @diffrule -(x::Real )                               x     -ds
@@ -283,17 +269,6 @@ end
 # @diffrule -(x::AbstractArray, y::Real)              y     -sum(ds)
 @diffrule -(x::AbstractArray, y::AbstractArray)     y     -ds
 
-# dot binary substraction
-# @diffrule .-(x::Real, y::Real)                      x     ds
-# @diffrule .-(x::Real, y::AbstractArray)             x     sum(ds)
-# @diffrule .-(x::AbstractArray, y::Real)             x     ones(size(x)) .* ds
-# @diffrule .-(x::AbstractVector, y::AbstractMatrix)  x     squeeze_sum(ds, 2)
-# @diffrule .-(x::AbstractArray, y::AbstractArray)    x     ds
-# @diffrule .-(x::Real, y::Real)                      y     -ds
-# @diffrule .-(x::Real, y::AbstractArray)             y     -ones(size(y)) .* ds
-# @diffrule .-(x::AbstractArray, y::Real)             y     -sum(ds)
-# @diffrule .-(x::AbstractMatrix, y::AbstractVector)  y     -squeeze_sum(ds, 2)
-# @diffrule .-(x::AbstractArray, y::AbstractArray)    y     -ds
 
 # sum() and mean()
 # @diffrule sum(x::Real)                              x     ds
@@ -306,6 +281,9 @@ end
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       y     0.0
 
+# diag
+@diffrule diag(x::AbstractMatrix)    x    Diagonal(ds)
+
 # dot()
 @diffrule dot(x::Real, y::Real)                     x     y * ds
 @diffrule dot(x::Real, y::Real)                     y     x * ds
@@ -315,14 +293,8 @@ end
 
 # log() and exp()
 @diffrule log(x::Real )                            x     ds / x
-# @diffrule log(x::AbstractArray)                    x     ds ./ x
-
 @diffrule exp(x::Real )                            x     exp(x) * ds
-# @diffrule exp(x::AbstractArray)                    x     exp(x) .* ds
-
 @diffrule log1p(x::Real)                           x     ds  / (1 + x)
-# @diffrule log1p(x::AbstractArray)                  x     ds ./ (1 + x)
-
 @diffrule expm1(x::Real)                           x     (1.0 + expm1(x))  * ds
 # @diffrule expm1(x::AbstractArray)                  x     (1.0 + expm1(x)) .* ds
 # note : derivative uses expm1() and not exp() to reuse the
@@ -330,45 +302,24 @@ end
 
 # trig functions
 @diffrule sin(x::Real )                            x     cos(x) * ds
-# @diffrule sin(x::AbstractArray)                    x     cos(x) .* ds
-
 @diffrule cos(x::Real )                            x     -sin(x) * ds
-# @diffrule cos(x::AbstractArray)                    x     -sin(x) .* ds
-
 @diffrule tan(x::Real )                            x     (1.0 + tan(x)  * tan(x))  * ds
-# @diffrule tan(x::AbstractArray)                    x     (1.0 + tan(x) .* tan(x)) .* ds
-
 @diffrule sinh(x::Real )                           x     cosh(x) * ds
-# @diffrule sinh(x::AbstractArray)                   x     cosh(x) .* ds
-
 @diffrule cosh(x::Real )                           x     sinh(x) * ds
-# @diffrule cosh(x::AbstractArray)                   x     sinh(x) .* ds
-
 @diffrule tanh(x::Real )                           x     (1.0 - tanh(x)  * tanh(x))  * ds
-# @diffrule tanh(x::AbstractArray)                   x     (1.0 - tanh(x) .* tanh(x)) .* ds
-
 @diffrule asin(x::Real )                           x     ds  / sqrt(1 - x *x)
-# @diffrule asin(x::AbstractArray)                   x     ds ./ sqrt(1 - x.*x)
-
 @diffrule acos(x::Real )                           x     -ds  / sqrt(1 - x *x)
-# @diffrule acos(x::AbstractArray)                   x     -ds ./ sqrt(1 - x.*x)
-
 @diffrule atan(x::Real )                           x     ds  / (1 + x *x)
-# @diffrule atan(x::AbstractArray)                   x     ds ./ (1 + x.*x)
 
 
 # round, floor, ceil, trunc, mod2pi
 @diffrule round(x::Real)                           x     0.0
-# @diffrule round(x::AbstractArray)                  x     0.0
 
 @diffrule floor(x::Real)                           x     0.0
-# @diffrule floor(x::AbstractArray)                  x     0.0
 
 @diffrule ceil(x::Real)                            x     0.0
-# @diffrule ceil(x::AbstractArray)                   x     0.0
 
 @diffrule trunc(x::Real)                           x     0.0
-# @diffrule trunc(x::AbstractArray)                  x     0.0
 
 @diffrule mod2pi(x::Real)                          x     ds
 
@@ -417,56 +368,22 @@ end
 @diffrule *(x::AbstractArray, y::Real )            y     sum(x .* ds)
 @diffrule *(x::AbstractArray, y::AbstractArray)    y     transpose(x) * ds
 
-# dot multiplication
-# @diffrule .*(x::Real, y::Real)                     x     y .* ds
-# @diffrule .*(x::Real, y::AbstractArray)            x     sum(y .* ds)
-# @diffrule .*(x::AbstractArray, y::Real)            x     y .* ds
-# @diffrule .*(x::AbstractVector, y::AbstractMatrix) x     squeeze_sum(ds .* y, 2) # ?
-# @diffrule .*(x::AbstractArray, y::AbstractArray)   x     y .* ds
-
-# @diffrule .*(x::Real, y::Real)                     y     x * ds
-# @diffrule .*(x::Real, y::AbstractArray)            y     x .* ds
-# @diffrule .*(x::AbstractArray, y::Real)            y     sum(x .* ds)
-# @diffrule .*(x::AbstractMatrix, y::AbstractVector) y     squeeze_sum(ds .* x, 2) # ?
-# @diffrule .*(x::AbstractArray, y::AbstractArray)   y     x .* ds
 
 # power  (both args reals)
 @diffrule ^(x::Real, y::Real)                      x     y * x ^ (y-1) * ds
 @diffrule ^(x::Real, y::Real)                      y     log(x) * x ^ y * ds
 # @diffrule Base.literal_pow(_fn::typeof(^), x::Real, ::Val{y}) x (y * x ^ (y-1) * ds)
 
-# # dot power
-# @diffrule .^(x::Real         , y::Real )           x     y * x ^ (y-1) * ds
-# @diffrule .^(x::Real         , y::AbstractArray)   x     sum(y .* x .^ (y-1) .* ds)
-# @diffrule .^(x::AbstractArray, y::Real )           x     y .* x .^ (y-1) .* ds
-# @diffrule .^(x::AbstractArray, y::AbstractArray)   x     y .* x .^ (y-1) .* ds
-
-# @diffrule .^(x::Real         , y::Real )           y     log(x) * x ^ y * ds
-# @diffrule .^(x::AbstractArray, y::Real )           y     sum( log(x) .* x .^ y .* ds)
-# @diffrule .^(x::Real         , y::AbstractArray)   y     log(x) .* x .^ y .* ds
-# @diffrule .^(x::AbstractArray, y::AbstractArray)   y     log(x) .* x .^ y .* ds
 
 # # division
 @diffrule /(x::Real          , y::Real )           x     ds / y
-# @diffrule /(x::AbstractArray , y::Real )           x     ds ./ y
-
 @diffrule /(x::Real          , y::Real )           y     -x * ds / (y * y)
-# @diffrule /(x::AbstractArray , y::Real )           y     sum(-x .* ds) / (y * y)
-
-# # dot division
-# @diffrule ./(x::Real         , y::Real )           x     ds / y
-# @diffrule ./(x::Real         , y::AbstractArray)   x     sum(ds ./ y)
-# @diffrule ./(x::AbstractArray, y::Real )           x     ds ./ y
-# @diffrule ./(x::AbstractArray, y::AbstractArray)   x     ds ./ y
-
-# @diffrule ./(x::Real         , y::Real )           y     -x * ds / (y * y)
-# @diffrule ./(x::Real         , y::AbstractArray)   y     -x * ds ./ (y .* y)
-# @diffrule ./(x::AbstractArray, y::Real )           y     -sum(x .* ds) / (y * y)
-# @diffrule ./(x::AbstractArray, y::AbstractArray)   y     -x .* ds ./ (y .* y)
 
 # transpose
-# @diffrule transpose(x::Real )                      x     ds
+@diffrule transpose(x::AbstractVector)             x     untranspose_vec(ds)
 @diffrule transpose(x::AbstractArray)              x     transpose(ds)
+@diffrule adjoint(x::AbstractVector)             x     untranspose_vec(ds)
+@diffrule adjoint(x::AbstractArray)              x     adjoint(ds)
 
 # # erf, erfc, gamma, beta, lbeta, lgamma
 # @diffrule erf(x::Real)                       x     2.0/sqrt(π) * exp(-x  * x)  * ds
@@ -493,4 +410,4 @@ end
 
 
 # should be something like @nodiff instead
-@diffrule rand(x) x 0.0f
+@diffrule rand(x) x 0.0f0
