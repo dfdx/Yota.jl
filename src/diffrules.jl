@@ -18,9 +18,9 @@ function resolve_old_broadcast(ex)
     end
     return ex
 end
-    
 
-function resolve_functions_and_types!(mod::Module, ex)    
+
+function resolve_functions_and_types!(mod::Module, ex)
     if Meta.isexpr(ex, :call)
         # replace function symbol with actual function reference and
         # recursively call on function args
@@ -213,10 +213,10 @@ end
 
 # reshape
 @diffrule reshape(x::AbstractArray, _a, _b)         x    reshape(ds, size(x))
-@diffrule reshape(x::AbstractArray, _a, _b)        _a    0.0
-@diffrule reshape(x::AbstractArray, _a, _b)        _b    0.0
+@diffrule reshape(x::AbstractArray, _a, _b)        _a    zero(eltype(x))
+@diffrule reshape(x::AbstractArray, _a, _b)        _b    0
 @diffrule reshape(x::AbstractArray, _d::Tuple)      x    reshape(ds, size(x))
-@diffrule reshape(x::AbstractArray, _d::Tuple)     _d    0.0
+@diffrule reshape(x::AbstractArray, _d::Tuple)     _d    0
 
 @diffrule vec(x::AbstractArray)    x    reshape(ds, size(x))
 
@@ -233,7 +233,7 @@ end
 
 
 # square root
-@diffrule sqrt(x::Real)              x     0.5f0 * x ^ (-0.5f0) * ds
+@diffrule sqrt(x::Real)              x     one(x) / 2 * x ^ (-one(x) / 2) * ds
 
 # addition
 @diffrule +(x::Real         , y::Real )            x     ds
@@ -274,12 +274,12 @@ end
 # @diffrule sum(x::Real)                              x     ds
 @diffrule sum(x::AbstractArray)                     x     sum_grad(x, ds)
 @diffrule Base._sum(x::AbstractArray, y::Int)             x     sum_grad(x, ds)
-@diffrule Base._sum(x::AbstractArray, y::Int)             y     0.0
+@diffrule Base._sum(x::AbstractArray, y::Int)             y     zero(eltype(x))
 
 # @diffrule Statistics.mean(x::Real)                         x     ds
 @diffrule Statistics.mean(x::AbstractArray)                x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       x     mean_grad(x, ds)
-@diffrule Statistics._mean(x::AbstractArray, y::Int)       y     0.0
+@diffrule Statistics._mean(x::AbstractArray, y::Int)       y     zero(eltype(x))
 
 # diag
 @diffrule diag(x::AbstractMatrix)    x    Diagonal(ds)
@@ -294,39 +294,39 @@ end
 # log() and exp()
 @diffrule log(x::Real )                            x     ds / x
 @diffrule exp(x::Real )                            x     exp(x) * ds
-@diffrule log1p(x::Real)                           x     ds  / (1 + x)
-@diffrule expm1(x::Real)                           x     (1.0 + expm1(x))  * ds
-# @diffrule expm1(x::AbstractArray)                  x     (1.0 + expm1(x)) .* ds
+@diffrule log1p(x::Real)                           x     ds  / (one(x) + x)
+@diffrule expm1(x::Real)                           x     (one(x) + expm1(x))  * ds
+# @diffrule expm1(x::AbstractArray)                  x     (one(x) + expm1(x)) .* ds
 # note : derivative uses expm1() and not exp() to reuse the
 #   already calculated expm1()
 
 # trig functions
 @diffrule sin(x::Real )                            x     cos(x) * ds
 @diffrule cos(x::Real )                            x     -sin(x) * ds
-@diffrule tan(x::Real )                            x     (1.0 + tan(x)  * tan(x))  * ds
+@diffrule tan(x::Real )                            x     (one(x) + tan(x)  * tan(x))  * ds
 @diffrule sinh(x::Real )                           x     cosh(x) * ds
 @diffrule cosh(x::Real )                           x     sinh(x) * ds
-@diffrule tanh(x::Real )                           x     (1.0 - tanh(x)  * tanh(x))  * ds
-@diffrule asin(x::Real )                           x     ds  / sqrt(1 - x *x)
-@diffrule acos(x::Real )                           x     -ds  / sqrt(1 - x *x)
-@diffrule atan(x::Real )                           x     ds  / (1 + x *x)
+@diffrule tanh(x::Real )                           x     (one(x) - tanh(x)  * tanh(x))  * ds
+@diffrule asin(x::Real )                           x     ds  / sqrt(one(x) - x*x)
+@diffrule acos(x::Real )                           x     -ds  / sqrt(one(x) - x*x)
+@diffrule atan(x::Real )                           x     ds  / (one(x) + x *x)
 
 
 # round, floor, ceil, trunc, mod2pi
-@diffrule round(x::Real)                           x     0.0
+@diffrule round(x::Real)                           x     zero(x)
 
-@diffrule floor(x::Real)                           x     0.0
+@diffrule floor(x::Real)                           x     zero(x)
 
-@diffrule ceil(x::Real)                            x     0.0
+@diffrule ceil(x::Real)                            x     zero(x)
 
-@diffrule trunc(x::Real)                           x     0.0
+@diffrule trunc(x::Real)                           x     zero(x)
 
 @diffrule mod2pi(x::Real)                          x     ds
 
 
 # abs, max(), min()
 @diffrule abs(x::Real)                             x     sign(x) * ds
-@diffrule abs2(x::Real)                            x     2.0 * x * ds
+@diffrule abs2(x::Real)                            x     2 * x * ds
 
 
 # @diffrule max(x::Real         , y::Real)           x     (x > y) * ds
@@ -370,7 +370,7 @@ end
 
 
 # power  (both args reals)
-@diffrule ^(x::Real, y::Real)                      x     y * x ^ (y-1) * ds
+@diffrule ^(x::Real, y::Real)                      x     y * x ^ (y-(one(x))) * ds
 @diffrule ^(x::Real, y::Real)                      y     log(x) * x ^ y * ds
 # @diffrule Base.literal_pow(_fn::typeof(^), x::Real, ::Val{y}) x (y * x ^ (y-1) * ds)
 
@@ -410,4 +410,4 @@ end
 
 
 # should be something like @nodiff instead
-@diffrule rand(x) x 0.0f0
+@diffrule rand(x) x zero(x)
