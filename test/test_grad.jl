@@ -22,13 +22,11 @@ sum_bcast(x, y) = sum(x .+ y)
 @testset "special bcast" begin
     for args in [
         (rand(3, 4), rand(3)),
-        # TODO: these are rare, but valid cases
-        # we can design grad_dot_add to handle them later
-        # (rand(3, 4), rand(3, 1)),
-        # (rand(3, 4), rand(1, 4)),
+        (rand(3, 4), rand(3, 1)),
+        (rand(3, 4), rand(1, 4)),
         (rand(3), rand(3, 4)),
-        # (rand(3, 1), rand(3, 4)),
-        # (rand(1, 4), rand(3, 4)),
+        (rand(3, 1), rand(3, 4)),
+        (rand(1, 4), rand(3, 4)),
     ]
         val, g = grad(sum_bcast, args...)
         for i=1:length(args)
