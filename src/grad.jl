@@ -149,8 +149,8 @@ function back!(tape::Tape)
     # x - dependencies of y
     # dy - derivative of z w.r.t. y
     z = tape[tape.resultid]
-    # using Float32 for seed since for 64-bit args it will be expanded anyway
-    dy_id = record!(tape, Constant, 1.0f0)
+    # using one() of type of the result for seed to keep type stability
+    dy_id = record!(tape, Constant, one(tape[tape.resultid].val))
     dy = tape[dy_id]
     # set initial derivative value
     tape.derivs[z.id] = dy.id
