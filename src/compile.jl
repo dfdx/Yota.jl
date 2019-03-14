@@ -128,8 +128,11 @@ end
 """
 Generate function expression from the tape without any optimizations or binding to
 tape's buffers.
+
+`ret_grad` optional parameter controls whether function should return only
+value of tape[resultid] (default) or also values of gradient nodes
 """
-function generate_function_expr_unbound(tape::Tape)
+function generate_function_expr_unbound(tape::Tape; ret_grad=false)
     # fn_args = [Expr(:(::), make_name(inp), typeof(inp.val)) for inp in tape if isa(inp, Input)]
     fn_args = [make_name(inp) for inp in tape if isa(inp, Input)]
     fn_ex = :(function $(gensym("tape_fn"))($(fn_args...)) end)
@@ -140,7 +143,23 @@ function generate_function_expr_unbound(tape::Tape)
             push!(fn_ex_body.args, ex)
         end
     end
-    push!(fn_ex_body.args, :(return $(make_name(tape[tape.resultid]))))
+    if ret_grad
+        res_var = make_name(tape[tape.resultid])
+        grad_vars = []
+        for op in tape
+            if op isa Input
+                if haskey(tape.derivs, op.id)
+                    push!(grad_vars, make_name(tape.derivs[op.id]))
+                else
+                    push!(grad_vars, nothing)
+                end
+            end
+        end
+        ret_tuple = Expr(:tuple, res_var, grad_vars...)
+        push!(fn_ex_body.args, :(return $ret_tuple))
+    else
+        push!(fn_ex_body.args, :(return $(make_name(tape[tape.resultid]))))
+    end
     return fn_ex
 end
 
@@ -150,8 +169,8 @@ end
 ########################################################################
 
 
-function compile(tape::Tape; bind=true)
-    fn_ex = bind ? generate_function_expr(tape) : generate_function_expr_unbound(tape)
+function compile(tape::Tape; bind=true, ret_grad=false)
+    fn_ex = bind ? generate_function_expr(tape) : generate_function_expr_unbound(tape; ret_grad=ret_grad)
     return Core.eval(@__MODULE__, fn_ex)
 end
 

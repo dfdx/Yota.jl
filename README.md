@@ -112,6 +112,12 @@ compile!(tape)
 # 492.063 ns (2 allocations: 144 bytes)
 ```
 
+## CuArrays support (experimental)
+
+Yota should work with CuArrays out of the box, although integration is not well tested yet.
+
+In addition, you can use function `to_cuda()` to transform arrays and structs into CUDA-compatible, see [cu_vae.jl](https://github.com/dfdx/Yota.jl/blob/master/examples/cu_vae.jl) for an example. Note that this API is highly experimental and will most likely change to something more device-agnostic.
+
 
 ## Static vs. dynamic (experimental)
 
@@ -147,8 +153,35 @@ _, g = grad(iterative, x, 3; dynamic=true)   # g[1] == [8.0, 8.0, 8.0, 8.0]
 Note that this feature is experimental and may be removed in future versions.
 
 
-## CuArrays support (experimental)
+## Simple grad (experimental)
 
-Yota should work with CuArrays out of the box, although integration is not well tested yet.
+`grad()` uses a number of optimizations and buffering to make gradient calculation as fast as possible. Sometimes, however, all we need is a simple gradient function that accepts all the same argument as the original one and returns gradients of its arguments, without attached buffers, additional data structures or whatever. You can create such a function using `simplegrad()`:
 
-In addition, you can use function `to_cuda()` to transform arrays and structs into CUDA-compatible, see [cu_vae.jl](https://github.com/dfdx/Yota.jl/blob/master/examples/cu_vae.jl) for an example. Note that this API is highly experimental and will most likely change to something more device-agnostic.
+```julia
+import Yota: simplegrad
+
+loss(W::AbstractMatrix, b::AbstractVector, x::AbstractArray) = sum(W * x .+ b)
+
+W, b, x = rand(128, 784), rand(128), rand(784, 100)
+∇loss = simplegrad(loss, W, b, x)   # note: ∇loss is a new _function_, world age concerns apply
+
+val, dW, db, dx = ∇loss(W, b, x)
+
+@code_lowered ∇loss(W, b, x)
+# CodeInfo(
+# 1 ─       %4 = (*)(%1, %3)
+# │         %5 = +
+# │         %6 = (broadcast)(%5, %4, %2)
+# │         %7 = (sum)(%6)
+# │         %8 = 1.0
+# │         %9 = (Yota.sum_grad)(%6, %8)
+# │         %10 = (Yota.unbroadcast)(%4, %9)
+# │         %11 = (Yota.unbroadcast)(%2, %9)
+# │         %12 = (transpose)(%3)
+# │         %13 = (*)(%10, %12)
+# │         %14 = (transpose)(%1)
+# │         %15 = (*)(%14, %10)
+# │         %13 = (Core.tuple)(%7, %13, %11, %15)
+# └──       return %13
+# )
+```

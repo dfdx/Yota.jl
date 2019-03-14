@@ -277,3 +277,9 @@ function grad(f::Function, args...; dynamic=false)
         return val, g
     end
 end
+
+
+function simplegrad(f, args...)
+    val, g = _grad(f, args...)
+    return compile(g.tape, bind=false, ret_grad=true)
+end
