@@ -1,3 +1,8 @@
+########################################################################
+#                 REINDEXING & OP BINARIZATION                         #
+########################################################################
+
+
 function reindex(op::Call, st::Dict)
     new_args = [get(st, x, x) for x in op.args]
     return copy_with(op, args=new_args)
@@ -58,7 +63,9 @@ function binarize_ops(tape::Tape)
 end
 
 
-## pre- and post-processing
+########################################################################
+#                       PRE- & POST-PROCESSING                         #
+########################################################################
 
 """
 Apply a number of transformations to a tape after tracing and before calculating derivatives
@@ -74,4 +81,43 @@ Apply a number of transformations after calculating derivatives
 """
 function postprocess(tape::Tape)
     return tape
+end
+
+
+########################################################################
+#                          HASH & EQUALITY                             #
+########################################################################
+
+# note: hash and == don't use operation values and .compiled field
+# so different runs of a tape doesn't affect its identity
+
+Base.hash(op::Input, h::UInt) = hash(op.id, h)
+Base.hash(op::Constant, h::UInt) = hash(op.id, hash(op.val, h))
+Base.hash(op::Assign, h::UInt) = hash(op.id, hash(op.src_id, h))
+Base.hash(op::Call, h::UInt) = hash(op.id, hash(op.fn, hash(op.args, h)))
+
+
+function Base.hash(tape::Tape, h::UInt)
+    h = hash(tape.resultid)
+    h = hash(tape.derivs, h)
+    h = hash(tape.fieldpaths, h)
+    h = hash(tape.device, h)
+    for op in tape
+        h = hash(op, h)
+    end
+    return h
+end
+
+
+Base.:(==)(op1::Input, op2::Input) = (op1.id == op2.id)
+Base.:(==)(op1::Constant, op2::Constant) = (op1.id == op2.id && op1.val == op2.val)
+Base.:(==)(op1::Assign, op2::Assign) = (op1.id == op2.id && op1.src_id == op2.src_id)
+Base.:(==)(op1::Call, op2::Call) = (op1.id == op2.id && op1.fn == op2.fn && op1.args == op2.args)
+
+function Base.:(==)(tape1::Tape, tape2::Tape)
+    return tape1.resultid == tape2.resultid &&
+        tape1.derivs == tape2.derivs &&
+        tape1.fieldpaths == tape2.fieldpaths &&
+        tape1.device == tape2.device &&
+        tape1.ops == tape2.ops
 end

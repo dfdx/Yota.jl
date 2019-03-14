@@ -113,19 +113,39 @@ compile!(tape)
 ```
 
 
-## Loops, conditions, etc.
+## Static vs. dynamic (experimental)
 
 Tracer records operations as they are executed the first time with given arguments. For example, for a loop like this:
 
 ```julia
 function iterative(x, n)
     for i=1:n
-        x = 2x
+        x = 2 .* x
     end
-    return x
+    return sum(x)
 end
 ```
-exactly `n` iterations will be recorded to the tape and all future values of `n` will make no effect.
+exactly `n` iterations will be recorded to the tape and replaying tape with any other values of `n` will make no effect. This also applies to a standard `grad()`:
+
+```julia
+x = rand(4)
+_, g = grad(iterative, x, 1)   # g[1] == [2.0, 2.0, 2.0, 2.0]
+_, g = grad(iterative, x, 2)   # g[1] == [2.0, 2.0, 2.0, 2.0]
+_, g = grad(iterative, x, 3)   # g[1] == [2.0, 2.0, 2.0, 2.0]
+```
+
+Nevertheless, Yota provides pseudo-dynamic capabilities by caching gradient results for all ever generated tapes. This doesn't eliminate cost of re-tracing, but avoids repeated backpropagation and tape optimization. You can tell `grad()` to use dynamic caching using `dynamic=true` keyword argument:
+
+
+```julia
+x = rand(4)
+_, g = grad(iterative, x, 1; dynamic=true)   # g[1] == [2.0, 2.0, 2.0, 2.0]
+_, g = grad(iterative, x, 2; dynamic=true)   # g[1] == [4.0, 4.0, 4.0, 4.0]
+_, g = grad(iterative, x, 3; dynamic=true)   # g[1] == [8.0, 8.0, 8.0, 8.0]
+```
+
+Note that this feature is experimental and may be removed in future versions.
+
 
 ## CuArrays support (experimental)
 

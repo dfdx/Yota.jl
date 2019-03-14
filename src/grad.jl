@@ -36,6 +36,7 @@ function GradResult(tape::Tape)
     gvars = Dict{Int,Any}()
     # struct fields
     for (argid, dct) in tape.fieldpaths
+        tape[argid] isa Input || continue  # skip non-input struct fields
         gvars[argid] = Dict(field_path => tape.derivs[var_id]
                             for (field_path, var_id) in dct
                             if haskey(tape.derivs, var_id))  # not all fields may have derivatives
@@ -43,7 +44,9 @@ function GradResult(tape::Tape)
     # other arguments
     struct_arg_ids = Set(keys(tape.fieldpaths))
     for op in tape
-        if op isa Input && !in(op.id, struct_arg_ids)
+        if (op isa Input                    # if operation is an Input
+            && !in(op.id, struct_arg_ids)   # and not a struct
+            && haskey(tape.derivs, op.id))  # and there's derivative for this var
             gvars[op.id] = tape.derivs[op.id]
         end
     end
@@ -75,7 +78,7 @@ Base.iterate(g::GradResult, state) = length(g) >= state ? (g[state], state + 1) 
 const DEBUG_STATE = Any[]
 
 
-getderiv(tape::Tape, id::Int) = tape[tape.derivs[id]]
+getderiv(tape::Tape, id::Int) = haskey(tape.derivs, id) ? tape[tape.derivs[id]] : nothing
 getderiv(tape::Tape, op::AbstractOp) = getderiv(tape, op.id)
 setderiv!(tape::Tape, op_id::Int, grad_op_id::Int) = (tape.derivs[op_id] = grad_op_id)
 setderiv!(tape::Tape, op::AbstractOp, grad_op::AbstractOp) = (tape.derivs[op.id] = grad_op.id)
@@ -116,6 +119,7 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     y = op
     x = tape[op.args[i]]
     dy = getderiv(tape, y)
+    dy == nothing && return   # op is not part of computation graph, e.g. range in loop
     # we handle broadcasting for + like normal derivatives
     # all other cases are handled by a generic bcast mechanism
     use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+]))
@@ -130,7 +134,7 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     if !haskey(tape.derivs, x.id)
         setderiv!(tape, x, dx)
     else
-        old_dx = getderiv(tape, x)        
+        old_dx = getderiv(tape, x)
         val = dx.val .+ old_dx.val
         dot_add_id = record!(tape, Constant, +)
         new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
@@ -187,8 +191,10 @@ function check_deriv_sizes(tape::Tape)
 end
 
 
-function _grad(f::Function, args...)
-    val, tape = trace(f, args...)
+"""
+Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes
+"""
+function _grad(tape::Tape)
     # apply preprocessing transformations
     tape = preprocess(tape)
     # backpropagate gradients
@@ -197,8 +203,39 @@ function _grad(f::Function, args...)
     check_deriv_sizes(tape)
     # apply postprocessing transformations
     tape = postprocess(tape)
-    # construct GradResult object that wraps tape and provide accessors for computed derivatives
+    return tape
+end
+
+
+function _grad(f::Function, args...)
+    val, tape = trace(f, args...)
+    # calculate gradients
+    tape = _grad(tape)
+    # construct GradResult object that wraps tape and provides accessors for computed derivatives
     return val, GradResult(tape)
+end
+
+
+const DYNAMIC_GRAD_CACHE = Dict{Any, Tape}()
+
+function _dynamic_grad(f::Function, args...)
+    val, tape = trace(f, args...)
+    if haskey(DYNAMIC_GRAD_CACHE, tape)
+        # take already processed tape from the cache and just play it
+        key = tape
+        tape = DYNAMIC_GRAD_CACHE[key]
+        # play to propagate both - value (should be unchanged) and gradients
+        val = play!(tape)
+        return val, GradResult(tape)
+    else
+        # copy tape just after tracing to use as key in cache later
+        key = deepcopy(tape)
+        # calculate gradients
+        tape = _grad(tape)
+        # save to cache
+        DYNAMIC_GRAD_CACHE[key] = tape
+        return val, GradResult(tape)
+    end
 end
 
 
@@ -224,10 +261,12 @@ in a format most suitable for that argument, namely:
 
 All gradients can be applied to original variables using `update!()` function.
 """
-function grad(f::Function, args...)
+function grad(f::Function, args...; dynamic=false)
     # key consists of function type and type of argument (for structs) or its size
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
-    if haskey(GRAD_CACHE, cache_key)
+    if dynamic
+        return _dynamic_grad(f, args...)
+    elseif haskey(GRAD_CACHE, cache_key)
         tape = GRAD_CACHE[cache_key]
         val = play!(tape, args...)
         return val, GradResult(tape)
