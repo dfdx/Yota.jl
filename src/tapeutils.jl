@@ -5,10 +5,11 @@
 
 function reindex(op::Call, st::Dict)
     new_args = [get(st, x, x) for x in op.args]
-    return copy_with(op, args=new_args)
+    new_id = get(st, op.id, op.id)
+    return copy_with(op, args=new_args, id=new_id)
 end
 
-reindex(op::AbstractOp, st::Dict) = op
+reindex(op::AbstractOp, st::Dict) = copy_with(op, id=get(st, op.id, op.id))
 
 
 function reindex_fields!(tape::Tape, st::Dict)
@@ -64,6 +65,44 @@ end
 
 
 ########################################################################
+#                       TAPE TRANSFORMATIONS                           #
+########################################################################
+
+function find_deps(tape::Tape, ids::Vector{Int}; result=Set{Int}())
+    ids = filter(id -> id != -1, ids)
+    for id in ids
+        if tape[id] isa Call
+            args = tape[id].args
+            push!(result, args...)
+            find_deps(tape, args; result=result)
+        end
+    end
+    return result
+end
+
+find_deps(tape::Tape, id::Int; result=Set{Int}()) = find_deps(tape, [id]; result=result)
+
+
+function remove_unused(tape::Tape; keep=[tape.resultid])
+    deps = find_deps(tape, keep); push!(deps, keep...)
+    st = Dict()
+    new_tape = copy_with(tape; ops=AbstractOp[])
+    for (id, op) in enumerate(tape)
+        if id in deps
+            new_id = length(new_tape) + 1
+            if id != new_id
+                st[id] = new_id
+            end
+            new_op = reindex(op, st)
+            push!(new_tape, new_op)
+        end
+    end
+    reindex_fields!(new_tape, st)
+    return new_tape
+end
+
+
+########################################################################
 #                       PRE- & POST-PROCESSING                         #
 ########################################################################
 
@@ -72,6 +111,7 @@ Apply a number of transformations to a tape after tracing and before calculating
 """
 function preprocess(tape::Tape)
     tape = binarize_ops(tape)
+    tape = remove_unused(tape)
     return tape
 end
 

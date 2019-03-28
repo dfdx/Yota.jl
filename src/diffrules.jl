@@ -276,6 +276,9 @@ end
 @diffrule Base._sum(x::AbstractArray, y::Int)             x     sum_grad(x, ds)
 @diffrule Base._sum(x::AbstractArray, y::Int)             y     zero(eltype(x))
 
+# special sums
+@diffrule sum(_fn::typeof(log), x::AbstractArray)    x    sum_grad(x, ds) ./ x
+
 # @diffrule Statistics.mean(x::Real)                         x     ds
 @diffrule Statistics.mean(x::AbstractArray)                x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       x     mean_grad(x, ds)
