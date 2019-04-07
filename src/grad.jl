@@ -115,6 +115,20 @@ function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
 end
 
 
+function set_or_add_deriv!(tape::Tape, x::AbstractOp, dx::AbstractOp)
+    if !haskey(tape.derivs, x.id)
+        setderiv!(tape, x, dx)
+    else
+        old_dx = getderiv(tape, x)
+        val = dx.val .+ old_dx.val
+        dot_add_id = record!(tape, Constant, +)
+        new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
+        new_dx = tape[new_dx_id]
+        setderiv!(tape, x, new_dx)
+    end
+end
+
+
 function step_back!(tape::Tape, op::Union{Call}, i::Int)
     y = op
     x = tape[op.args[i]]
@@ -131,16 +145,7 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
         push!(DEBUG_STATE, (tape, op, i))
         rethrow()
     end
-    if !haskey(tape.derivs, x.id)
-        setderiv!(tape, x, dx)
-    else
-        old_dx = getderiv(tape, x)
-        val = dx.val .+ old_dx.val
-        dot_add_id = record!(tape, Constant, +)
-        new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
-        new_dx = tape[new_dx_id]
-        setderiv!(tape, x, new_dx)
-    end
+    set_or_add_deriv!(tape, x, dx)
 end
 
 
@@ -159,14 +164,34 @@ function back!(tape::Tape)
     # set initial derivative value
     tape.derivs[z.id] = dy.id
     for op in reverse(tape.ops[1:end-1])
-        if op isa Call && op.fn != Base.getproperty
-            for i=1:length(op.args)
-                # backpropagate only non-constant vars
-                # note that it also prevents backprop on 1st param of broadcast
-                arg_op = tape[op.args[i]]
-                if !isa(arg_op, Constant)
-                    # println(op, " ", i)
-                    step_back!(tape, op, i)
+        if op isa Call
+            if op.fn == Base.getproperty
+                # since first argument of getproperty is a struct,
+                # we treat it in a special way: instead of inventing some kind
+                # of "struct derivative", we look for the call to __new__()
+                # that created this struct; if found, we add current derivative to
+                # the variable used as the field when instantiating the struct
+                if haskey(tape.derivs, op.id)
+                    dy_id = tape.derivs[op.id]
+                    x = find_field_source_var(tape, op)
+                    if x != nothing
+                        set_or_add_deriv!(tape, x, tape[dy_id])
+                        # tape.derivs[x_id] = dy_id
+                    end
+                end
+            elseif op.fn == __new__
+                # we take care of __new__() when stepping through getproperty()
+                # so here we can just skip it
+            else
+                # ordinary function call
+                for i=1:length(op.args)
+                    # backpropagate only non-constant vars
+                    # note that it also prevents backprop on 1st param of broadcast
+                    arg_op = tape[op.args[i]]
+                    if !isa(arg_op, Constant)
+                        # println(op, " ", i)
+                        step_back!(tape, op, i)
+                    end
                 end
             end
         end
@@ -181,11 +206,13 @@ has the same size as the input.
 """
 function check_deriv_sizes(tape::Tape)
     for (var_id, grad_var_id) in tape.derivs
-        var_size = size(tape[var_id].val)
-        grad_var_size = size(tape[grad_var_id].val)
-        if  var_size != grad_var_size
-            @warn "Gradient %$grad_var_id has size $grad_var_size, " *
-                "but original variable %$var_id has size $var_size"
+        if !isstruct(tape[var_id].val)
+            var_size = size(tape[var_id].val)
+            grad_var_size = size(tape[grad_var_id].val)
+            if  var_size != grad_var_size
+                @warn "Gradient %$grad_var_id has size $grad_var_size, " *
+                    "but original variable %$var_id has size $var_size"
+            end
         end
     end
 end

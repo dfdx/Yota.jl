@@ -55,8 +55,12 @@ forward(m::Linear, X) = m.W * X .+ m.b
 
 loss(m::Linear, X) = sum(forward(m, X))
 
-@testset "grad: structs" begin
 
+mutable struct Point x; y end
+constructor_loss(a) = (p = Point(a, a); p.x + p.y)
+
+
+@testset "grad: structs" begin
     args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
     val, g = grad(loss, args...)
 
@@ -66,7 +70,34 @@ loss(m::Linear, X) = sum(forward(m, X))
     val, g = grad(loss, args...)
     @test val == loss(args...)
 
+    _, g = grad(constructor_loss, 4.0)
+    @test g[1] == 2
 end
+
+
+mutable struct Line p1; p2 end
+
+function add_points(x)
+    p = Point(x, x)
+    l = Line(p, p)
+    return 2*l.p1.x + 5*l.p2.y
+end
+
+
+
+@testset "grad: structs/new" begin
+    # find_field_source_var
+    _, tape = trace(add_points, rand())
+    src_op = find_field_source_var(tape, tape[15])
+    @test src_op.id == 1
+    @test src_op.val isa Real
+    src_op = find_field_source_var(tape, tape[13])
+    @test src_op.id == 3
+    @test src_op.val isa Point
+
+    @test grad(add_points, rand())[2][1] == 7
+end
+
 
 
 # HESS = randn(3,3)

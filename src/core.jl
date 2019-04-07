@@ -7,6 +7,7 @@ using Espresso
 using Requires
 
 
+include("utils.jl")
 include("helpers.jl")
 include("devices.jl")
 include("tape.jl")
