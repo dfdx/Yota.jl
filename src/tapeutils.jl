@@ -161,3 +161,39 @@ function Base.:(==)(tape1::Tape, tape2::Tape)
         tape1.device == tape2.device &&
         tape1.ops == tape2.ops
 end
+
+
+########################################################################
+#                       __NEW__() & __GETPROPERTY__()                  #
+########################################################################
+
+
+function field_var_from_ctor_op(tape::Tape, ctor::Call, getprop_op::Call)
+    @assert ctor.fn == __new__
+    @assert getprop_op.fn == Base.getproperty
+    T = typeof(ctor.val)
+    flds = fieldnames(T)
+    fld = tape[getprop_op.args[2]].val
+    fld_arg_idx = findfirst(x -> x == fld, flds) + 1
+    return tape[ctor.args[fld_arg_idx]]
+end
+
+
+"""
+Given a tape and getproperty() operation, try to find a variable
+that was used to create that field
+"""
+function find_field_source_var(tape::Tape, getprop_op::Call)
+    parent = tape[getprop_op.args[1]]
+    if parent isa Call && parent.fn == __new__
+        # found constructor for this field, return variable that made up getprop_op's field
+        return field_var_from_ctor_op(tape, parent, getprop_op)
+    elseif parent isa Call && parent.fn == Base.getproperty
+        # nested getproperty, find constructor for the current struct recursively
+        ctor = find_field_source_var(tape, parent)
+        return field_var_from_ctor_op(tape, ctor, getprop_op)
+    else
+        # can't find source field - give up and return nothing
+        return nothing
+    end
+end

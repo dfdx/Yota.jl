@@ -98,8 +98,8 @@ end
 
 Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), Dict(), nothing, device)
 Tape() = Tape(CPU())
-Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs, tape.fieldpaths,
-                                tape.compiled, tape.device)
+Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
+                                tape.fieldpaths, tape.compiled, tape.device)
 
 
 function Base.show(io::IO, tape::Tape)

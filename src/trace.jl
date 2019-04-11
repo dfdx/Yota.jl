@@ -9,17 +9,38 @@ Cassette.metadatatype(::Type{<:TraceCtx}, ::DataType) = Int
 Cassette.hastagging(::Type{<:TraceCtx}) = true
 
 
-const PRIMITIVES = Set([
-    *, /, +, -, sin, cos, sum, Base._sum,
-    println,
-    Base.getproperty, Base.getfield,
-    broadcast, Broadcast.materialize, Broadcast.broadcasted])
+########################################################################
+#                            CUSTOM PASS                               #
+########################################################################
 
+function __new__(T, args...)
+    # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
+    return T(args...)
+end
+
+
+function traced_new(::Type{<:TraceCtx}, reflection::Cassette.Reflection)
+    ir = reflection.code_info
+    Cassette.replace_match!(x -> Base.Meta.isexpr(x, :new), ir.code) do x
+        return Expr(:call, __new__, x.args...)
+    end
+    return ir
+end
+
+@runonce const traced_new_pass = Cassette.@pass traced_new
 
 
 ########################################################################
 #                               TRACE                                  #
 ########################################################################
+
+const PRIMITIVES = Set([
+    *, /, +, -, sin, cos, sum, Base._sum,
+    println,
+    Base.getproperty, Base.getfield,
+    broadcast, Broadcast.materialize, Broadcast.broadcasted,
+    __new__])
+
 
 struct TapeBox
     tape::Tape
@@ -40,7 +61,7 @@ function trace(f, args...; primitives=PRIMITIVES, optimize=true)
     # create tape
     tape = Tape(guess_device(args))
     box = TapeBox(tape, primitives)
-    ctx = enabletagging(TraceCtx(metadata=box), f)
+    ctx = enabletagging(TraceCtx(metadata=box, pass=traced_new_pass), f)
     tagged_args = Vector(undef, length(args))
     for (i, x) in enumerate(args)
         id = record!(tape, Input, x)
@@ -76,8 +97,9 @@ end
 function Cassette.overdub(ctx::TraceCtx, f, args...)
     tape = ctx.metadata.tape
     primitives = ctx.metadata.primitives
-    # @info "$f($args...)"
+    # handle_new(...)
     if f in primitives
+        # args = with_tagged_properties(ctx, tape, args)    # only if f() is getproperty()
         args = with_free_args_as_constants(ctx, tape, args)
         arg_ids = [metadata(x, ctx) for x in args]
         arg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in arg_ids]

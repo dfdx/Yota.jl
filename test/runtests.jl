@@ -2,6 +2,7 @@ using Test
 using Yota
 using Yota: Tape, Input, Call, Constant, trace, play!, transform, binarize_ops
 using Yota: mean_grad, setfield_nested!, copy_with, simplegrad, remove_unused
+using Yota: find_field_source_var
 
 include("test_tracer.jl")
 include("gradcheck.jl")
