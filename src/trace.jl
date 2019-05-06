@@ -14,8 +14,14 @@ Cassette.hastagging(::Type{<:TraceCtx}) = true
 ########################################################################
 
 function __new__(T, args...)
+    # @show T
+    # @show args
     # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
-    return T(args...)
+    if T <: NamedTuple
+        return T(args)
+    else
+        return T(args...)
+    end
 end
 
 
@@ -37,7 +43,7 @@ end
 const PRIMITIVES = Set([
     *, /, +, -, sin, cos, sum, Base._sum,
     println,
-    Base.getproperty, Base.getfield,
+    Base.getproperty, Base.getfield, Core.kwfunc,
     broadcast, Broadcast.materialize, Broadcast.broadcasted,
     __new__])
 
@@ -95,6 +101,11 @@ end
 
 
 function Cassette.overdub(ctx::TraceCtx, f, args...)
+    if false
+        @show f
+        # arg_vals = [untag(x, ctx) for x in args]
+        # @show arg_vals
+    end
     tape = ctx.metadata.tape
     primitives = ctx.metadata.primitives
     # handle_new(...)
