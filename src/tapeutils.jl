@@ -191,7 +191,11 @@ function find_field_source_var(tape::Tape, getprop_op::Call)
     elseif parent isa Call && parent.fn == Base.getproperty
         # nested getproperty, find constructor for the current struct recursively
         ctor = find_field_source_var(tape, parent)
-        return field_var_from_ctor_op(tape, ctor, getprop_op)
+        if ctor != nothing
+            return field_var_from_ctor_op(tape, ctor, getprop_op)
+        else
+            return nothing
+        end
     else
         # can't find source field - give up and return nothing
         return nothing

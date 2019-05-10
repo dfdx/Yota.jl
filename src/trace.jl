@@ -43,7 +43,7 @@ end
 const PRIMITIVES = Set([
     *, /, +, -, sin, cos, sum, Base._sum,
     println,
-    Base.getproperty, Base.getfield, Core.kwfunc,
+    Base.getproperty, Base.getfield, # Core.kwfunc,
     broadcast, Broadcast.materialize, Broadcast.broadcasted,
     __new__])
 

@@ -173,6 +173,7 @@ function back!(tape::Tape)
                 # the variable used as the field when instantiating the struct
                 if haskey(tape.derivs, op.id)
                     dy_id = tape.derivs[op.id]
+                    dy_id != nothing || continue
                     x = find_field_source_var(tape, op)
                     if x != nothing
                         set_or_add_deriv!(tape, x, tape[dy_id])
@@ -188,7 +189,7 @@ function back!(tape::Tape)
                     # backpropagate only non-constant vars
                     # note that it also prevents backprop on 1st param of broadcast
                     arg_op = tape[op.args[i]]
-                    if !isa(arg_op, Constant)
+                    if !isa(arg_op, Constant) && !dont_diff(tape, op, i)
                         # println(op, " ", i)
                         step_back!(tape, op, i)
                     end

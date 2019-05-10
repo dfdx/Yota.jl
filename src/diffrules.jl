@@ -3,6 +3,7 @@
 ########################################################################
 
 const DIFF_RULES = Vector{Tuple}()
+const NO_DIFF_RULES = Vector{Tuple}()
 const DIFF_PHS = Set([:w, :x, :y, :z, :i, :j, :k,])
 
 
@@ -41,6 +42,7 @@ function resolve_functions_and_types!(mod::Module, ex)
 end
 
 
+# not used?
 function add_diff_rule(mod, pat, var, rpat)
     pat, rpat = map(Espresso.sanitize, (pat, rpat))
     resolve_functions_and_types!(mod, pat)
@@ -156,6 +158,49 @@ function find_rules_for(fun)
 end
 
 
+## nodiff
+
+macro nodiff(pat, var)
+    esc(quote
+        mod = @__MODULE__
+        local pat = $Espresso.sanitize($(QuoteNode(pat)))
+        pat, $resolve_old_broadcast(pat)
+        $resolve_functions_and_types!(mod, pat)
+        push!($NO_DIFF_RULES, (pat, $(QuoteNode(var))))
+        push!($PRIMITIVES, pat.args[1])
+        nothing
+        end)
+end
+
+
+function match_nodiff_rule(rule, ex, dep_types, idx)
+    tpat, vname = rule
+    vidx = findfirst(isequal(vname), get_arg_names(tpat))
+    if idx != vidx
+        return false
+    end
+    pat_types = get_arg_types(tpat)
+    if (length(dep_types) != length(pat_types) ||
+        !all([t <: p for (t, p) in zip(dep_types, pat_types)]))
+        return false
+    end
+    pat = without_types(tpat)
+    ex_ = without_keywords(ex)
+    return matchingex(pat, ex_; phs=DIFF_PHS)
+end
+
+
+function dont_diff(tape::Tape, op::AbstractOp, idx::Int)
+    ex = to_expr(tape, op)
+    dep_types = [tape[arg].typ for arg in op.args]
+    for rule in NO_DIFF_RULES
+        if match_nodiff_rule(rule, ex, dep_types, idx)
+            return true
+        end
+    end
+    return false
+end
+
 
 #######################################################################
 #                              RULES                                  #
@@ -212,6 +257,8 @@ end
 @diffrule vcat(x,y,z,t)  t     ds[4]
 
 # reshape
+@diffrule reshape(x::AbstractArray, _a)             x    reshape(ds, size(x))
+@diffrule reshape(x::AbstractArray, _a)             _a   zero(eltype(x))
 @diffrule reshape(x::AbstractArray, _a, _b)         x    reshape(ds, size(x))
 @diffrule reshape(x::AbstractArray, _a, _b)        _a    zero(eltype(x))
 @diffrule reshape(x::AbstractArray, _a, _b)        _b    0
