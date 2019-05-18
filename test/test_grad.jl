@@ -27,8 +27,32 @@ sum_bcast(x, y) = sum(x .+ y)
         (rand(3), rand(3, 4)),
         (rand(3, 1), rand(3, 4)),
         (rand(1, 4), rand(3, 4)),
+        # (rand(3, 4), rand()),
+        # (rand(), rand(3, 4)),
     ]
+        @test gradcheck(sum_bcast, args...)
         val, g = grad(sum_bcast, args...)
+        for i=1:length(args)
+            @test size(g[i]) == size(args[i])
+        end
+    end
+end
+
+sum_prod_bcast(x, y) = sum(x .* y)
+
+@testset "special bcast 2" begin
+    for args in [
+        (rand(3, 4), rand(3)),
+        (rand(3, 4), rand(3, 1)),
+        (rand(3, 4), rand(1, 4)),
+        (rand(3), rand(3, 4)),
+        (rand(3, 1), rand(3, 4)),
+        (rand(1, 4), rand(3, 4)),
+        # (rand(3, 4), rand()),
+        # (rand(), rand(3, 4)),
+    ]
+        @test gradcheck(sum_prod_bcast, args...)
+        val, g = grad(sum_prod_bcast, args...)
         for i=1:length(args)
             @test size(g[i]) == size(args[i])
         end

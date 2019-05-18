@@ -232,7 +232,7 @@ end
 
 @diffrule reverse(x)   x     0.0
 
-#  tuple  TODO : specialized macro for this kind of function
+# tuple
 @diffrule tuple(x)        x     ds[1]
 @diffrule tuple(x,y)      x     ds[1]
 @diffrule tuple(x,y)      y     ds[2]
@@ -243,6 +243,18 @@ end
 @diffrule tuple(x,y,z,t)  y     ds[2]
 @diffrule tuple(x,y,z,t)  z     ds[3]
 @diffrule tuple(x,y,z,t)  t     ds[4]
+
+# __tuple__ (current tracer implemetation uses it instead of normal tuple)
+@diffrule __tuple__(x)        x     ds[1]
+@diffrule __tuple__(x,y)      x     ds[1]
+@diffrule __tuple__(x,y)      y     ds[2]
+@diffrule __tuple__(x,y,z)    x     ds[1]
+@diffrule __tuple__(x,y,z)    y     ds[2]
+@diffrule __tuple__(x,y,z)    z     ds[3]
+@diffrule __tuple__(x,y,z,t)  x     ds[1]
+@diffrule __tuple__(x,y,z,t)  y     ds[2]
+@diffrule __tuple__(x,y,z,t)  z     ds[3]
+@diffrule __tuple__(x,y,z,t)  t     ds[4]
 
 #  vcat
 @diffrule vcat(x)        x     ds[1]
@@ -290,16 +302,9 @@ end
 
 @diffrule broadcast(_fn::typeof(+), x, y) x unbroadcast(x, ds)
 @diffrule broadcast(_fn::typeof(+), x, y) y unbroadcast(y, ds)
-# @diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) x sum(ds)
-# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) x ds
-# @diffrule broadcast(_fn::typeof(+), x::AbstractVector, y::AbstractMatrix) x sum_dropdims(ds, 2)
-# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) x ds
 
-
-# @diffrule broadcast(_fn::typeof(+), x::Real, y::AbstractArray) y ds
-# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::Real) y sum(ds)
-# @diffrule broadcast(_fn::typeof(+), x::AbstractMatrix, y::AbstractVector) y sum_dropdims(ds, 2)
-# @diffrule broadcast(_fn::typeof(+), x::AbstractArray, y::AbstractArray) y ds
+@diffrule broadcast(_fn::typeof(*), x, y) x unbroadcast_prod_x(x, y, ds)
+@diffrule broadcast(_fn::typeof(*), x, y) y unbroadcast_prod_y(x, y, ds)
 
 
 # unary substraction

@@ -134,9 +134,9 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     x = tape[op.args[i]]
     dy = getderiv(tape, y)
     dy == nothing && return   # op is not part of computation graph, e.g. range in loop
-    # we handle broadcasting for + like normal derivatives
+    # we handle broadcasting for a few built-in functions like normal derivatives
     # all other cases are handled by a generic bcast mechanism
-    use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+]))
+    use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+, *]))
     dx = try
         use_bcast_rules ? deriv_broadcast!(tape, op, i, dy) : deriv!(tape, op, i, dy)
     catch

@@ -25,15 +25,26 @@ function __new__(T, args...)
 end
 
 
-function traced_new(::Type{<:TraceCtx}, reflection::Cassette.Reflection)
+function __tuple__(args...)
+    return tuple(args...)
+end
+
+
+is_tuple(s) = s == :tuple || (s isa GlobalRef && s.name == :tuple)
+
+
+function prepare_ir(::Type{<:TraceCtx}, reflection::Cassette.Reflection)
     ir = reflection.code_info
     Cassette.replace_match!(x -> Base.Meta.isexpr(x, :new), ir.code) do x
         return Expr(:call, __new__, x.args...)
     end
+    Cassette.replace_match!(x -> Base.Meta.isexpr(x, :call) && is_tuple(x.args[1]), ir.code) do x
+        return Expr(:call, __tuple__, x.args[2:end]...)
+    end
     return ir
 end
 
-@runonce const traced_new_pass = Cassette.@pass traced_new
+@runonce const prepare_pass = Cassette.@pass prepare_ir
 
 
 ########################################################################
@@ -45,7 +56,7 @@ const PRIMITIVES = Set([
     println,
     Base.getproperty, Base.getfield, # Core.kwfunc,
     broadcast, Broadcast.materialize, Broadcast.broadcasted,
-    __new__])
+    __new__, __tuple__])
 
 
 struct TapeBox
@@ -67,7 +78,7 @@ function trace(f, args...; primitives=PRIMITIVES, optimize=true)
     # create tape
     tape = Tape(guess_device(args))
     box = TapeBox(tape, primitives)
-    ctx = enabletagging(TraceCtx(metadata=box, pass=traced_new_pass), f)
+    ctx = enabletagging(TraceCtx(metadata=box, pass=prepare_pass), f)
     tagged_args = Vector(undef, length(args))
     for (i, x) in enumerate(args)
         id = record!(tape, Input, x)
@@ -103,8 +114,9 @@ end
 function Cassette.overdub(ctx::TraceCtx, f, args...)
     if false
         @show f
-        # arg_vals = [untag(x, ctx) for x in args]
+        arg_vals = [untag(x, ctx) for x in args]
         # @show arg_vals
+        @show args
     end
     tape = ctx.metadata.tape
     primitives = ctx.metadata.primitives

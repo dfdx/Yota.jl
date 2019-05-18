@@ -281,6 +281,7 @@ end
 function simplify(tape::Tape)
     tape = recover_broadcast(tape)
     tape = squash_assigned(tape)
+    tape = remove_unused(tape)
     return tape
 end
 
