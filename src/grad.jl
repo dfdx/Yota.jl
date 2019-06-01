@@ -180,9 +180,22 @@ function back!(tape::Tape)
                         # tape.derivs[x_id] = dy_id
                     end
                 end
-            elseif op.fn == __new__
-                # we take care of __new__() when stepping through getproperty()
-                # so here we can just skip it
+            elseif op.fn == __getfield__
+                # unstructuring if tuples is lowere into pretty weird code sequence
+                # ending with __getfield__; similar to getproperty(), we find source var
+                # for the corresponding tuple argument and backprop to it
+                if haskey(tape.derivs, op.id)
+                    dy_id = tape.derivs[op.id]
+                    dy_id != nothing || continue
+                    x = find_tuple_field_source_var(tape, op)
+                    if x != nothing
+                        set_or_add_deriv!(tape, x, tape[dy_id])
+                        # tape.derivs[x_id] = dy_id
+                    end
+                end
+            elseif op.fn in (__new__, Base.indexed_iterate)
+                # we take care of these operations somewhere else
+                # so just skip them here
             else
                 # ordinary function call
                 for i=1:length(op.args)

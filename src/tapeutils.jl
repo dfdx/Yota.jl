@@ -201,3 +201,19 @@ function find_field_source_var(tape::Tape, getprop_op::Call)
         return nothing
     end
 end
+
+
+"""
+Given a tape and getfield() operation, try to find a variable
+that was used to create that field.
+NOTE: This works only with getfield() on tuples
+"""
+function find_tuple_field_source_var(tape::Tape, getf_op::Call)
+    ind_it_op = tape[getf_op.args[1]]
+    @assert ind_it_op isa Call && ind_it_op.fn == Base.indexed_iterate
+    tuple_op = tape[ind_it_op.args[1]]
+    @assert tuple_op isa Call && tuple_op.fn == __tuple__
+    tuple_idx = tape[ind_it_op.args[2]].val
+    src_var = tape[tuple_op.args[tuple_idx]]
+    return src_var
+end
