@@ -123,6 +123,19 @@ end
 end
 
 
+make_t(x) = tuple(x, x)
+
+function make_t_loss(x)
+    a, b = make_t(x)
+    return a + b
+end
+
+
+@testset "grad: tuple unpack" begin
+    _, g = grad(make_t_loss, 3.0)
+    @test g[1] == 2.0
+end
+
 
 # HESS = randn(3,3)
 # hessian_fun(x) = x'*(HESS*x)

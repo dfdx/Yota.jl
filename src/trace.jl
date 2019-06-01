@@ -25,12 +25,13 @@ function __new__(T, args...)
 end
 
 
-function __tuple__(args...)
-    return tuple(args...)
-end
+__tuple__(args...) = tuple(args...)
+__getfield__(args...) = getfield(args...)
 
 
-is_tuple(s) = s == :tuple || (s isa GlobalRef && s.name == :tuple)
+
+
+is_gref_call(a, fn_name) = a isa GlobalRef && a.name == fn_name
 
 
 function prepare_ir(::Type{<:TraceCtx}, reflection::Cassette.Reflection)
@@ -38,8 +39,11 @@ function prepare_ir(::Type{<:TraceCtx}, reflection::Cassette.Reflection)
     Cassette.replace_match!(x -> Base.Meta.isexpr(x, :new), ir.code) do x
         return Expr(:call, __new__, x.args...)
     end
-    Cassette.replace_match!(x -> Base.Meta.isexpr(x, :call) && is_tuple(x.args[1]), ir.code) do x
+    Cassette.replace_match!(x -> Base.Meta.isexpr(x, :call) && is_gref_call(x.args[1], :tuple), ir.code) do x
         return Expr(:call, __tuple__, x.args[2:end]...)
+    end
+    Cassette.replace_match!(x -> Base.Meta.isexpr(x, :call) && is_gref_call(x.args[1], :getfield), ir.code) do x
+        return Expr(:call, __getfield__, x.args[2:end]...)
     end
     return ir
 end
@@ -54,9 +58,9 @@ end
 const PRIMITIVES = Set([
     *, /, +, -, sin, cos, sum, Base._sum,
     println,
-    Base.getproperty, Base.getfield, # Core.kwfunc,
+    Base.getproperty, Base.getfield, Base.indexed_iterate, # Core.kwfunc,
     broadcast, Broadcast.materialize, Broadcast.broadcasted,
-    __new__, __tuple__])
+    __new__, __tuple__, __getfield__])
 
 
 struct TapeBox
