@@ -29,11 +29,13 @@ function update!(x::Real, gx::Real, fn::Function=minus_updater)
     error("Can't update value of $(typeof(x)) in-place!")
 end
 
-function update!(x, gx, fn::Function=minus_updater)
+function update!(x, gx, fn::Function=minus_updater; ignore=Set())
     @assert isstruct(x) "Expected mutable struct as 1st argument"
     @assert gx isa Dict "Gradient for structs should be a dict of (field path -> grad value)"
     for (path, gv) in gx
-        v = getfield_nested(x, path)
-        setfield_nested!(x, path, fn(v, gv))
+        if !in(path, ignore)
+            v = getfield_nested(x, path)
+            setfield_nested!(x, path, fn(v, gv))
+        end
     end
 end
