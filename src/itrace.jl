@@ -4,112 +4,116 @@ import JuliaInterpreter: enter_call, step_expr!, next_call!, @lookup, Frame
 include("core.jl")
 
 
-
-# function itrace(f, args...; primitives=PRIMITIVES, optimize=true)
-# end
-
-
 getexpr(fr::Frame, pc::Int) = fr.framecode.src.code[pc]
 current_expr(fr::Frame) = getexpr(fr, fr.pc)
 
 
+"""
+Split JuliaInterpreter call expression into a tuple of 3 elements:
 
-# if f in primitives
-#         # args = with_tagged_properties(ctx, tape, args)    # only if f() is getproperty()
-#         args = with_free_args_as_constants(ctx, tape, args)
-#         arg_ids = [metadata(x, ctx) for x in args]
-#         arg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in arg_ids]
-#         # execute call
-#         retval = fallback(ctx, f, [untag(x, ctx) for x in args]...)
-#         # record to the tape and tag with a newly created ID
-#         ret_id = record!(tape, Call, retval, f, arg_ids)
-#         retval = tag(retval, ctx, ret_id)
-#     elseif canrecurse(ctx, f, args...)
-#         retval = Cassette.recurse(ctx, f, args...)
-#     else
-#         retval = fallback(ctx, f, args...)
-# end
+ * function to be called
+ * args to this function
+ * vars on the tape corresponding to these args
 
-# iscall(ex) =  || ()
+If arguments include free parameters (not SlotNumber or SSAValue), these are recorded
+to the tape as constants
+"""
+function split_int_call!(tape::Tape, fr::Frame, frame_vars::Dict, ex)
+    arr = Meta.isexpr(ex, :(=)) ? ex.args[2].args : ex.args
+    # for whatever reason JuliaInterpreter wraps some nodes in the original code into QuoteNode
+    arr = [isa(x, QuoteNode) ? x.value : x for x in arr]
+    cf = @lookup(fr, arr[1])
+    cargs = [@lookup(fr, x) for x in arr[2:end]]
+    cvars = Vector{Int}(undef, length(cargs))
+    for (i, x) in enumerate(arr[2:end])
+        # if isa(x, JuliaInterpreter.SlotNumber) || isa(x, JuliaInterpreter.SSAValue)
+        if haskey(frame_vars, x)
+            cvars[i] = frame_vars[x]
+        else
+            val = @lookup(fr, x)
+            id = record!(tape, Constant, val)
+            cvars[i] = id
+            if val != x
+                # if constant appeared to be a SlotNumber or SSAValue
+                # store its mapping into frame_vars
+                frame_vars[x] = id
+            end
+        end
+    end
+    return cf, cargs, cvars
+end
 
 
-# """
-# Split JuliaInterpreter call expression into a tuple of 3 elements:
+"""
+Given a Frame and current expression, extract LHS location (SlotNumber or SSAValue)
+"""
+get_location(fr::Frame, ex) = Meta.isexpr(ex, :(=)) ? ex.args[1] : JuliaInterpreter.SSAValue(fr.pc)
 
-#  * function to be called
-#  * args to this function
-#  * vars on the tape corresponding to these args
-# """
-# function split_int_call(tape::Tape, fr::Frame, ex)
-#     arr = Meta.isexpr(ex, :(=)) ? ex.args[2].args : ex.args
-#     cf = @lookup(fr, arr[1])
-#     cargs = [@lookup(fr, a) for a in arr[2:end]]
-#     cvars = 
-#     if 
-#         f_args = 
-#     else
-#         f_args = [@lookup(fr, a) for a in ]
-#     end
-#     return f_args[1], f_args[2:end]
-# end
-
+is_iint_call_expr(ex) = Meta.isexpr(ex, :call) || (Meta.isexpr(ex, :(=)) && Meta.isexpr(ex.args[2], :call))
 
 
 function itrace!(f, tape::Tape, argvars...; primitives)
     args, vars = zip(argvars...)
     fr = enter_call(f, args...)
-    frame_vars = Dict{Any, Int}(JuliaInterpreter.SlotNumber(i + 1) => v for (i, v) in enumerate(vars))    
+    frame_vars = Dict{Any, Int}(JuliaInterpreter.SlotNumber(i + 1) => v for (i, v) in enumerate(vars))
+    is_int_call_expr(current_expr(fr)) || next_call!(fr)  # skip non-call expressions
     ex = current_expr(fr)
     while !Meta.isexpr(ex, :return)
-        if Meta.isexpr(ex, :call) || (Meta.isexpr(ex, :(=)) && Meta.isexpr(ex.args[2], :call))
-            arr = Meta.isexpr(ex, :(=)) ? ex.args[2].args : ex.args  # TODO: move or simplify
-            # cf, cargs, cvars = function, args and vars of the current expression
-            cf = @lookup(fr, arr[1])
-            cargs = [@lookup(fr, a) for a in arr[2:end]]
-            cvars = [frame_vars[wa] for wa in arr[2:end]]            
-            if cf in primitives
-                # we will map result to this location (SlotNumber or SSAValue)
-                loc = Meta.isexpr(ex, :(=)) ? ex.args[1] : JuliaInterpreter.SSAValue(fr.pc)  # TODO: check 
-                retval = next_call!(fr)
-                ret_id = record!(tape, Call, retval, cf, cvars)                
-                frame_vars[loc] = ret_id  # for slots, may overwrite old mapping
+        # println("--------------- $ex -------------")
+        if is_int_call_expr(ex)
+            cf, cargs, cvars = split_int_call!(tape, fr, frame_vars, ex)
+            loc = get_location(fr, ex)
+            if cf in primitives || isa(cf, Core.Builtin) || isa(cf, Core.IntrinsicFunction) || !isa(cf, Function)
+                next_call!(fr)
+                retval = @lookup(fr, loc)
+                ret_id = record!(tape, Call, retval, cf, cvars)
+                frame_vars[loc] = ret_id  # for slots it may overwrite old mapping
             else
-                # TODO: handle recursive call
-                itrace!(cf, tape, zip(cargs, cvars)...; primitives=primitives)
+                retval, ret_id = itrace!(cf, tape, zip(cargs, cvars)...; primitives=primitives)
+                frame_vars[loc] = ret_id  # for slots it may overwrite old mapping
+                next_call!(fr)  # can we avoid this double execution?
             end
         end
         ex = current_expr(fr)
     end
-    # TODO: handle return
+    retval = @lookup(fr, ex.args[1])
+    ret_id = frame_vars[ex.args[1]]
+    return retval, ret_id  # return var ID of a result variable
 end
 
 
 
 bar(x) = 2.0x + 1.0
+baz(x; y=3.5) = x - y
 
-function foo(x)
-    y = bar(x)
-    z = exp(y)
+
+function foo(a)
+    b = bar(a)
+    c = baz(b; y=4.5)
+    d = exp(c)
+    return d
 end
 
-
+"""
+Trace function f with arguments args using JuliaInterpreter
+"""
 function itrace(f, args...; primitives=PRIMITIVES, optimize=true)
     tape = Tape(guess_device(args))
     argvars = Vector(undef, length(args))
-    for (i, arg) in enumerate(args)        
+    for (i, arg) in enumerate(args)
         id = record!(tape, Input, arg)
         argvars[i] = (arg, id)
     end
-    itrace!(f, tape, argvars...; primitives=primitives)
+    val, resultid = itrace!(f, tape, argvars...; primitives=primitives)
+    tape.resultid = resultid
+    return val, tape
 end
 
-
-# NEXT STEPS:
-# add bar() to primitives and finish non-recursive path of itrace!
 
 function main()
     f = foo
     args = (4.0,)
     primitives = PRIMITIVES
-    _itrace(f, args, ; primitives=primitives)
+    push!(primitives, Core.kwfunc(baz))
+    _, tape = itrace(f, args...; primitives=primitives)
 end

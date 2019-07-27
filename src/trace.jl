@@ -60,6 +60,8 @@ const PRIMITIVES = Set([
     println,
     Base.getproperty, Base.getfield, Base.indexed_iterate, # Core.kwfunc,
     broadcast, Broadcast.materialize, Broadcast.broadcasted,
+    Core.apply_type, Core.kwfunc,
+    tuple,
     __new__, __tuple__, __getfield__])
 
 
