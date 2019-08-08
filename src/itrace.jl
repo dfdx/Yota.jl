@@ -1,8 +1,6 @@
 import JuliaInterpreter
 import JuliaInterpreter: enter_call, step_expr!, next_call!, @lookup, Frame
 
-include("core.jl")
-
 
 getexpr(fr::Frame, pc::Int) = fr.framecode.src.code[pc]
 current_expr(fr::Frame) = getexpr(fr, fr.pc)
@@ -49,7 +47,7 @@ Given a Frame and current expression, extract LHS location (SlotNumber or SSAVal
 """
 get_location(fr::Frame, ex) = Meta.isexpr(ex, :(=)) ? ex.args[1] : JuliaInterpreter.SSAValue(fr.pc)
 
-is_iint_call_expr(ex) = Meta.isexpr(ex, :call) || (Meta.isexpr(ex, :(=)) && Meta.isexpr(ex.args[2], :call))
+is_int_call_expr(ex) = Meta.isexpr(ex, :call) || (Meta.isexpr(ex, :(=)) && Meta.isexpr(ex.args[2], :call))
 
 
 function itrace!(f, tape::Tape, argvars...; primitives)
@@ -82,18 +80,6 @@ function itrace!(f, tape::Tape, argvars...; primitives)
 end
 
 
-
-bar(x) = 2.0x + 1.0
-baz(x; y=3.5) = x - y
-
-
-function foo(a)
-    b = bar(a)
-    c = baz(b; y=4.5)
-    d = exp(c)
-    return d
-end
-
 """
 Trace function f with arguments args using JuliaInterpreter
 """
@@ -106,14 +92,10 @@ function itrace(f, args...; primitives=PRIMITIVES, optimize=true)
     end
     val, resultid = itrace!(f, tape, argvars...; primitives=primitives)
     tape.resultid = resultid
+    if optimize
+        tape = simplify(tape)
+    end
     return val, tape
 end
 
-
-function main()
-    f = foo
-    args = (4.0,)
-    primitives = PRIMITIVES
-    push!(primitives, Core.kwfunc(baz))
-    _, tape = itrace(f, args...; primitives=primitives)
-end
+# TODO: remove Call.kwargs
