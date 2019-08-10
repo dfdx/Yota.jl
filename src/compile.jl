@@ -18,12 +18,7 @@ end
 
 function to_exnode(op::Call)
     arg_names = map(make_name, op.args)
-    # fns = maybe_to_symbol(op.fn)
-    if isempty(op.kwargs)
-        ex = Expr(:call, op.fn, arg_names...)
-    else
-        ex = Expr(:call, op.fn, Espresso.make_kw_params(op.kwargs), arg_names...)
-    end
+    ex = Expr(:call, op.fn, arg_names...)
     return ExNode{:call}(make_name(op), ex; val=op.val)
 end
 

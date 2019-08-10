@@ -1,5 +1,5 @@
 import JuliaInterpreter
-import JuliaInterpreter: enter_call, step_expr!, next_call!, @lookup, Frame
+import JuliaInterpreter: enter_call, step_expr!, next_call!, @lookup, Frame, SSAValue, SlotNumber
 
 
 getexpr(fr::Frame, pc::Int) = fr.framecode.src.code[pc]
@@ -61,7 +61,15 @@ function itrace!(f, tape::Tape, argvars...; primitives)
         if is_int_call_expr(ex)
             cf, cargs, cvars = split_int_call!(tape, fr, frame_vars, ex)
             loc = get_location(fr, ex)
-            if cf in primitives || isa(cf, Core.Builtin) || isa(cf, Core.IntrinsicFunction) || !isa(cf, Function)
+            if cf isa UnionAll && cf <: NamedTuple
+                # replace cf with namedtuple function, adjust arguments
+                names = collect(cf.body.parameters)[1]
+                cf = namedtuple
+                cargs = [names; cargs]
+                names_var_id = record!(tape, Constant, names)
+                cvars = [names_var_id; cvars]
+            end
+            if cf in primitives || isa(cf, Core.Builtin) || isa(cf, Core.IntrinsicFunction)
                 next_call!(fr)
                 retval = @lookup(fr, loc)
                 ret_id = record!(tape, Call, retval, cf, cvars)

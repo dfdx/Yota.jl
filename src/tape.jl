@@ -47,7 +47,6 @@ mutable struct Call <: AbstractOp
     val::Any
     fn::Union{Function, Type}
     args::Vector{Int}
-    kwargs::Dict          # currently not used
 end
 
 Call(id::Int, val::Any, fn::Union{Function, Type}, args::Vector{Int}; kwargs=Dict()) =
