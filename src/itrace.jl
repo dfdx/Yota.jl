@@ -21,14 +21,14 @@ function split_int_call!(tape::Tape, fr::Frame, frame_vars::Dict, ex)
     # for whatever reason JuliaInterpreter wraps some nodes in the original code into QuoteNode
     arr = [isa(x, QuoteNode) ? x.value : x for x in arr]
     cf = @lookup(fr, arr[1])
-    cargs = [@lookup(fr, x) for x in arr[2:end]]
+    cargs = [x isa Symbol ? x : @lookup(fr, x) for x in arr[2:end]]
     cvars = Vector{Int}(undef, length(cargs))
     for (i, x) in enumerate(arr[2:end])
         # if isa(x, JuliaInterpreter.SlotNumber) || isa(x, JuliaInterpreter.SSAValue)
         if haskey(frame_vars, x)
             cvars[i] = frame_vars[x]
         else
-            val = @lookup(fr, x)
+            val = x isa Symbol ? x : @lookup(fr, x)
             id = record!(tape, Constant, val)
             cvars[i] = id
             if val != x
@@ -59,8 +59,11 @@ function itrace!(f, tape::Tape, argvars...; primitives)
     while !Meta.isexpr(ex, :return)
         # println("--------------- $ex -------------")
         if is_int_call_expr(ex)
+            # read as "current function", "current arguments", "current variables"
             cf, cargs, cvars = split_int_call!(tape, fr, frame_vars, ex)
             loc = get_location(fr, ex)
+            # there are several special cases such as NamedTuples and constructors
+            # we replace these with calls to special helper functions
             if cf isa UnionAll && cf <: NamedTuple
                 # replace cf with namedtuple function, adjust arguments
                 names = collect(cf.body.parameters)[1]
@@ -68,7 +71,21 @@ function itrace!(f, tape::Tape, argvars...; primitives)
                 cargs = [names; cargs]
                 names_var_id = record!(tape, Constant, names)
                 cvars = [names_var_id; cvars]
+            elseif cf isa DataType
+                # constructor, replace with a call to __new__ which we know how to differentiate
+                T = cf
+                cf = __new__
+                cargs = [T; cargs]
+                T_var_id = record!(tape, Constant, T)
+                cvars = [T_var_id; cvars]
+            elseif cf == Base.tuple
+                cf = __tuple__
+            elseif cf == Base.getfield
+                # similar to constuctors, there's a special case for __getfield__ in backprop
+                cf = __getfield__
             end
+            # if current function is a primitive of a built-in, write it to the tape
+            # otherwise recurse into the current function
             if cf in primitives || isa(cf, Core.Builtin) || isa(cf, Core.IntrinsicFunction)
                 next_call!(fr)
                 retval = @lookup(fr, loc)
@@ -105,5 +122,3 @@ function itrace(f, args...; primitives=PRIMITIVES, optimize=true)
     end
     return val, tape
 end
-
-# TODO: remove Call.kwargs
