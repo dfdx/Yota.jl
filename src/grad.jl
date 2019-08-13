@@ -248,7 +248,7 @@ end
 
 
 function _grad(f::Function, args...)
-    val, tape = itrace(f, args...)
+    val, tape = trace(f, args...)
     # calculate gradients
     tape = _grad(tape)
     # construct GradResult object that wraps tape and provides accessors for computed derivatives

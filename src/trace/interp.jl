@@ -1,5 +1,5 @@
 import JuliaInterpreter
-import JuliaInterpreter: enter_call, step_expr!, next_call!, @lookup, Frame, SSAValue, SlotNumber
+import JuliaInterpreter: enter_call, step_expr!, @lookup, Frame, SSAValue, SlotNumber
 
 
 getexpr(fr::Frame, pc::Int) = fr.framecode.src.code[pc]
@@ -48,17 +48,23 @@ Given a Frame and current expression, extract LHS location (SlotNumber or SSAVal
 get_location(fr::Frame, ex) = Meta.isexpr(ex, :(=)) ? ex.args[1] : JuliaInterpreter.SSAValue(fr.pc)
 
 is_int_call_expr(ex) = Meta.isexpr(ex, :call) || (Meta.isexpr(ex, :(=)) && Meta.isexpr(ex.args[2], :call))
+is_int_assign_expr(ex) = Meta.isexpr(ex, :(=)) && (isa(ex.args[2], SlotNumber) || isa(ex.args[2], SSAValue))
+
+is_interesting_expr(ex) = is_int_call_expr(ex) || is_int_assign_expr(ex) || Meta.isexpr(ex, :return)
 
 
 function itrace!(f, tape::Tape, argvars...; primitives)
     args, vars = zip(argvars...)
     fr = enter_call(f, args...)
     frame_vars = Dict{Any, Int}(JuliaInterpreter.SlotNumber(i + 1) => v for (i, v) in enumerate(vars))
-    is_int_call_expr(current_expr(fr)) || next_call!(fr)  # skip non-call expressions
+    is_interesting_expr(current_expr(fr)) || step_expr!(fr)  # skip non-call expressions
     ex = current_expr(fr)
     while !Meta.isexpr(ex, :return)
-        # println("--------------- $ex -------------")
-        if is_int_call_expr(ex)
+        if is_int_assign_expr(ex)
+            lhs, rhs = ex.args
+            frame_vars[lhs] = frame_vars[rhs]
+            step_expr!(fr)
+        elseif is_int_call_expr(ex)
             # read as "current function", "current arguments", "current variables"
             cf, cargs, cvars = split_int_call!(tape, fr, frame_vars, ex)
             loc = get_location(fr, ex)
@@ -87,15 +93,17 @@ function itrace!(f, tape::Tape, argvars...; primitives)
             # if current function is a primitive of a built-in, write it to the tape
             # otherwise recurse into the current function
             if cf in primitives || isa(cf, Core.Builtin) || isa(cf, Core.IntrinsicFunction)
-                next_call!(fr)
+                step_expr!(fr)
                 retval = @lookup(fr, loc)
                 ret_id = record!(tape, Call, retval, cf, cvars)
                 frame_vars[loc] = ret_id  # for slots it may overwrite old mapping
             else
                 retval, ret_id = itrace!(cf, tape, zip(cargs, cvars)...; primitives=primitives)
                 frame_vars[loc] = ret_id  # for slots it may overwrite old mapping
-                next_call!(fr)  # can we avoid this double execution?
+                step_expr!(fr)  # can we avoid this double execution?
             end
+        else
+            step_expr!(fr)
         end
         ex = current_expr(fr)
     end
