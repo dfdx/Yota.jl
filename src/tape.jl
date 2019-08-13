@@ -47,19 +47,16 @@ mutable struct Call <: AbstractOp
     val::Any
     fn::Union{Function, Type}
     args::Vector{Int}
-    kwargs::Dict          # currently not used
 end
 
-Call(id::Int, val::Any, fn::Union{Function, Type}, args::Vector{Int}; kwargs=Dict()) =
-    Call(id, val, fn, args, kwargs)
+# Call(id::Int, val::Any, fn::Union{Function, Type}, args::Vector{Int}) =
+#     Call(id, val, fn, args)
 Base.getproperty(op::Input, f::Call) = f == :typ ? typeof(op.val) : getfield(op, f)
 
 
 function Base.show(io::IO, op::Call)
     arg_str = join(["%$(id)" for id in op.args], ", ")
-    kwarg_str = (isempty(op.kwargs) ? "" : "; " *
-                 join(["$k=$v" for (k, v) in op.kwargs], ", "))
-    print(io, "%$(op.id) = $(op.fn)($arg_str$kwarg_str)::$(op.typ)")
+    print(io, "%$(op.id) = $(op.fn)($arg_str)::$(op.typ)")
 end
 
 
@@ -159,7 +156,7 @@ function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
             arg_id = record!(tape, Constant, x)
             new_op_args[i] = arg_id
         end
-    end    
+    end
     fn = ex.args[1]
     fn = device_function(tape.device, fn)
     if bcast
@@ -203,8 +200,7 @@ function replace_in_args!(tape::Tape, st::Dict)
     for (i, op) in enumerate(tape)
         if op isa Call
             new_args = [get(st, x, x) for x in op.args]
-            new_kwargs = Dict(k => get(st, x, x) for (k, x) in op.kwargs)
-            tape[i] = copy_with(op, args=new_args, kwargs=new_kwargs)
+            tape[i] = copy_with(op, args=new_args)
         end
     end
 end

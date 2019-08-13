@@ -13,23 +13,6 @@ Cassette.hastagging(::Type{<:TraceCtx}) = true
 #                            CUSTOM PASS                               #
 ########################################################################
 
-function __new__(T, args...)
-    # @show T
-    # @show args
-    # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
-    if T <: NamedTuple
-        return T(args)
-    else
-        return T(args...)
-    end
-end
-
-
-__tuple__(args...) = tuple(args...)
-__getfield__(args...) = getfield(args...)
-
-
-
 
 is_gref_call(a, fn_name) = a isa GlobalRef && a.name == fn_name
 
@@ -55,14 +38,6 @@ end
 #                               TRACE                                  #
 ########################################################################
 
-const PRIMITIVES = Set([
-    *, /, +, -, sin, cos, sum, Base._sum,
-    println,
-    Base.getproperty, Base.getfield, Base.indexed_iterate, # Core.kwfunc,
-    broadcast, Broadcast.materialize, Broadcast.broadcasted,
-    __new__, __tuple__, __getfield__])
-
-
 struct TapeBox
     tape::Tape
     primitives::Set{Any}
@@ -78,7 +53,7 @@ foo(x) = 2.0x + 1.0
 val, tape = trace(foo, 4.0)
 ```
 """
-function trace(f, args...; primitives=PRIMITIVES, optimize=true)
+function ctrace(f, args...; primitives=PRIMITIVES, optimize=true)
     # create tape
     tape = Tape(guess_device(args))
     box = TapeBox(tape, primitives)

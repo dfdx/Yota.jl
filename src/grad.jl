@@ -85,7 +85,6 @@ setderiv!(tape::Tape, op::AbstractOp, grad_op::AbstractOp) = (tape.derivs[op.id]
 
 
 Espresso.to_expr(tape::Tape, op::Call) = begin
-    @assert isempty(op.kwargs) "Oops, functions with kwargs aren't supported just yet"
     Expr(:call, op.fn, [Symbol("%$i") for i in op.args]...)
 end
 
@@ -181,7 +180,7 @@ function back!(tape::Tape)
                     end
                 end
             elseif op.fn == __getfield__
-                # unstructuring if tuples is lowere into pretty weird code sequence
+                # unstructuring of tuples is lowered into pretty weird code sequence
                 # ending with __getfield__; similar to getproperty(), we find source var
                 # for the corresponding tuple argument and backprop to it
                 if haskey(tape.derivs, op.id)

@@ -244,7 +244,7 @@ end
 @diffrule tuple(x,y,z,t)  z     ds[3]
 @diffrule tuple(x,y,z,t)  t     ds[4]
 
-# __tuple__ (current tracer implemetation uses it instead of normal tuple)
+# __tuple__ (cassette tracer implemetation uses it instead of normal tuple)
 @diffrule __tuple__(x)        x     ds[1]
 @diffrule __tuple__(x,y)      x     ds[1]
 @diffrule __tuple__(x,y)      y     ds[2]
@@ -313,28 +313,26 @@ end
 
 # binary substraction
 @diffrule -(x::Real, y::Real)                       x     ds
-# @diffrule -(x::Real, y::AbstractArray)              x     sum(ds)
-# @diffrule -(x::AbstractArray, y::Real)              x     ones(size(x)) .* ds
 @diffrule -(x::AbstractArray, y::AbstractArray)     x     ds
 @diffrule -(x::Real         , y::Real)              y     -ds
-# @diffrule -(x::Real, y::AbstractArray)              y     -ones(size(y)) .* ds
-# @diffrule -(x::AbstractArray, y::Real)              y     -sum(ds)
 @diffrule -(x::AbstractArray, y::AbstractArray)     y     -ds
 
 
 # sum() and mean()
-# @diffrule sum(x::Real)                              x     ds
 @diffrule sum(x::AbstractArray)                     x     sum_grad(x, ds)
 @diffrule Base._sum(x::AbstractArray, y::Int)             x     sum_grad(x, ds)
 @diffrule Base._sum(x::AbstractArray, y::Int)             y     zero(eltype(x))
+@diffrule Core.kwfunc(sum)(_dims, _, x::AbstractArray)     x     sum_grad(x, ds)
 
 # special sums
 @diffrule sum(_fn::typeof(log), x::AbstractArray)    x    sum_grad(x, ds) ./ x
 
-# @diffrule Statistics.mean(x::Real)                         x     ds
 @diffrule Statistics.mean(x::AbstractArray)                x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       x     mean_grad(x, ds)
 @diffrule Statistics._mean(x::AbstractArray, y::Int)       y     zero(eltype(x))
+@diffrule Core.kwfunc(Statistics.mean)(_dims, _, x::AbstractArray) x mean_grad(x, ds)
+@nodiff Core.kwfunc(Statistics.mean)(_dims, _, x::AbstractArray) _dims
+@nodiff Core.kwfunc(Statistics.mean)(_dims, _, x::AbstractArray) _
 
 # diag
 @diffrule diag(x::AbstractMatrix)    x    Diagonal(ds)
