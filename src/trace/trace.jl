@@ -13,19 +13,25 @@ end
 __tuple__(args...) = tuple(args...)
 __getfield__(args...) = getfield(args...)
 
-const PRIMITIVES = Set([
-    # *, /, +, -, sin, cos, sum, Base._sum,
-    print, println,
-    Base.getproperty, Base.getfield, Base.indexed_iterate,
-    # broadcasting
-    broadcast, Broadcast.materialize, Broadcast.broadcasted,
-    # functions with kw arguments
-    Core.apply_type, Core.kwfunc,
-    tuple,
-    # for loop primitives
-    Colon(), Base.iterate, Base.not_int, ===,
-    # our own special functions
-    __new__, __tuple__, __getfield__, namedtuple])
+
+function module_functions(modl)
+    res = Vector{Function}()
+    for s in Base.names(modl; all=true)
+        isdefined(modl, s) || continue
+        fn = getfield(modl, s)
+        if fn isa Function && match(r"^[a-z#]+$", string(s)) != nothing
+            push!(res, fn)
+        end
+    end
+    return res
+end
+
+const PRIMITIVES = Set{Function}(vcat(
+    module_functions(Base),
+    module_functions(Core),
+    [Broadcast.materialize, Broadcast.broadcasted, Colon(),
+     # our own special functions
+     __new__, __tuple__, __getfield__, namedtuple]))
 
 
 include("cassette.jl")

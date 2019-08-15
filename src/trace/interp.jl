@@ -98,7 +98,12 @@ function itrace!(f, tape::Tape, argvars...; primitives)
                 ret_id = record!(tape, Call, retval, cf, cvars)
                 frame_vars[loc] = ret_id  # for slots it may overwrite old mapping
             else
-                retval, ret_id = itrace!(cf, tape, zip(cargs, cvars)...; primitives=primitives)
+                try
+                    retval, ret_id = itrace!(cf, tape, zip(cargs, cvars)...; primitives=primitives)
+                catch
+                    println("Failed to trace through function $cf")
+                    rethrow()
+                end
                 frame_vars[loc] = ret_id  # for slots it may overwrite old mapping
                 step_expr!(fr)  # can we avoid this double execution?
             end

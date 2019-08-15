@@ -108,7 +108,6 @@ function add_points(x)
 end
 
 
-
 @testset "grad: structs/new" begin
     # find_field_source_var
     _, tape = trace(add_points, rand())
