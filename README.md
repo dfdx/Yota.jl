@@ -57,7 +57,7 @@ You can add custom derivatives using `@diffrule` macro.
 
 ```julia
 logistic(x) = 1 / (1 + exp(-x))
-# for an expression like `logistic(x)` where x is a Number
+# for an expression like `y = logistic(x)` where x is a Number
 # gradient w.r.t. x
 # is `(logistic(x) * (1 - logistic(x)) * ds)` where "ds" stands for derivative "dL/dy"
 @diffrule logistic(x::Number) x (logistic(x) * (1 - logistic(x)) * ds)
@@ -65,6 +65,30 @@ logistic(x) = 1 / (1 + exp(-x))
 L(x) = sum(logistic.(x))
 val, g = grad(L, rand(5))
 ```
+
+For functions accepting keyword arguments use `@diffrule_kw` instead:
+
+```julia
+import NNlib: conv, ∇conv_data, ∇conv_filter
+
+@diffrule_kw conv(x, w) x ∇conv_data(ds, w)
+@diffrule_kw conv(x, w) w ∇conv_filter(ds, x)
+```
+
+During reverse pass Yota will generate call to derivative function with the same keyword arguments that were
+passed to the original one. For example, if you have:
+
+```julia
+conv(A, W; pad=1)
+```
+
+corresponding derivative will be:
+
+```julia
+∇conv_data(ds, w; pad=1)
+```
+
+There's also `@nodiff(call_pattern, variable)` macro which stops Yota from backpropagating through that variable.
 
 ## Tracer and the Tape
 

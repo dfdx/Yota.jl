@@ -28,28 +28,24 @@ function resolve_functions_and_types!(mod::Module, ex)
         if string(ex.args[1])[1] != '.'  # .*, .+, etc.
             ex.args[1] = Core.eval(mod, ex.args[1])
         end
-        for x in ex.args[2:end]
-            resolve_functions_and_types!(mod, x)
-        end
+        resolve_functions_and_types!(mod, @view ex.args[2:end])
+        # for x in ex.args[2:end]
+        #     resolve_functions_and_types!(mod, x)
+        # end
     elseif Meta.isexpr(ex, :(::))
         ex.args[2] = Core.eval(mod, ex.args[2])
-    elseif ex isa Vector
-        for x in ex
-            resolve_functions_and_types!(mod, x)
+    elseif ex isa Vector || ex isa SubArray
+        for (i, x) in enumerate(ex)
+            if Meta.isexpr(x, :$)
+                ex[i] = Core.eval(mod, x.args[1])
+            else
+                resolve_functions_and_types!(mod, x)
+            end
         end
     end
     return ex
 end
 
-
-# not used?
-function add_diff_rule(mod, pat, var, rpat)
-    pat, rpat = map(Espresso.sanitize, (pat, rpat))
-    resolve_functions_and_types!(mod, pat)
-    resolve_functions_and_types!(mod, rpat)
-    push!(DIFF_RULES, (pat, var, rpat))
-    push!(PRIMITIVES, pat.args[1])
-end
 
 macro diffrule(pat, var, rpat)
     esc(quote
@@ -61,6 +57,20 @@ macro diffrule(pat, var, rpat)
         push!($DIFF_RULES, (pat, $(QuoteNode(var)), rpat))
         push!($PRIMITIVES, pat.args[1])
         nothing
+        end)
+end
+
+
+macro diffrule_kw(pat, var, rpat)
+    kw_pat = rewrite(pat, :(_fn(_args...)), :(Core.kwfunc(_fn)(_kw, _, _args...)))
+    kw_rpat = rewrite(rpat, :(_fn(_args...)), :(Core.kwfunc(_fn)(_kw, _, _args...)))
+    kw_rpat = subs(kw_rpat, Dict(:_ => Expr(:$, rpat.args[1])))
+    return esc(
+        quote
+        @diffrule $pat $var $rpat
+        @diffrule $kw_pat $var $kw_rpat
+        @nodiff $kw_pat _kw
+        @nodiff $kw_pat _
         end)
 end
 
