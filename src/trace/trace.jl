@@ -26,7 +26,7 @@ function module_functions(modl)
     return res
 end
 
-const PRIMITIVES = Set{Function}(vcat(
+const PRIMITIVES = Set{Any}(vcat(
     module_functions(Base),
     module_functions(Core),
     [Broadcast.materialize, Broadcast.broadcasted, Colon(),

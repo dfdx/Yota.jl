@@ -97,7 +97,8 @@ function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     dep_types = [tape[arg].typ for arg in op.args]
     dex = deriv_expr(ex, dep_types, i)
     st = Dict(Symbol("%$i") => i for i in op.args)
-    st[:ds] = dy.id
+    st[:dy] = dy.id
+    st[:y] = op.id
     ret_id = record_expr!(tape, dex; st=st)
     return tape[ret_id]
 end
@@ -108,7 +109,8 @@ function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     dep_eltypes = [eltype(tape[arg].typ) for arg in op.args[2:end]]
     dex = deriv_expr(ex, dep_eltypes, i-1)
     st = Dict(Symbol("%$id") => id for id in op.args)
-    st[:ds] = dy.id
+    st[:dy] = dy.id
+    st[:y] = op.id
     ret_id = record_expr!(tape, dex; st=st, bcast=true)
     return tape[ret_id]
 end

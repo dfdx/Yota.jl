@@ -3,7 +3,9 @@ using LinearAlgebra
 using Cassette
 using Cassette: Tagged, tag, untag, istagged, metadata, hasmetadata,
     enabletagging, @overdub, overdub, canrecurse, similarcontext, fallback
+using JuliaInterpreter
 using Espresso
+using NNlib
 using Requires
 
 
@@ -13,7 +15,7 @@ include("devices.jl")
 include("tape.jl")
 include("tapeutils.jl")
 include("trace/trace.jl")
-include("diffrules.jl")
+include("diffrules/diffrules.jl")
 include("grad.jl")
 include("compile.jl")
 include("update.jl")
