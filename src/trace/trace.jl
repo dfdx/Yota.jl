@@ -38,4 +38,4 @@ include("cassette.jl")
 include("interp.jl")
 
 
-trace = itrace
+trace = ctrace

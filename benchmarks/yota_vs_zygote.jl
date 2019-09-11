@@ -1,6 +1,7 @@
 using Yota
 using Zygote
 using Zygote: @adjoint
+# include("../src/core.jl")
 using BenchmarkTools
 using Distributions
 import NNlib
@@ -10,8 +11,8 @@ logistic(x) = 1 / (1 + exp(-x))
 softplus(x) = log(exp(x) + 1)
 
 # Yota diff rules
-@diffrule logistic(x::Number) x (logistic(x) * (1 - logistic(x)) * ds)
-@diffrule softplus(x::Number) x logistic(x) * ds
+@diffrule logistic(x::Number) x (logistic(x) * (1 - logistic(x)) * dy)
+@diffrule softplus(x::Number) x logistic(x) * dy
 
 # Zygote diff rules
 @adjoint logistic(x) = logistic(x), Δ -> ((logistic(x) * (1 - logistic(x)) * Δ),)
