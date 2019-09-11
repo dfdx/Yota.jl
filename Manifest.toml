@@ -9,7 +9,7 @@ git-tree-sha1 = "1d00c35118babf85c4a9a72c3d3550d498b64a03"
 repo-rev = "45a4f68c304c5ac39543338f7281812a689adf35"
 repo-url = "https://github.com/jrevels/Cassette.jl.git"
 uuid = "7057c7e9-c182-5462-911a-8362d720325c"
-version = "0.2.5+"
+version = "0.2.6+"
 
 [[CodeTracking]]
 deps = ["InteractiveUtils", "Test", "UUIDs"]

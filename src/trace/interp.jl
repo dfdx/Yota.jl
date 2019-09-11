@@ -50,8 +50,7 @@ is_int_assign_expr(ex) = Meta.isexpr(ex, :(=)) && (isa(ex.args[2], SlotNumber) |
 
 is_interesting_expr(ex) = is_int_call_expr(ex) || is_int_assign_expr(ex) || Meta.isexpr(ex, :return)
 
-# f, f_var, args, vars
-# f_arg_vars?
+
 function itrace!(tape::Tape, fargs, vars; primitives)
     frame = enter_call(fargs...)
     frame_vars = Dict{Any, Int}(JuliaInterpreter.SlotNumber(i) => v for (i, v) in enumerate(vars))
