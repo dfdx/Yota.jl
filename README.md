@@ -111,7 +111,7 @@ print(tape)
 #   %3 = broadcast(%2, %1)::Array{Float64,1}
 #   %4 = sum(%3)::Float64
 ```
-`trace` uses [JuliaInterpreter.jl](https://github.com/JuliaDebug/JuliaInterpreter.jl) to collect function calls during execution. Functions are divided into 2 groups:
+`trace` uses [Cassette.jl](https://github.com/jrevels/Cassette.jl) to collect function calls during execution. Functions are divided into 2 groups:
 
  * primitive, which are recorded to the tape;
  * non-primitive, which are traced-through down to primitive ones.
@@ -136,7 +136,7 @@ compile!(tape)
 # 492.063 ns (2 allocations: 144 bytes)
 ```
 
-Note that `trace()` is an alias to `itrace()` - JuliaInterpreter-based tracer. Older versions of Yota used another implementation with identical interface and capabilities, but based on [Cassette.jl](https://github.com/jrevels/Cassette.jl). This implementation is still available by name `ctrace()`.
+Note that `trace()` is an alias to `ctrace()` - Cassette-based tracer. There's also an alternative implementation with identical interface and capabilities, but based on [JuliaInterpreter.jl](https://github.com/JuliaDebug/JuliaInterpreter.jl). This implementation is available by name `itrace()`.
 
 ## CuArrays support (experimental)
 

@@ -92,10 +92,14 @@ end
 
 function Cassette.overdub(ctx::TraceCtx, f, args...)
     if false
-        @show f
-        arg_vals = [untag(x, ctx) for x in args]
-        # @show arg_vals
-        @show args
+        # @show f
+        vals = [untag(x, ctx) for x in args]
+        # @show vals
+        println("$f($vals)")
+        # @show args
+    end
+    if istagged(f, ctx)
+        f = untag(f, ctx)
     end
     tape = ctx.metadata.tape
     primitives = ctx.metadata.primitives
