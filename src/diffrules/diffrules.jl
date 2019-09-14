@@ -47,15 +47,23 @@ function resolve_functions_and_types!(mod::Module, ex)
 end
 
 
+add_diff_rule(rule) = push!(DIFF_RULES, rule)
+add_primitive(primitive) = push!(PRIMITIVES, primitive)
+
+
 macro diffrule(pat, var, rpat)
+    println("diffrule called with argumets $pat, $var, $rpat")
     esc(quote
         mod = @__MODULE__
         local pat, rpat = map($Espresso.sanitize, ($(QuoteNode(pat)), $(QuoteNode(rpat))))
         pat, rpat = map($resolve_old_broadcast, (pat, rpat))
         $resolve_functions_and_types!(mod, pat)
         $resolve_functions_and_types!(mod, rpat)
-        push!($DIFF_RULES, (pat, $(QuoteNode(var)), rpat))
-        push!($PRIMITIVES, pat.args[1])
+        # push!($DIFF_RULES, (pat, $(QuoteNode(var)), rpat))
+        # push!($PRIMITIVES, pat.args[1])
+        $add_diff_rule((pat, $(QuoteNode(var)), rpat))
+        $add_primitive(pat.args[1])
+        println("diffrule: $(pat.args[1]) in PRIMITIVES? $(pat.args[1] in PRIMITIVES)")
         nothing
         end)
 end
