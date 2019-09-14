@@ -90,34 +90,67 @@ function with_free_args_as_constants(ctx::TraceCtx, tape::Tape, args)
 end
 
 
-function Cassette.overdub(ctx::TraceCtx, f, args...)
+function Cassette.overdub(ctx::TraceCtx, fargs...)
     if false
         # @show f
-        vals = [untag(x, ctx) for x in args]
+        vals = [untag(x, ctx) for x in fargs]
         # @show vals
         println("$f($vals)")
         # @show args
     end
-    if istagged(f, ctx)
-        f = untag(f, ctx)
-    end
+    # if istagged(f, ctx)
+    #     f = untag(f, ctx)
+    # end
+    f, args = fargs[1], fargs[2:end]
+    fv = istagged(f, ctx) ? untag(f, ctx) : f
     tape = ctx.metadata.tape
     primitives = ctx.metadata.primitives
-    # handle_new(...)
-    if f in primitives
-        # args = with_tagged_properties(ctx, tape, args)    # only if f() is getproperty()
-        args = with_free_args_as_constants(ctx, tape, args)
-        arg_ids = [metadata(x, ctx) for x in args]
-        arg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in arg_ids]
+    if fv in primitives
+        fargs = with_free_args_as_constants(ctx, tape, fargs)
+        farg_ids = [metadata(x, ctx) for x in fargs]
+        farg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in farg_ids]
         # execute call
-        retval = fallback(ctx, f, [untag(x, ctx) for x in args]...)
+        retval = fallback(ctx, [untag(x, ctx) for x in fargs]...)
         # record to the tape and tag with a newly created ID
-        ret_id = record!(tape, Call, retval, f, arg_ids)
+        ret_id = record!(tape, Call, retval, fv, farg_ids[2:end])
         retval = tag(retval, ctx, ret_id)
-    elseif canrecurse(ctx, f, args...)
-        retval = Cassette.recurse(ctx, f, args...)
+    elseif canrecurse(ctx, fv, args...)
+        retval = Cassette.recurse(ctx, fargs...)
     else
-        retval = fallback(ctx, f, args...)
+        retval = fallback(ctx, fargs...)
     end
     return retval
 end
+
+
+# function Cassette.overdub(ctx::TraceCtx, f, args...)
+#     if false
+#         # @show f
+#         vals = [untag(x, ctx) for x in args]
+#         # @show vals
+#         println("$f($vals)")
+#         # @show args
+#     end
+#     if istagged(f, ctx)
+#         f = untag(f, ctx)
+#     end
+#     tape = ctx.metadata.tape
+#     primitives = ctx.metadata.primitives
+#     # handle_new(...)
+#     if f in primitives
+#         # args = with_tagged_properties(ctx, tape, args)    # only if f() is getproperty()
+#         args = with_free_args_as_constants(ctx, tape, args)
+#         arg_ids = [metadata(x, ctx) for x in args]
+#         arg_ids = Int[id isa Cassette.NoMetaData ? -1 : id for id in arg_ids]
+#         # execute call
+#         retval = fallback(ctx, f, [untag(x, ctx) for x in args]...)
+#         # record to the tape and tag with a newly created ID
+#         ret_id = record!(tape, Call, retval, f, arg_ids)
+#         retval = tag(retval, ctx, ret_id)
+#     elseif canrecurse(ctx, f, args...)
+#         retval = Cassette.recurse(ctx, f, args...)
+#     else
+#         retval = fallback(ctx, f, args...)
+#     end
+#     return retval
+# end
