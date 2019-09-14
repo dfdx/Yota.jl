@@ -174,14 +174,16 @@ end
 
 ## nodiff
 
+add_no_diff_rule(rule) = push!(NO_DIFF_RULES, rule)
+
 macro nodiff(pat, var)
     esc(quote
         mod = @__MODULE__
         local pat = $Espresso.sanitize($(QuoteNode(pat)))
         pat, $resolve_old_broadcast(pat)
         $resolve_functions_and_types!(mod, pat)
-        push!($NO_DIFF_RULES, (pat, $(QuoteNode(var))))
-        push!($PRIMITIVES, pat.args[1])
+        $add_no_diff_rule((pat, $(QuoteNode(var))))
+        $add_primitive(pat.args[1])
         nothing
         end)
 end
