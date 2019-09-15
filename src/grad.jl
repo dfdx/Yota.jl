@@ -7,7 +7,7 @@ function field_paths(tape::Tape)
     for op in reverse(tape.ops)
         _op = op
         path = []
-        while _op isa Call && _op.fn == Base.getproperty
+        while _op isa Call && _op.fn in (Base.getproperty, __getfield__)
             field_name = tape[_op.args[2]].val
             push!(path, field_name)
             _op_id = _op.args[1]
