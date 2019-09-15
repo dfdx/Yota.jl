@@ -209,7 +209,7 @@ that was used to create that field.
 NOTE: This works only with getfield() on tuples
 """
 function find_tuple_field_source_var(tape::Tape, getf_op::Call)
-    getf_base_op = tape[getf_op.args[1]]  
+    getf_base_op = tape[getf_op.args[1]]
     if getf_base_op.fn == Base.indexed_iterate
         tuple_op = tape[getf_base_op.args[1]]
         tuple_idx = tape[ind_it_op.args[2]].val

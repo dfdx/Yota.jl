@@ -28,4 +28,10 @@ end
     reduced_tape = remove_unused(tape)
     @test length(reduced_tape) = 17   # may be too strict, but let's give it a try
     @test play!(reduced_tape, x) == play!(tape, x)
+
+    # test unwind_iterate
+    _, tape = trace(t -> (r = 0; for x in t r += x end; return r), (100, 200, 300); optimize=false)
+    tape_no_iter = remove_unused(unwind_iterate(tape))
+    @test play!(tape, (1, 2, 3)) == play!(tape, (1, 2, 3))
+    @test length(tape_no_iter) < length(tape)
 end

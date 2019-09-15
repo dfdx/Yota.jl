@@ -274,9 +274,38 @@ function squash_assigned(tape::Tape)
 end
 
 
+"""
+Unwind iterate() sequences into plain __getfield__ expressions.
+unwind_iterate() doesn't remove unused elements for performance reasons,
+so remove_unused() should be called after it.
+"""
+function unwind_iterate(tape::Tape)
+    tape = copy_with(tape)
+    for op in tape
+        if (op isa Call && op.fn == __getfield__
+            && tape[op.args[1]] isa Call && tape[op.args[1]].fn == Base.iterate
+            && tape[op.args[2]] isa Constant && tape[op.args[2]].val == 1)            
+            iterate_op = tape[op.args[1]]
+            iterable_op = tape[iterate_op.args[1]]
+            idx = length(iterate_op.args) > 1 ? tape[iterate_op.args[2]].val : 1
+            if iterable_op.val isa Tuple || iterable_op.val isa Vector
+                # 1. Replace iterable op with index in the original iterable
+                tape[iterate_op.id] = Constant(iterate_op.id, idx)
+                # 2. Replace __getfield__ on iterator with __getfield__ on original iterable
+                idx_id = iterate_op.id
+                obj_id = iterable_op.id
+                tape[op.id] = Call(op.id, op.val, __getfield__, [obj_id, idx_id])
+            end
+        end
+    end
+    return tape
+end
+
+
 function simplify(tape::Tape)
     tape = recover_broadcast(tape)
     tape = squash_assigned(tape)
+    tape = unwind_iterate(tape)
     tape = remove_unused(tape)
     return tape
 end

@@ -4,11 +4,11 @@ using CuArrays
 
 CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
 
-@diffrule CUDAnative.exp(x::Real) x CUDAnative.exp(x) * ds
-@diffrule CUDAnative.pow(x::Real, y::Real) x (y * CUDAnative.pow(x, (y-1)) * ds)
-@diffrule CUDAnative.pow(x::Real, y::Real) y CUDAnative.log(x) * CUDAnative.pow(x, y) * ds
-@diffrule CUDAnative.log(x::Real) x ds / x
-@diffrule CUDAnative.sqrt(x::Real) x (0.5f0 * CUDAnative.pow(x, -0.5f0) * ds)
+@diffrule CUDAnative.exp(u::Real) u CUDAnative.exp(u) * dy
+@diffrule CUDAnative.pow(u::Real, v::Real) u (v * CUDAnative.pow(u, (v-1)) * dy)
+@diffrule CUDAnative.pow(u::Real, v::Real) v CUDAnative.log(u) * CUDAnative.pow(u, v) * dy
+@diffrule CUDAnative.log(u::Real) u dy / u
+@diffrule CUDAnative.sqrt(u::Real) u (0.5f0 * CUDAnative.pow(u, -0.5f0) * dy)
 
 
 # # const NON_DISPATCHED_OPS = [log, exp, sqrt, ^, ones]
