@@ -207,10 +207,17 @@ end
 
 
 function dont_diff(tape::Tape, op::AbstractOp, idx::Int)
-    ex = to_expr(tape, op)
-    dep_types = [tape[arg].typ for arg in op.args]
+    if op.fn == broadcast
+        ex = to_unbroadcast_expr(tape, op)
+        dep_types = [eltype(tape[arg].typ) for arg in op.args[2:end]]
+        idx_ = idx - 1
+    else
+        ex =  to_expr(tape, op)
+        dep_types = [tape[arg].typ for arg in op.args]
+        idx_ = idx
+    end
     for rule in NO_DIFF_RULES
-        if match_nodiff_rule(rule, ex, dep_types, idx)
+        if match_nodiff_rule(rule, ex, dep_types, idx_)
             return true
         end
     end

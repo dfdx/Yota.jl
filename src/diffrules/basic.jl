@@ -219,9 +219,9 @@
 @diffrule ^(u::Real, v::Real)                      v     log(u) * u ^ v * dy
 
 get_val_param(::Val{v}) where v = v
-@diffrule Base.literal_pow(_, u::Real, v::Val)    u      get_val_param(v) * u ^ (get_val_param(v)-(one(u))) * dy
-@nodiff Base.literal_pow(_, u::Real, v::Val) _
-@nodiff Base.literal_pow(_, u::Real, v::Val) v
+@diffrule Base.literal_pow(_, u::Real, v)         u      get_val_param(v) * u ^ (get_val_param(v)-(one(u))) * dy
+@nodiff Base.literal_pow(_, u::Real, v)           _
+@nodiff Base.literal_pow(_, u::Real, v)           v
 
 
 # # division

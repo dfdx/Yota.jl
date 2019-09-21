@@ -59,6 +59,9 @@ sum_prod_bcast(x, y) = sum(x .* y)
     end
 end
 
+@testset "grad: literal_pow" begin
+    @test gradcheck(x -> sum(x .^ 2), rand(3, 4))
+end
 
 @testset "grad: transpose" begin
     a = rand(5)
