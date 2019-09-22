@@ -22,11 +22,9 @@ CUDANATIVE_OPS[^] = CUDAnative.pow
 CUDANATIVE_OPS[ones] = CUDAnative.ones
 
 device_function(device::GPU, f::Function) = get(CUDANATIVE_OPS, f, f)
-# device_function(::GPU, f::Function) = CuArrays.cufunc(f)
-to_device(device::GPU, x) = cu(x)
 
 
-function to_cuda(x)
+function to_device(device::GPU, x)
     T = typeof(x)
     flds = fieldnames(T)
     if is_cuarray(x)
@@ -36,7 +34,7 @@ function to_cuda(x)
         return cu(x)
     else
         # struct, recursively convert and construct type from fields
-        fld_vals = [to_cuda(getfield(x, fld)) for fld in flds]
+        fld_vals = [to_device(device, getfield(x, fld)) for fld in flds]
         return T(fld_vals...)
     end
 end
