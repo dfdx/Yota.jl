@@ -274,6 +274,45 @@ function squash_assigned(tape::Tape)
 end
 
 
+## Accidentially I've created another version of squash_assigned which seems simpler and still correct
+## but I haven't tested it thoroughly, so I just leave it here as is in case I'll ever have to deal
+## with it again
+##
+## function fuse_assigned(tape::Tape)
+##     new_tape = copy_with(tape, ops=AbstractOp[])
+##     st = Dict{Int, Int}()  # substitution table for op indices
+##     for i=1:length(tape)
+##         op = reindex(tape[i], st)
+##         if op isa Assign
+##             # dig until not-assign argument is found
+##             root = op
+##             while root isa Assign
+##                 root = tape[root.src_id]
+##             end
+##             st[op.id] = root.id
+##         else
+##             new_op = reindex(op, st)
+##             push!(new_tape, new_op)
+##         end
+##     end
+##     reindex_fields!(new_tape, st)
+##     return new_tape
+## end
+
+
+## function test_fuse_assigned()
+##     tape = Tape()
+##     record!(tape, Input, 3.0)
+##     record!(tape, Input, 2.0)
+##     record!(tape, Assign, 1, tape[1].val)
+##     record!(tape, Assign, 3, tape[3].val)
+##     record!(tape, Call, 5.0, +, [2, 4])
+##     record!(tape, Assign, 5, tape[5].val)
+##     tape.resultid = length(tape)
+## end
+
+
+
 """
 Unwind iterate() sequences into plain __getfield__ expressions.
 unwind_iterate() doesn't remove unused elements for performance reasons,
@@ -284,7 +323,7 @@ function unwind_iterate(tape::Tape)
     for op in tape
         if (op isa Call && op.fn == __getfield__
             && tape[op.args[1]] isa Call && tape[op.args[1]].fn == Base.iterate
-            && tape[op.args[2]] isa Constant && tape[op.args[2]].val == 1)            
+            && tape[op.args[2]] isa Constant && tape[op.args[2]].val == 1)
             iterate_op = tape[op.args[1]]
             iterable_op = tape[iterate_op.args[1]]
             idx = length(iterate_op.args) > 1 ? tape[iterate_op.args[2]].val : 1
@@ -306,6 +345,7 @@ function simplify(tape::Tape)
     tape = recover_broadcast(tape)
     tape = squash_assigned(tape)
     tape = unwind_iterate(tape)
+    tape = eliminate_common(tape)
     tape = remove_unused(tape)
     return tape
 end

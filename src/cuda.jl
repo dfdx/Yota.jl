@@ -2,7 +2,7 @@ import CUDAnative
 using CuArrays
 
 
-CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
+# CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
 
 @diffrule CUDAnative.exp(u::Real) u CUDAnative.exp(u) * dy
 @diffrule CUDAnative.pow(u::Real, v::Real) u (v * CUDAnative.pow(u, (v-1)) * dy)

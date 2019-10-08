@@ -58,6 +58,16 @@ function Espresso.to_expr(tape::Tape)
 end
 
 
+# alternatives for simplegrad
+function to_simple_expr(op::Call)
+    arg_names = map(make_name, op.args)
+    call = Expr(:call, op.fn, arg_names...)
+    return Expr(:(=), make_name(op.id), call)
+end
+
+to_simple_expr(op::AbstractOp) = to_expr(op)
+
+
 ########################################################################
 #                       CODE GENERATION                                #
 ########################################################################
@@ -161,7 +171,7 @@ function generate_function_expr_unbound(tape::Tape; ret_grad=false)
     fn_ex_body = fn_ex.args[2]
     for op in tape
         if !isa(op, Input)
-            ex = op |> to_expr
+            ex = op |> to_simple_expr
             push!(fn_ex_body.args, ex)
         end
     end
