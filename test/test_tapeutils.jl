@@ -34,4 +34,19 @@ end
     tape_no_iter = remove_unused(unwind_iterate(tape))
     @test play!(tape, (1, 2, 3)) == play!(tape, (1, 2, 3))
     @test length(tape_no_iter) < length(tape)
+
+
+    tape = Tape()
+    record!(tape, Input, 3.0)
+    record!(tape, Input, 2.0)
+    record!(tape, Call, 5.0, +, [1, 2])
+    record!(tape, Constant, 4.0)
+    record!(tape, Call, 5.0, +, [1, 2])
+    record!(tape, Call, 25.0, *, [3, 5])
+    tape.resultid = length(tape)
+
+    tape2 = eliminate_common(tape)
+    @test length(tape2) == 5
+    @test play!(tape, 9.0, 4.0) == play!(tape2, 9.0, 4.0)
+
 end

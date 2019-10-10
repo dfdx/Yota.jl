@@ -7,29 +7,65 @@ make_name(op::AbstractOp) = Symbol("%$(op.id)")
 
 unmake_name(x::Symbol) = parse(Int, string(x)[2:end])
 
-to_exnode(op::Input) = ExNode{:input}(make_name(op), make_name(op); val=op.val)
-to_exnode(op::Assign) = ExNode{:(=)}(make_name(op), make_name(op.src_id); val=op.val)
+# to_exnode(op::Input) = ExNode{:input}(make_name(op), make_name(op); val=op.val)
+# to_exnode(op::Assign) = ExNode{:(=)}(make_name(op), make_name(op.src_id); val=op.val)
 
-function to_exnode(op::Constant)
+# function to_exnode(op::Constant)
+#     val = op.val isa Symbol ? QuoteNode(op.val) : op.val
+#     return ExNode{:constant}(make_name(op), val; val=val)
+# end
+
+
+# function to_exnode(op::Call)
+#     arg_names = map(make_name, op.args)
+#     ex = Expr(:call, op.fn, arg_names...)
+#     return ExNode{:call}(make_name(op), ex; val=op.val)
+# end
+
+
+# function to_exgraph(tape::Tape)
+#     g = ExGraph()
+#     for op in tape
+#         push!(g, to_exnode(op))
+#     end
+#     return g
+# end
+
+
+Espresso.to_expr(op::Input) = :()
+Espresso.to_expr(op::Assign) = Expr(:(=), make_name(op), make_name(op.src_id))
+
+function Espresso.to_expr(op::Constant)
     val = op.val isa Symbol ? QuoteNode(op.val) : op.val
-    return ExNode{:constant}(make_name(op), val; val=val)
+    return Expr(:(=), make_name(op), val)
 end
 
 
-function to_exnode(op::Call)
+function Espresso.to_expr(op::Call)
     arg_names = map(make_name, op.args)
-    ex = Expr(:call, op.fn, arg_names...)
-    return ExNode{:call}(make_name(op), ex; val=op.val)
+    call = Expr(:call, op.fn, arg_names...)
+    assign = op.val isa AbstractArray ? :(.=) : :(=)
+    return Expr(assign, make_name(op.id), call)
 end
 
 
-function to_exgraph(tape::Tape)
-    g = ExGraph()
+function Espresso.to_expr(tape::Tape)
+    body = Expr(:block)
     for op in tape
-        push!(g, to_exnode(op))
+        push!(body.args, to_expr(op))
     end
-    return g
+    return body
 end
+
+
+# alternatives for simplegrad
+function to_simple_expr(op::Call)
+    arg_names = map(make_name, op.args)
+    call = Expr(:call, op.fn, arg_names...)
+    return Expr(:(=), make_name(op.id), call)
+end
+
+to_simple_expr(op::AbstractOp) = to_expr(op)
 
 
 ########################################################################
@@ -73,14 +109,15 @@ end
 Main part of generated function code
 """
 function generate_body(tape::Tape)
-    ret_var_ids = vcat(values(tape.derivs) |> collect, [tape.resultid])
-    ret_var_names = [Symbol("%$id") for id in ret_var_ids]
-    exg = to_exgraph(tape)
+    # ret_var_ids = vcat(values(tape.derivs) |> collect, [tape.resultid])
+    # ret_var_names = [Symbol("%$id") for id in ret_var_ids]
+    # exg = to_exgraph(tape)
     # exg = Espresso.fuse_broadcasting(exg)  # TODO: this breaks test_examples.jl
-    exg = Espresso.fuse_assigned(exg; outvars=ret_var_names)
-    exg = Espresso.eliminate_common(exg)
-    ex = Espresso.to_expr_kw(exg)
+    # exg = Espresso.fuse_assigned(exg; outvars=ret_var_names)
+    # exg = Espresso.eliminate_common(exg)
+    # ex = Espresso.to_expr_kw(exg)
     # ex = rewrite_all(ex, INPLACE_RULES; phs=Set([:X, :Y, :Z]))
+    ex = to_expr(tape)
     ex = rewrite_mul(tape, ex)
     return ex
 end
@@ -134,7 +171,7 @@ function generate_function_expr_unbound(tape::Tape; ret_grad=false)
     fn_ex_body = fn_ex.args[2]
     for op in tape
         if !isa(op, Input)
-            ex = op |> to_exnode |> to_expr
+            ex = op |> to_simple_expr
             push!(fn_ex_body.args, ex)
         end
     end

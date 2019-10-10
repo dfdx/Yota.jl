@@ -9,12 +9,23 @@ function reindex(op::Call, st::Dict)
     return copy_with(op, args=new_args, id=new_id)
 end
 
+reindex(op::Assign, st::Dict) = copy_with(op, id=get(st, op.id, op.id),
+                                          src_id=get(st, op.src_id, op.src_id))
 reindex(op::AbstractOp, st::Dict) = copy_with(op, id=get(st, op.id, op.id))
 
 
 function reindex_fields!(tape::Tape, st::Dict)
     tape.resultid = get(st, tape.resultid, tape.resultid)
     # possibly we also need to reindex .derivs
+end
+
+
+function reindex(tape::Tape, st::Dict)
+    new_tape = copy_with(tape, ops=AbstractOp[])
+    for op in tape
+        push!(new_tape, reindex(op, st))
+    end
+    return new_tape
 end
 
 
@@ -99,6 +110,33 @@ function remove_unused(tape::Tape; keep=[tape.resultid])
     end
     reindex_fields!(new_tape, st)
     return new_tape
+end
+
+
+function eliminate_common(tape::Tape)
+    new_tape = copy_with(tape, ops=AbstractOp[])
+    existing = Dict()
+    st = Dict()
+    for op in tape
+        op = reindex(op, st)
+        if isa(op, Call)
+            key = (op.fn, op.args...)
+            if haskey(existing, key)
+                # such expression already exists
+                # replace curren one with assignment
+                src = existing[key]
+                st[op.id] = src
+                push!(new_tape, Assign(op.id, src, tape[src].val))
+            else
+                # new expression - put to `existing` and record to new_tape
+                existing[key] = op.id
+                push!(new_tape, op)
+            end
+        else
+            push!(new_tape, op)
+        end
+    end
+    return squash_assigned(new_tape)
 end
 
 
