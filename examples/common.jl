@@ -1,8 +1,8 @@
 logistic(x) = 1 ./ (1 + exp.(-x))
-@diffrule logistic(x::Number) x (logistic(x) .* (1 .- logistic(x)) .* ds)
+@diffrule logistic(x::Number) x (logistic(x) .* (1 .- logistic(x)) .* dy)
 
 softplus(x) = log(exp(x) + 1)
-@diffrule softplus(x::Number) x logistic(x) .* ds
+@diffrule softplus(x::Number) x logistic(x) .* dy
 
 
 function xavier_init(dim_in, dim_out; c=1)

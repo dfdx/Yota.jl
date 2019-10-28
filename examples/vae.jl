@@ -88,13 +88,16 @@ end
 function StatsBase.fit!(m::VAE{T}, X::AbstractMatrix{T};
               n_epochs=50, batch_size=100) where T
     for epoch in 1:n_epochs
+        empty!(Yota.GRAD_CACHE)
         print("Epoch $epoch: ")
         epoch_cost = 0
         t = @elapsed for (i, x) in enumerate(eachbatch(X, size=batch_size))
             eps = typeof(x)(rand(Normal(0, 1), size(m.We3, 1), batch_size))
-            cost, g = grad(vae_cost, m, eps, x)
+            cost, g = Yota._grad(vae_cost, m, eps, x)
             update!(m, g[1], (x, gx) -> x .- 0.01gx)
             epoch_cost += cost
+            gW = g[1][(:We1,)]
+            @info "epoch = $epoch; loss = $cost; norm(∇We1) = $(sum(abs2, gW)); norm(We1) = $(sum(abs2, m.We1))"
         end
         println("avg_cost=$(epoch_cost / (size(X,2) / batch_size)), elapsed=$t")
     end
