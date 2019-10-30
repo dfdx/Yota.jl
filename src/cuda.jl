@@ -24,6 +24,9 @@ CUDANATIVE_OPS[ones] = CUDAnative.ones
 device_function(device::GPU, f::Function) = get(CUDANATIVE_OPS, f, f)
 
 
+to_device(device::CPU, x::CuArray) = convert(Array, x)
+
+
 function to_device(device::GPU, x)
     T = typeof(x)
     flds = fieldnames(T)
