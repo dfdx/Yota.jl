@@ -7,6 +7,8 @@ struct GPU <: AbstractDevice
     id::Int
 end
 
+GPU() = GPU(1)
+
 
 """
 Check if the argument is of type CuArray. Doesn't require CuArrays.jl to be loaded
@@ -49,3 +51,7 @@ For CPU it's usually no-op. For GPU behavior differs between object types:
 to_device(device::CPU, x) = x
 to_device(device::CPU, f::Function, args) = f
 # see also cuda.jl
+
+
+(device::CPU)(x) = to_device(device, x)
+(device::GPU)(x) = to_device(device, x)
