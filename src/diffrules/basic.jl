@@ -48,17 +48,27 @@
 @diffrule __tuple__(u,v,w,t)  w     dy[3]
 @diffrule __tuple__(u,v,w,t)  t     dy[4]
 
-#  vcat
-@diffrule vcat(u)        u     dy[1]
-@diffrule vcat(u,v)      u     dy[1]
-@diffrule vcat(u,v)      v     dy[2]
-@diffrule vcat(u,v,w)    u     dy[1]
-@diffrule vcat(u,v,w)    v     dy[2]
-@diffrule vcat(u,v,w)    w     dy[3]
-@diffrule vcat(u,v,w,t)  u     dy[1]
-@diffrule vcat(u,v,w,t)  v     dy[2]
-@diffrule vcat(u,v,w,t)  w     dy[3]
-@diffrule vcat(u,v,w,t)  t     dy[4]
+# vcat
+@diffrule vcat(u,v)      u     unvcat(dy, 1, u, v)
+@diffrule vcat(u,v)      v     unvcat(dy, 2, u, v)
+@diffrule vcat(u,v,w)    u     unvcat(dy, 1, u, v, w)
+@diffrule vcat(u,v,w)    v     unvcat(dy, 2, u, v, w)
+@diffrule vcat(u,v,w)    w     unvcat(dy, 3, u, v, 2)
+@diffrule vcat(u,v,w,t)  u     unvcat(dy, 1, u, v, w, t)
+@diffrule vcat(u,v,w,t)  v     unvcat(dy, 2, u, v, w, t)
+@diffrule vcat(u,v,w,t)  w     unvcat(dy, 3, u, v, w, t)
+@diffrule vcat(u,v,w,t)  t     unvcat(dy, 4, u, v, w, t)
+
+#  hcat
+@diffrule hcat(u,v)      u     unhcat(dy, 1, u, v)
+@diffrule hcat(u,v)      v     unhcat(dy, 2, u, v)
+@diffrule hcat(u,v,w)    u     unhcat(dy, 1, u, v, w)
+@diffrule hcat(u,v,w)    v     unhcat(dy, 2, u, v, w)
+@diffrule hcat(u,v,w)    w     unhcat(dy, 3, u, v, 2)
+@diffrule hcat(u,v,w,t)  u     unhcat(dy, 1, u, v, w, t)
+@diffrule hcat(u,v,w,t)  v     unhcat(dy, 2, u, v, w, t)
+@diffrule hcat(u,v,w,t)  w     unhcat(dy, 3, u, v, w, t)
+@diffrule hcat(u,v,w,t)  t     unhcat(dy, 4, u, v, w, t)
 
 # reshape
 @diffrule reshape(u::AbstractArray, _a)             u    reshape(dy, size(u))
