@@ -49,16 +49,15 @@
 @diffrule __tuple__(u,v,w,t)  t     dy[4]
 
 #  vcat
-@diffrule vcat(u)        u     dy[1]
-@diffrule vcat(u,v)      u     dy[1]
-@diffrule vcat(u,v)      v     dy[2]
-@diffrule vcat(u,v,w)    u     dy[1]
-@diffrule vcat(u,v,w)    v     dy[2]
-@diffrule vcat(u,v,w)    w     dy[3]
-@diffrule vcat(u,v,w,t)  u     dy[1]
-@diffrule vcat(u,v,w,t)  v     dy[2]
-@diffrule vcat(u,v,w,t)  w     dy[3]
-@diffrule vcat(u,v,w,t)  t     dy[4]
+@diffrule vcat(u,v)      u     unvcat(dy, 1, u, v)
+@diffrule vcat(u,v)      v     unvcat(dy, 2, u, v)
+@diffrule vcat(u,v,w)    u     unvcat(dy, 1, u, v, w)
+@diffrule vcat(u,v,w)    v     unvcat(dy, 2, u, v, w)
+@diffrule vcat(u,v,w)    w     unvcat(dy, 3, u, v, 2)
+@diffrule vcat(u,v,w,t)  u     unvcat(dy, 1, u, v, w, t)
+@diffrule vcat(u,v,w,t)  v     unvcat(dy, 2, u, v, w, t)
+@diffrule vcat(u,v,w,t)  w     unvcat(dy, 3, u, v, w, t)
+@diffrule vcat(u,v,w,t)  t     unvcat(dy, 4, u, v, w, t)
 
 # reshape
 @diffrule reshape(u::AbstractArray, _a)             u    reshape(dy, size(u))
