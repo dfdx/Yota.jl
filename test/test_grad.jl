@@ -17,6 +17,17 @@ loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 end
 
 
+@testset "grad: getindex" begin
+    x = rand(3, 4, 5)
+    x1 = zero(x); x1[1] = 1
+    @test grad(x -> x[1], x)[2][1] == x1
+    x2 = zero(x); x2[1, 2, 1] = 1
+    @test grad(x -> x[1, 2, 1], x)[2][1] == x2
+    x3 = zero(x); x3[:, 1, :] .= 1
+    @test grad(x -> sum(x[:, 1, :]), x)[2][1] == x3
+end
+
+
 sum_bcast(x, y) = sum(x .+ y)
 
 @testset "special bcast" begin
