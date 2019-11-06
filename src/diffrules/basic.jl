@@ -85,12 +85,12 @@
 @diffrule getindex(u::AbstractArray, i)         u    ungetindex(u, dy, i)
 @diffrule getindex(u::AbstractArray, i, j)      u    ungetindex(u, dy, i, j)
 @diffrule getindex(u::AbstractArray, i, j, k)   u    ungetindex(u, dy, i, j, k)
-@diffrule getindex(u::AbstractArray, i)         i    0
-@diffrule getindex(u::AbstractArray, i, j)      i    0
-@diffrule getindex(u::AbstractArray, i, j)      j    0
-@diffrule getindex(u::AbstractArray, i, j, k)   i    0
-@diffrule getindex(u::AbstractArray, i, j, k)   j    0
-@diffrule getindex(u::AbstractArray, i, j, k)   k    0
+@nodiff getindex(u::AbstractArray, i)         i
+@nodiff getindex(u::AbstractArray, i, j)      i
+@nodiff getindex(u::AbstractArray, i, j)      j
+@nodiff getindex(u::AbstractArray, i, j, k)   i
+@nodiff getindex(u::AbstractArray, i, j, k)   j
+@nodiff getindex(u::AbstractArray, i, j, k)   k
 
 
 # square root
