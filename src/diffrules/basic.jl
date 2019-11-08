@@ -14,11 +14,29 @@
 @nodiff similar(u,v) u
 @nodiff similar(u,v) v
 
-@nodiff zeros(u)     u
-@nodiff zero(u)     u
+@nodiff zeros(u)             u
+@nodiff zero(u)              u
+@nodiff zeros(i, j)          i
+@nodiff zeros(i, j)          j
+@nodiff zeros(i, j, k)       i
+@nodiff zeros(i, j, k)       j
+@nodiff zeros(i, j, k)       k
+@nodiff zeros(i, j, k, _l)   i
+@nodiff zeros(i, j, k, _l)   j
+@nodiff zeros(i, j, k, _l)   k
+@nodiff zeros(i, j, k, _l)   _l
 
-@nodiff ones(u)      u
-@nodiff one(u)     u
+@nodiff ones(u)             u
+@nodiff one(u)              u
+@nodiff ones(i, j)          i
+@nodiff ones(i, j)          j
+@nodiff ones(i, j, k)       i
+@nodiff ones(i, j, k)       j
+@nodiff ones(i, j, k)       k
+@nodiff ones(i, j, k, _l)   i
+@nodiff ones(i, j, k, _l)   j
+@nodiff ones(i, j, k, _l)   k
+@nodiff ones(i, j, k, _l)   _l
 
 @nodiff sign(u)      u
 
@@ -72,16 +90,26 @@
 
 # reshape
 @diffrule reshape(u::AbstractArray, _a)             u    reshape(dy, size(u))
-@diffrule reshape(u::AbstractArray, _a)             _a   zero(eltype(u))
 @diffrule reshape(u::AbstractArray, _a, _b)         u    reshape(dy, size(u))
-@diffrule reshape(u::AbstractArray, _a, _b)        _a    zero(eltype(u))
-@diffrule reshape(u::AbstractArray, _a, _b)        _b    0
+@diffrule reshape(u::AbstractArray, _a, _b, _c)     u    reshape(dy, size(u))
+@diffrule reshape(u::AbstractArray, _a, _b, _c, _d) u    reshape(dy, size(u))
+@nodiff reshape(u::AbstractArray, _a)              _a
+@nodiff reshape(u::AbstractArray, _a, _b)          _a
+@nodiff reshape(u::AbstractArray, _a, _b)          _b
+@nodiff reshape(u::AbstractArray, _a, _b, _c)      _a
+@nodiff reshape(u::AbstractArray, _a, _b, _c)      _b
+@nodiff reshape(u::AbstractArray, _a, _b, _c)      _c
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _a
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _b
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _c
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _d
 @diffrule reshape(u::AbstractArray, _d::Tuple)      u    reshape(dy, size(u))
-@diffrule reshape(u::AbstractArray, _d::Tuple)     _d    0
+@nodiff reshape(u::AbstractArray, _d::Tuple)        _d
 
 @diffrule vec(u::AbstractArray)    u    reshape(dy, size(u))
 
 
+# getindex
 @diffrule getindex(u::AbstractArray, i)         u    ungetindex(u, dy, i)
 @diffrule getindex(u::AbstractArray, i, j)      u    ungetindex(u, dy, i, j)
 @diffrule getindex(u::AbstractArray, i, j, k)   u    ungetindex(u, dy, i, j, k)
@@ -91,6 +119,18 @@
 @nodiff getindex(u::AbstractArray, i, j, k)   i
 @nodiff getindex(u::AbstractArray, i, j, k)   j
 @nodiff getindex(u::AbstractArray, i, j, k)   k
+
+
+# view - in non-mutating world behaves like getting subarrays using getindex
+@diffrule view(u::AbstractArray, i)         u    ungetindex(u, dy, i)
+@diffrule view(u::AbstractArray, i, j)      u    ungetindex(u, dy, i, j)
+@diffrule view(u::AbstractArray, i, j, k)   u    ungetindex(u, dy, i, j, k)
+@nodiff view(u::AbstractArray, i)         i
+@nodiff view(u::AbstractArray, i, j)      i
+@nodiff view(u::AbstractArray, i, j)      j
+@nodiff view(u::AbstractArray, i, j, k)   i
+@nodiff view(u::AbstractArray, i, j, k)   j
+@nodiff view(u::AbstractArray, i, j, k)   k
 
 
 # square root
