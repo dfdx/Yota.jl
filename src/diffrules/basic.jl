@@ -71,7 +71,7 @@
 @diffrule vcat(u,v)      v     unvcat(dy, 2, u, v)
 @diffrule vcat(u,v,w)    u     unvcat(dy, 1, u, v, w)
 @diffrule vcat(u,v,w)    v     unvcat(dy, 2, u, v, w)
-@diffrule vcat(u,v,w)    w     unvcat(dy, 3, u, v, 2)
+@diffrule vcat(u,v,w)    w     unvcat(dy, 3, u, v, w)
 @diffrule vcat(u,v,w,t)  u     unvcat(dy, 1, u, v, w, t)
 @diffrule vcat(u,v,w,t)  v     unvcat(dy, 2, u, v, w, t)
 @diffrule vcat(u,v,w,t)  w     unvcat(dy, 3, u, v, w, t)
@@ -82,11 +82,22 @@
 @diffrule hcat(u,v)      v     unhcat(dy, 2, u, v)
 @diffrule hcat(u,v,w)    u     unhcat(dy, 1, u, v, w)
 @diffrule hcat(u,v,w)    v     unhcat(dy, 2, u, v, w)
-@diffrule hcat(u,v,w)    w     unhcat(dy, 3, u, v, 2)
+@diffrule hcat(u,v,w)    w     unhcat(dy, 3, u, v, w)
 @diffrule hcat(u,v,w,t)  u     unhcat(dy, 1, u, v, w, t)
 @diffrule hcat(u,v,w,t)  v     unhcat(dy, 2, u, v, w, t)
 @diffrule hcat(u,v,w,t)  w     unhcat(dy, 3, u, v, w, t)
 @diffrule hcat(u,v,w,t)  t     unhcat(dy, 4, u, v, w, t)
+
+#  cat
+@diffrule_kw cat(u,v)      u     uncat(dy, 1, u, v)
+@diffrule_kw cat(u,v)      v     uncat(dy, 2, u, v)
+@diffrule_kw cat(u,v,w)    u     uncat(dy, 1, u, v, w)
+@diffrule_kw cat(u,v,w)    v     uncat(dy, 2, u, v, w)
+@diffrule_kw cat(u,v,w)    w     uncat(dy, 3, u, v, w)
+@diffrule_kw cat(u,v,w,t)  u     uncat(dy, 1, u, v, w, t)
+@diffrule_kw cat(u,v,w,t)  v     uncat(dy, 2, u, v, w, t)
+@diffrule_kw cat(u,v,w,t)  w     uncat(dy, 3, u, v, w, t)
+@diffrule_kw cat(u,v,w,t)  t     uncat(dy, 4, u, v, w, t)
 
 # reshape
 @diffrule reshape(u::AbstractArray, _a)             u    reshape(dy, size(u))

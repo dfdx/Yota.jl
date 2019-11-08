@@ -4,7 +4,7 @@
 
 const DIFF_RULES = Vector{Tuple}()
 const NO_DIFF_RULES = Vector{Tuple}()
-const DIFF_PHS = Set([:x, :u, :v, :w, :i, :j, :k,])
+const DIFF_PHS = Set([:x, :u, :v, :w, :t, :i, :j, :k,])
 
 
 function resolve_old_broadcast(ex)
