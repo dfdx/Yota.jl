@@ -319,3 +319,5 @@ get_val_param(::Val{v}) where v = v
 # @diffrule lbeta(u::AbstractArray, v::AbstractArray)   v   (polygamma(0,v)-polygamma(0,u+v)) .* dy
 
 @nodiff rand(u) u
+
+@diffrule to_device(u)    u    dy
