@@ -320,4 +320,5 @@ get_val_param(::Val{v}) where v = v
 
 @nodiff rand(u) u
 
-@diffrule to_device(u)    u    dy
+@nodiff to_device(_d, u)      _d
+@diffrule to_device(_d, u)    u    dy
