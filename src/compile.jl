@@ -7,30 +7,6 @@ make_name(op::AbstractOp) = Symbol("%$(op.id)")
 
 unmake_name(x::Symbol) = parse(Int, string(x)[2:end])
 
-# to_exnode(op::Input) = ExNode{:input}(make_name(op), make_name(op); val=op.val)
-# to_exnode(op::Assign) = ExNode{:(=)}(make_name(op), make_name(op.src_id); val=op.val)
-
-# function to_exnode(op::Constant)
-#     val = op.val isa Symbol ? QuoteNode(op.val) : op.val
-#     return ExNode{:constant}(make_name(op), val; val=val)
-# end
-
-
-# function to_exnode(op::Call)
-#     arg_names = map(make_name, op.args)
-#     ex = Expr(:call, op.fn, arg_names...)
-#     return ExNode{:call}(make_name(op), ex; val=op.val)
-# end
-
-
-# function to_exgraph(tape::Tape)
-#     g = ExGraph()
-#     for op in tape
-#         push!(g, to_exnode(op))
-#     end
-#     return g
-# end
-
 
 Espresso.to_expr(op::Input) = :()
 Espresso.to_expr(op::Assign) = Expr(:(=), make_name(op), make_name(op.src_id))
@@ -44,7 +20,7 @@ end
 function Espresso.to_expr(op::Call)
     arg_names = map(make_name, op.args)
     call = Expr(:call, op.fn, arg_names...)
-    assign = op.val isa AbstractArray ? :(.=) : :(=)
+    assign = (op.val isa Array || is_cuarray(op.val)) ? :(.=) : :(=)
     return Expr(assign, make_name(op.id), call)
 end
 

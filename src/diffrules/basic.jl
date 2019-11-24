@@ -14,11 +14,29 @@
 @nodiff similar(u,v) u
 @nodiff similar(u,v) v
 
-@nodiff zeros(u)     u
-@nodiff zero(u)     u
+@nodiff zeros(u)             u
+@nodiff zero(u)              u
+@nodiff zeros(i, j)          i
+@nodiff zeros(i, j)          j
+@nodiff zeros(i, j, k)       i
+@nodiff zeros(i, j, k)       j
+@nodiff zeros(i, j, k)       k
+@nodiff zeros(i, j, k, _l)   i
+@nodiff zeros(i, j, k, _l)   j
+@nodiff zeros(i, j, k, _l)   k
+@nodiff zeros(i, j, k, _l)   _l
 
-@nodiff ones(u)      u
-@nodiff one(u)     u
+@nodiff ones(u)             u
+@nodiff one(u)              u
+@nodiff ones(i, j)          i
+@nodiff ones(i, j)          j
+@nodiff ones(i, j, k)       i
+@nodiff ones(i, j, k)       j
+@nodiff ones(i, j, k)       k
+@nodiff ones(i, j, k, _l)   i
+@nodiff ones(i, j, k, _l)   j
+@nodiff ones(i, j, k, _l)   k
+@nodiff ones(i, j, k, _l)   _l
 
 @nodiff sign(u)      u
 
@@ -53,7 +71,7 @@
 @diffrule vcat(u,v)      v     unvcat(dy, 2, u, v)
 @diffrule vcat(u,v,w)    u     unvcat(dy, 1, u, v, w)
 @diffrule vcat(u,v,w)    v     unvcat(dy, 2, u, v, w)
-@diffrule vcat(u,v,w)    w     unvcat(dy, 3, u, v, 2)
+@diffrule vcat(u,v,w)    w     unvcat(dy, 3, u, v, w)
 @diffrule vcat(u,v,w,t)  u     unvcat(dy, 1, u, v, w, t)
 @diffrule vcat(u,v,w,t)  v     unvcat(dy, 2, u, v, w, t)
 @diffrule vcat(u,v,w,t)  w     unvcat(dy, 3, u, v, w, t)
@@ -64,24 +82,45 @@
 @diffrule hcat(u,v)      v     unhcat(dy, 2, u, v)
 @diffrule hcat(u,v,w)    u     unhcat(dy, 1, u, v, w)
 @diffrule hcat(u,v,w)    v     unhcat(dy, 2, u, v, w)
-@diffrule hcat(u,v,w)    w     unhcat(dy, 3, u, v, 2)
+@diffrule hcat(u,v,w)    w     unhcat(dy, 3, u, v, w)
 @diffrule hcat(u,v,w,t)  u     unhcat(dy, 1, u, v, w, t)
 @diffrule hcat(u,v,w,t)  v     unhcat(dy, 2, u, v, w, t)
 @diffrule hcat(u,v,w,t)  w     unhcat(dy, 3, u, v, w, t)
 @diffrule hcat(u,v,w,t)  t     unhcat(dy, 4, u, v, w, t)
 
+#  cat
+@diffrule_kw cat(u,v)      u     uncat(dy, 1, u, v)
+@diffrule_kw cat(u,v)      v     uncat(dy, 2, u, v)
+@diffrule_kw cat(u,v,w)    u     uncat(dy, 1, u, v, w)
+@diffrule_kw cat(u,v,w)    v     uncat(dy, 2, u, v, w)
+@diffrule_kw cat(u,v,w)    w     uncat(dy, 3, u, v, w)
+@diffrule_kw cat(u,v,w,t)  u     uncat(dy, 1, u, v, w, t)
+@diffrule_kw cat(u,v,w,t)  v     uncat(dy, 2, u, v, w, t)
+@diffrule_kw cat(u,v,w,t)  w     uncat(dy, 3, u, v, w, t)
+@diffrule_kw cat(u,v,w,t)  t     uncat(dy, 4, u, v, w, t)
+
 # reshape
 @diffrule reshape(u::AbstractArray, _a)             u    reshape(dy, size(u))
-@diffrule reshape(u::AbstractArray, _a)             _a   zero(eltype(u))
 @diffrule reshape(u::AbstractArray, _a, _b)         u    reshape(dy, size(u))
-@diffrule reshape(u::AbstractArray, _a, _b)        _a    zero(eltype(u))
-@diffrule reshape(u::AbstractArray, _a, _b)        _b    0
+@diffrule reshape(u::AbstractArray, _a, _b, _c)     u    reshape(dy, size(u))
+@diffrule reshape(u::AbstractArray, _a, _b, _c, _d) u    reshape(dy, size(u))
+@nodiff reshape(u::AbstractArray, _a)              _a
+@nodiff reshape(u::AbstractArray, _a, _b)          _a
+@nodiff reshape(u::AbstractArray, _a, _b)          _b
+@nodiff reshape(u::AbstractArray, _a, _b, _c)      _a
+@nodiff reshape(u::AbstractArray, _a, _b, _c)      _b
+@nodiff reshape(u::AbstractArray, _a, _b, _c)      _c
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _a
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _b
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _c
+@nodiff reshape(u::AbstractArray, _a, _b, _c, _d)  _d
 @diffrule reshape(u::AbstractArray, _d::Tuple)      u    reshape(dy, size(u))
-@diffrule reshape(u::AbstractArray, _d::Tuple)     _d    0
+@nodiff reshape(u::AbstractArray, _d::Tuple)        _d
 
 @diffrule vec(u::AbstractArray)    u    reshape(dy, size(u))
 
 
+# getindex
 @diffrule getindex(u::AbstractArray, i)         u    ungetindex(u, dy, i)
 @diffrule getindex(u::AbstractArray, i, j)      u    ungetindex(u, dy, i, j)
 @diffrule getindex(u::AbstractArray, i, j, k)   u    ungetindex(u, dy, i, j, k)
@@ -91,6 +130,18 @@
 @nodiff getindex(u::AbstractArray, i, j, k)   i
 @nodiff getindex(u::AbstractArray, i, j, k)   j
 @nodiff getindex(u::AbstractArray, i, j, k)   k
+
+
+# view - in non-mutating world behaves like getting subarrays using getindex
+@diffrule view(u::AbstractArray, i)         u    ungetindex(u, dy, i)
+@diffrule view(u::AbstractArray, i, j)      u    ungetindex(u, dy, i, j)
+@diffrule view(u::AbstractArray, i, j, k)   u    ungetindex(u, dy, i, j, k)
+@nodiff view(u::AbstractArray, i)         i
+@nodiff view(u::AbstractArray, i, j)      i
+@nodiff view(u::AbstractArray, i, j)      j
+@nodiff view(u::AbstractArray, i, j, k)   i
+@nodiff view(u::AbstractArray, i, j, k)   j
+@nodiff view(u::AbstractArray, i, j, k)   k
 
 
 # square root
@@ -268,3 +319,6 @@ get_val_param(::Val{v}) where v = v
 # @diffrule lbeta(u::AbstractArray, v::AbstractArray)   v   (polygamma(0,v)-polygamma(0,u+v)) .* dy
 
 @nodiff rand(u) u
+
+@nodiff to_device(_d, u)      _d
+@diffrule to_device(_d, u)    u    dy

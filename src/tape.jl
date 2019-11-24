@@ -330,10 +330,12 @@ function unwind_iterate(tape::Tape)
             if iterable_op.val isa Tuple || iterable_op.val isa Vector || iterable_op.val isa UnitRange
                 # 1. Replace iterable op with index in the original iterable
                 tape[iterate_op.id] = Constant(iterate_op.id, idx)
-                # 2. Replace __getfield__ on iterator with __getfield__ on original iterable
+                # 2. Replace __getfield__ on iterator with __getfield__ or getindex on original iterable
                 idx_id = iterate_op.id
                 obj_id = iterable_op.id
-                tape[op.id] = Call(op.id, op.val, __getfield__, [obj_id, idx_id])
+                # TODO: in which other cases getindex is better than __getfield__?
+                get_op = iterable_op.val isa UnitRange ? getindex : __getfield__
+                tape[op.id] = Call(op.id, op.val, get_op, [obj_id, idx_id])
             end
         end
     end

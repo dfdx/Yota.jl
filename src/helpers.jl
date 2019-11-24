@@ -77,6 +77,7 @@ untranspose_vec(ds::Transpose{T, <:AbstractVector{T}}) where T = transpose(ds)
 untranspose_vec(ds::Adjoint{T, <:AbstractVector{T}}) where T = adjoint(ds)
 untranspose_vec(ds::AbstractMatrix) = dropdims(transpose(ds); dims=2)
 
+
 function unvcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
     a = arrs[n]
     from = n == 1 ? 1 : sum(size(arr, 1) for arr in arrs[1:n-1]) + 1
@@ -90,6 +91,17 @@ function unhcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
     from = n == 1 ? 1 : sum(size(arr, 2) for arr in arrs[1:n-1]) + 1
     to = from + size(a, 2) - 1
     return dy[:, from:to, [(:) for i=1:length(size(dy)) - 2]...]
+end
+
+
+function uncat(dy::AbstractArray, n::Int, arrs::AbstractArray...; dims)
+    @assert(dims isa Integer, "Can only undo cat() over a single dimension, " *
+            "but dimensions $dims were provided")
+    dim = dims
+    a = arrs[n]
+    from = n == 1 ? 1 : sum(size(arr, dim) for arr in arrs[1:n-1]) + 1
+    to = from + size(a, dim) - 1
+    return dy[[(:) for i=1:dim - 1]..., from:to, [(:) for i=1:length(size(dy)) - dim]...]
 end
 
 
