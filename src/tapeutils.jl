@@ -82,10 +82,11 @@ end
 function find_deps(tape::Tape, ids::Vector{Int}; result=Set{Int}())
     ids = filter(id -> id != -1, ids)
     for id in ids
-        if tape[id] isa Call
-            args = tape[id].args
-            push!(result, args...)
+        # take only calls and skip ops that have already been processed
+        if tape[id] isa Call && !in(id, result)
+            args = tape[id].args            
             find_deps(tape, args; result=result)
+            push!(result, args...)
         end
     end
     return result
