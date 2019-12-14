@@ -32,7 +32,7 @@ if has_cuda()
         using CuArrays
         using CUDAnative
 
-        BEST_AVAILABLE_DEVICE[] = GPU(0)
+        BEST_AVAILABLE_DEVICE[] = GPU(1)
 
         include("cuda.jl")
     catch ex

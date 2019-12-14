@@ -32,6 +32,8 @@ function to_device(device::GPU, x)
     flds = fieldnames(T)
     if is_cuarray(x)
         return x
+    elseif isa(x, Real)
+        return Float32(x)
     elseif isempty(flds)
         # primitive or array
         return cu(x)
