@@ -269,7 +269,7 @@ function squash_assigned(tape::Tape)
         end
     end
     replace_in_args!(new_tape, reindex_st)
-    new_tape.resultid = get(reindex_st, tape.resultid, tape.resultid)
+    reindex_fields!(new_tape, reindex_st)
     return new_tape
 end
 
@@ -278,7 +278,7 @@ end
 ## but I haven't tested it thoroughly, so I just leave it here as is in case I'll ever have to deal
 ## with it again
 ##
-## function fuse_assigned(tape::Tape)
+## function squash_assigned(tape::Tape)
 ##     new_tape = copy_with(tape, ops=AbstractOp[])
 ##     st = Dict{Int, Int}()  # substitution table for op indices
 ##     for i=1:length(tape)
