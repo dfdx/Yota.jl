@@ -16,6 +16,7 @@ reindex(op::AbstractOp, st::Dict) = copy_with(op, id=get(st, op.id, op.id))
 
 function reindex_fields!(tape::Tape, st::Dict)
     tape.resultid = get(st, tape.resultid, tape.resultid)
+    tape.derivs = Dict(get(st, k, k) => get(st, v, v) for (k, v) in tape.derivs)
     # possibly we also need to reindex .derivs
 end
 
@@ -159,6 +160,7 @@ end
 Apply a number of transformations after calculating derivatives
 """
 function postprocess(tape::Tape)
+    tape = eliminate_common(tape)
     return tape
 end
 
