@@ -239,7 +239,9 @@ end
 
 
 function squash_assigned(tape::Tape)
-    tape = copy_with(tape; ops=deepcopy(tape.ops))
+    # note: after update to CuArrays v1.5.0 deepcopy(tape.ops) fails for Lilith.GRU if there's Assign op
+    # I don't know the reason, but [deepcopy(op) for op in tape.ops] fixes it
+    tape = copy_with(tape; ops=[deepcopy(op) for op in tape.ops])
     # 1. compute subs table for chains of assignment operations
     # and replace equivalent op ids
     assign_st = Dict()
