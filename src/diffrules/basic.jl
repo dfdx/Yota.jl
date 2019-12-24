@@ -180,10 +180,10 @@
 # special sums
 @diffrule sum(_fn::typeof(log), u::AbstractArray)    u    sum_grad(u, dy) ./ u
 
-@diffrule Statistics.mean(u::AbstractArray)                u     mean_grad(u, dy)
-@diffrule Statistics._mean(u::AbstractArray, v::Int)       u     mean_grad(u, dy)
+@diffrule Statistics.mean(u::AbstractArray)                u     ∇mean(u, dy)
+@diffrule Statistics._mean(u::AbstractArray, v::Int)       u     ∇mean(u, dy)
 @diffrule Statistics._mean(u::AbstractArray, v::Int)       v     zero(eltype(u))
-@diffrule Core.kwfunc(Statistics.mean)(_dims, _, u::AbstractArray) u mean_grad(u, dy)
+@diffrule Core.kwfunc(Statistics.mean)(_dims, _, u::AbstractArray) u ∇mean(u, dy, _dims)
 @nodiff Core.kwfunc(Statistics.mean)(_dims, _, u::AbstractArray) _dims
 @nodiff Core.kwfunc(Statistics.mean)(_dims, _, u::AbstractArray) _
 

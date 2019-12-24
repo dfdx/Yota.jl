@@ -22,9 +22,16 @@ function sum_grad(x::AbstractArray, ds)
 end
 
 
-function mean_grad(x::AbstractArray, ds)
+# function mean_grad(x::AbstractArray, ds)
+#     dx = similar(x)
+#     dx .= ds ./ length(x)
+#     return dx
+# end
+
+
+function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
     dx = similar(x)
-    dx .= ds ./ length(x)
+    dx .= dy ./ prod(size(x, d) for d in dims)
     return dx
 end
 

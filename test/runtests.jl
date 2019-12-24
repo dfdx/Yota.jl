@@ -1,7 +1,7 @@
 using Test
 using Yota
 using Yota: Tape, Input, Call, Constant, trace, itrace, play!, transform, binarize_ops
-using Yota: mean_grad, setfield_nested!, copy_with, simplegrad, remove_unused
+using Yota: ∇mean, setfield_nested!, copy_with, simplegrad, remove_unused
 using Yota: find_field_source_var, unwind_iterate, eliminate_common
 using Yota: unvcat, unhcat, uncat
 

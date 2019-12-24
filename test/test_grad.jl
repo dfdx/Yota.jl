@@ -12,7 +12,6 @@ loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 
     val, g = grad(loss_kw_mean, args...)
     @test val == loss_kw_mean(args...)
-    @test any(op isa Call && op.fn == mean_grad for op in g.tape)
     @test gradcheck(loss_kw_mean, args...)
 end
 
