@@ -238,68 +238,73 @@ function recover_broadcast(tape::Tape)
 end
 
 
-function squash_assigned(tape::Tape)
-    # note: after update to CuArrays v1.5.0 deepcopy(tape.ops) fails for Lilith.GRU if there's Assign op
-    # I don't know the reason, but [deepcopy(op) for op in tape.ops] fixes it
-    tape = copy_with(tape; ops=[deepcopy(op) for op in tape.ops])
-    # 1. compute subs table for chains of assignment operations
-    # and replace equivalent op ids
-    assign_st = Dict()
-    for (id, op) in enumerate(tape)
-        if op isa Assign
-            # propagate replacement through known st
-            src_id = op.src_id
-            while haskey(assign_st, src_id)
-                src_id = assign_st[src_id]
-            end
-            assign_st[id] = src_id
-        end
-    end
-    replace_in_args!(tape, assign_st)
-    tape.resultid = get(assign_st, tape.resultid, tape.resultid)
-    # 2. create new ops w/o assignments
-    new_tape = copy_with(tape; ops=AbstractOp[])
-    reindex_st = Dict()
-    for (id, op) in enumerate(tape)
-        if !isa(op, Assign)
-            # record any other operations as is
-            new_id = length(new_tape) + 1
-            push!(new_tape.ops, copy_with(op; id=new_id))
-            if id != new_id
-                reindex_st[id] = new_id
-            end
-        end
-    end
-    replace_in_args!(new_tape, reindex_st)
-    reindex_fields!(new_tape, reindex_st)
-    return new_tape
-end
+# function squash_assigned(tape::Tape)
+#     # note: after update to CuArrays v1.5.0 deepcopy(tape.ops) fails for Lilith.GRU if there's Assign op
+#     # I don't know the reason, but [deepcopy(op) for op in tape.ops] fixes it
+#     tape = copy_with(tape; ops=[deepcopy(op) for op in tape.ops])
+#     # 1. compute subs table for chains of assignment operations
+#     # and replace equivalent op ids
+#     assign_st = Dict()
+#     for (id, op) in enumerate(tape)
+#         if op isa Assign
+#             # propagate replacement through known st
+#             src_id = op.src_id
+#             while haskey(assign_st, src_id)
+#                 src_id = assign_st[src_id]
+#             end
+#             assign_st[id] = src_id
+#         end
+#     end
+#     replace_in_args!(tape, assign_st)
+#     tape.resultid = get(assign_st, tape.resultid, tape.resultid)
+#     # 2. create new ops w/o assignments
+#     new_tape = copy_with(tape; ops=AbstractOp[])
+#     reindex_st = Dict()
+#     for (id, op) in enumerate(tape)
+#         if !isa(op, Assign)
+#             # record any other operations as is
+#             new_id = length(new_tape) + 1
+#             push!(new_tape.ops, copy_with(op; id=new_id))
+#             if id != new_id
+#                 reindex_st[id] = new_id
+#             end
+#         end
+#     end
+#     replace_in_args!(new_tape, reindex_st)
+#     reindex_fields!(new_tape, reindex_st)
+#     return new_tape
+# end
 
 
 ## Accidentially I've created another version of squash_assigned which seems simpler and still correct
 ## but I haven't tested it thoroughly, so I just leave it here as is in case I'll ever have to deal
 ## with it again
 ##
-## function squash_assigned(tape::Tape)
-##     new_tape = copy_with(tape, ops=AbstractOp[])
-##     st = Dict{Int, Int}()  # substitution table for op indices
-##     for i=1:length(tape)
-##         op = reindex(tape[i], st)
-##         if op isa Assign
-##             # dig until not-assign argument is found
-##             root = op
-##             while root isa Assign
-##                 root = tape[root.src_id]
-##             end
-##             st[op.id] = root.id
-##         else
-##             new_op = reindex(op, st)
-##             push!(new_tape, new_op)
-##         end
-##     end
-##     reindex_fields!(new_tape, st)
-##     return new_tape
-## end
+function squash_assigned(tape::Tape)
+    new_tape = copy_with(tape, ops=AbstractOp[])
+    st = Dict{Int, Int}()  # substitution table for op indices
+    for id=1:length(tape)
+        op = reindex(tape[id], st)
+        if op isa Assign
+            # dig until not-assign argument is found
+            root = op
+            while root isa Assign
+                root = tape[root.src_id]
+            end
+            st[op.id] = root.id
+            # note: not pushing this op into new tape
+        else
+            new_id = length(new_tape) + 1
+            new_op = copy_with(op, id=new_id)
+            push!(new_tape, new_op)
+            if new_id != id
+                st[id] = new_id
+            end
+        end
+    end
+    reindex_fields!(new_tape, st)
+    return new_tape
+end
 
 
 ## function test_fuse_assigned()
