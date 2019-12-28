@@ -276,29 +276,29 @@ end
 # end
 
 
-## Accidentially I've created another version of squash_assigned which seems simpler and still correct
-## but I haven't tested it thoroughly, so I just leave it here as is in case I'll ever have to deal
-## with it again
-##
+
 function squash_assigned(tape::Tape)
     new_tape = copy_with(tape, ops=AbstractOp[])
     st = Dict{Int, Int}()  # substitution table for op indices
     for id=1:length(tape)
+        # id == 228 && break
         op = reindex(tape[id], st)
         if op isa Assign
             # dig until not-assign argument is found
             root = op
             while root isa Assign
-                root = tape[root.src_id]
+                root = new_tape[root.src_id]
             end
-            st[op.id] = root.id
+            st[op.id] = root.id   # replace this op id on _old_ tape with root id on the _new_ tape
             # note: not pushing this op into new tape
+            # println("assign: $op; replacing $(op.id) => $(root.id)")
         else
             new_id = length(new_tape) + 1
             new_op = copy_with(op, id=new_id)
             push!(new_tape, new_op)
             if new_id != id
                 st[id] = new_id
+                # println("subs $id => $new_id")
             end
         end
     end
@@ -307,16 +307,16 @@ function squash_assigned(tape::Tape)
 end
 
 
-## function test_fuse_assigned()
-##     tape = Tape()
-##     record!(tape, Input, 3.0)
-##     record!(tape, Input, 2.0)
-##     record!(tape, Assign, 1, tape[1].val)
-##     record!(tape, Assign, 3, tape[3].val)
-##     record!(tape, Call, 5.0, +, [2, 4])
-##     record!(tape, Assign, 5, tape[5].val)
-##     tape.resultid = length(tape)
-## end
+# function test_fuse_assigned()
+#     tape = Tape()
+#     record!(tape, Input, 3.0)
+#     record!(tape, Input, 2.0)
+#     record!(tape, Assign, 1, tape[1].val)
+#     record!(tape, Assign, 3, tape[3].val)
+#     record!(tape, Call, 5.0, +, [2, 4])
+#     record!(tape, Assign, 5, tape[5].val)
+#     tape.resultid = length(tape)
+# end
 
 
 
@@ -371,7 +371,7 @@ exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
 exec!(tape::Tape, op::Call) = (op.val = op.fn([tape[id].val for id in op.args]...))
 
 
-function play!(tape::Tape, args...; use_compiled=true)
+function play!(tape::Tape, args...; use_compiled=true, debug=false)
     for (i, val) in enumerate(args)
         @assert(tape[i] isa Input, "More arguments than the original function had")
         tape[i].val = val
@@ -380,6 +380,9 @@ function play!(tape::Tape, args...; use_compiled=true)
         Base.invokelatest(tape.compiled)
     else
         for op in tape
+            if debug
+                println(op)
+            end
             exec!(tape, op)
         end
     end
