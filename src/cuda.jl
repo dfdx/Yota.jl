@@ -34,6 +34,8 @@ function to_device(device::GPU, x)
         return x
     elseif isa(x, Real)
         return Float32(x)
+    elseif isa(x, Tuple)
+        return ((to_device(device, el) for el in x)...,)
     elseif isempty(flds)
         # primitive or array
         return cu(x)
