@@ -74,10 +74,10 @@ end
 unbroadcast_prod_y(x::AbstractArray, y::AbstractArray, Δ) = unbroadcast_prod_x(y, x, Δ)
 
 
-unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x([x], y, Δ)[1]
-unbroadcast_prod_x(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_x(x, [y], Δ)
-unbroadcast_prod_y(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_y(x, [y], Δ)[1]
-unbroadcast_prod_y(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_y([x], y, Δ)
+unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(convert(typeof(y), [x]), y, Δ)[1]
+unbroadcast_prod_x(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_x(x, convert(typeof(x), [y]), Δ)
+unbroadcast_prod_y(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_y(x, convert(typeof(x), [y]), Δ)[1]
+unbroadcast_prod_y(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_y(convert(typeof(y), [x]), y, Δ)
 
 
 untranspose_vec(ds::Transpose{T, <:AbstractVector{T}}) where T = transpose(ds)
