@@ -32,7 +32,7 @@ function to_device(device::GPU, x)
     flds = fieldnames(T)
     if is_cuarray(x)
         return x
-    elseif isa(x, Real)
+    elseif isa(x, AbstractFloat)
         return Float32(x)
     elseif isa(x, Tuple)
         return ((to_device(device, el) for el in x)...,)
