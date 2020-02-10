@@ -20,7 +20,8 @@ end
 function Espresso.to_expr(op::Call)
     arg_names = map(make_name, op.args)
     call = Expr(:call, op.fn, arg_names...)
-    assign = (op.val isa Array || is_cuarray(op.val)) ? :(.=) : :(=)
+    # assign = ((op.val isa Array || is_cuarray(op.val)) && op.fn == broadcast) ? :(.=) : :(=)    
+    assign = :(=)
     return Expr(assign, make_name(op.id), call)
 end
 
