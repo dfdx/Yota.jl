@@ -4,6 +4,7 @@
 
 const DIFF_RULES = Vector{Tuple}()
 const NO_DIFF_RULES = Vector{Tuple}()
+const CONSTRUCTORS = Vector{Tuple}()
 const DIFF_PHS = Set([:x, :u, :v, :w, :t, :i, :j, :k,])
 
 
@@ -49,8 +50,37 @@ end
 
 add_diff_rule(rule) = push!(DIFF_RULES, rule)
 add_primitive(primitive) = push!(PRIMITIVES, primitive)
+add_constructor(ctor) = push!(CONSTRUCTORS, ctor)
 
 
+"""
+Define a differentiation rule for a function.
+
+Arguments:
+
+ * pat - pattern of a function call, may include argument types
+ * var - variable (argument) for which the rule is defined
+ * rpat - replacement pattern, i.e. expression that calculates the derivative
+
+Examples:
+
+    @diffrule +(u::Real, v::Real) u dy
+    @diffrule sum(u::AbstractArray) u sum_grad(u, dy)
+    @diffrule Statistics.mean(u::AbstractArray) u ∇mean(u, dy)
+    @diffrule logpdf(_d::MvNormal, x) _d.μ ∇logpdf(dy, _d, x)
+
+Note that diff rules are added dynamically, so it's advised to put @diffrule
+to __init__() method of a module to survive module precompilation.
+
+Allowed and special variable names:
+
+ * x, u, v, w and some others (see Yota.DIFF_PHS for the full list)
+ * any var beginning with _, e.g. _a, _d, etc.
+ * y - special, replaced with the result of the function call (e.g. `y = func(args)`)
+ * dy - special, replaced with the derivative w.r.t. to y
+
+See also: @diffrule_kw, @nodiff, @ctor
+"""
 macro diffrule(pat, var, rpat)
     esc(quote
         mod = @__MODULE__
@@ -65,6 +95,21 @@ macro diffrule(pat, var, rpat)
 end
 
 
+"""
+Define a differentiation rule for a functioin with keyword arguments.
+Keyword arguments need not to be specified; instead all kw args are passed to
+the gradient functions as is.
+
+Examples:
+
+    conv2d(x, w; stride=1, padding=0, dilation=1) = ...
+    ∇conv2d_w(dy, x, w; stride=1, padding=0, dilation=1) = ...
+    @diffrule_kw conv2d(x, w) w ∇conv2d_w(dy, x, w)
+    @diffrule_kw conv2d(x, w) x ∇conv2d_x(dy, x, w)  # kwargs passed implicitely
+
+See also: @diffrule, @nodiff, @ctor
+
+"""
 macro diffrule_kw(pat, var, rpat)
     kw_pat = rewrite(pat, :(_fn(_args...)), :(Core.kwfunc(_fn)(_kw, _, _args...)))
     kw_rpat = rewrite(rpat, :(_fn(_args...)), :(Core.kwfunc(_fn)(_kw, _, _args...)))
@@ -75,6 +120,42 @@ macro diffrule_kw(pat, var, rpat)
         @diffrule $kw_pat $var $kw_rpat
         @nodiff $kw_pat _kw
         @nodiff $kw_pat _
+        end)
+end
+
+
+"""
+Define a type constructor that should not be traced, but instead recorded
+to the tape as is. Here's an example:
+
+    @ctor MvNormal(μ, Σ)    
+
+This should be read as:
+
+1) record MvNormal to the tape as is
+2) if @diffrule w.r.t. its field is added, propagate it directly to the variable
+   that was used to construct that field
+
+For example, after the following diff rule:
+
+    @diffrule logpdf(_d::MvNormal, x) _d.μ ∇logpdf(dy, _d, x)
+
+Yota will _completely bypass_ internals of the constructor and jump directly to the
+1st variable passed to MvNormal().
+
+Note that if you don't want to bypass the constructor (which you normally shouldn't do),
+you can rely on Yota handling it automatically. 
+
+"""
+macro ctor(ex)
+    esc(quote
+        mod = @__MODULE__
+        local ex = $Espresso.sanitize($(QuoteNode(ex)))
+        ex = $resolve_old_broadcast(ex)
+        $resolve_functions_and_types!(mod, ex)
+        $add_constructor((ex.args[1], ex.args[2:end]...))
+        $add_primitive(ex.args[1])
+        nothing
         end)
 end
 
@@ -105,21 +186,27 @@ end
 
 function match_rule(rule, ex, dep_types, idx)
     tpat, vname, rpat = rule
+    # if var name is actually a field expression, e.g. :(str.fld)
+    fldname = nothing
+    if Meta.isexpr(vname, :(.))
+        fldname = vname.args[2].value
+        vname = vname.args[1]
+    end
     vidx = findfirst(isequal(vname), get_arg_names(tpat))
     if idx != vidx
-        return nothing
+        return nothing, nothing
     end
     pat_types = get_arg_types(tpat)
     if (length(dep_types) != length(pat_types) ||
         !all([t <: p for (t, p) in zip(dep_types, pat_types)]))
-        return nothing
+        return nothing, nothing
     end
     pat = without_types(tpat)
     ex_ = without_keywords(ex)
     if !matchingex(pat, ex_; phs=DIFF_PHS)
-        return nothing
+        return nothing, nothing
     else
-        return pat => rpat
+        return pat => rpat, fldname
     end
 end
 
@@ -138,28 +225,33 @@ end
 
 
 """
-Rewrite single call expression into its derivative. Example:
+For each matched rule, rewrite call expression into its derivative w.r.t.
+its argument with index `idx`. If argument under `idx` is a struct,
+second returned values is a symbolic name of the field that this derivative
+should be attributed to. Otherwise it's nothing.
+
+Example:
 
 ```
-deriv_expr(:($sin(x)), [Float64], 1)
-# ==> :((cos(x) * ds))
+deriv_exprs(:($sin(x)), [Float64], 1)
+# ==> :((cos(x) * ds)), nothing
 ```
 """
-function deriv_expr(ex, dep_types, idx::Int)
-    rex = nothing
+function deriv_exprs(ex, dep_types, idx::Int)
+    result = Tuple[]   # list of tuples (rewritten_expr, field_name | nothing)
     for rule in DIFF_RULES
-        m = match_rule(rule, ex, dep_types, idx)
+        m, fldname = match_rule(rule, ex, dep_types, idx)
         if m != nothing
             pat, rpat = m
             rex = rewrite_with_keywords(ex, pat, rpat)
-            break
+            push!(result, (rex, fldname))
         end
     end
-    if rex == nothing
+    if isempty(result)
         error("Can't find differentiation rule for $ex at $idx " *
               "with types $dep_types)")
     end
-    return rex
+    return result
 end
 
 
@@ -176,11 +268,15 @@ end
 
 add_no_diff_rule(rule) = push!(NO_DIFF_RULES, rule)
 
+
+"""
+Don't propagate derivative of the given function w.r.t. specified variable
+"""
 macro nodiff(pat, var)
     esc(quote
         mod = @__MODULE__
         local pat = $Espresso.sanitize($(QuoteNode(pat)))
-        pat, $resolve_old_broadcast(pat)
+        pat = $resolve_old_broadcast(pat)
         $resolve_functions_and_types!(mod, pat)
         $add_no_diff_rule((pat, $(QuoteNode(var))))
         $add_primitive(pat.args[1])

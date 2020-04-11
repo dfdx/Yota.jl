@@ -85,7 +85,7 @@ function find_deps(tape::Tape, ids::Vector{Int}; result=Set{Int}())
     for id in ids
         # take only calls and skip ops that have already been processed
         if tape[id] isa Call && !in(id, result)
-            args = tape[id].args            
+            args = tape[id].args
             find_deps(tape, args; result=result)
             push!(result, args...)
         end
@@ -208,7 +208,28 @@ end
 #                       __NEW__() & __GETPROPERTY__()                  #
 ########################################################################
 
+"""
+Find the variable that was used to construct the specified field of the constructor op
+"""
+function field_var_from_ctor_op(tape::Tape, ctor_op::Call, fldname::Symbol)
+    ctor_typ = ctor_op.fn
+    for ctor_def in CONSTRUCTORS
+        if ctor_typ == ctor_def[1]
+            fld_idx_in_ctor_def = findfirst(isequal(fldname), ctor_def[2:end])
+            if fld_idx_in_ctor_def != nothing
+                # tape ID of corresponding argument to the constructor
+                arg_id = ctor_op.args[fld_idx_in_ctor_def]
+                return tape[arg_id]
+            end
+        end
+    end
+    return nothing
+end
 
+
+# TODO: make unified API for 2 versions of this function
+# 1st - for __new__ constuctor
+# 2nd - for primitive constructor created using @ctor macro
 function field_var_from_ctor_op(tape::Tape, ctor::Call, getprop_op::Call)
     @assert ctor.fn == __new__
     @assert getprop_op.fn == Base.getproperty
