@@ -11,7 +11,7 @@ end
     # diagonal covariance matrix
     # values for comparison obtained from PyTorch
     mu = zeros(2)
-    s = ones(2) |> diagm
+    s = [1.0 0.0; 0.0 1.0]
     x = [-0.5, 0.5]
     _, g = grad(mvnormal_loss, mu, s, x)
     @test g[1] == [-0.5, 0.5]
