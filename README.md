@@ -136,7 +136,7 @@ compile!(tape)
 # 492.063 ns (2 allocations: 144 bytes)
 ```
 
-Note that `trace()` is an alias to `ctrace()` - Cassette-based tracer. There's also an alternative implementation with identical interface and capabilities, but based on [JuliaInterpreter.jl](https://github.com/JuliaDebug/JuliaInterpreter.jl). This implementation is available by name `itrace()`.
+Note that `trace()` is an alias to `ctrace()` - Cassette-based tracer. There's also an alternative implementation with identical interface and capabilities, but based on [JuliaInterpreter.jl](https://github.com/JuliaDebug/JuliaInterpreter.jl). This implementation is available by name `itrace()` and is currently supported on Julia 1.0-1.3.
 
 ## CuArrays support (experimental)
 

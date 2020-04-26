@@ -5,6 +5,7 @@ using Cassette: Tagged, tag, untag, istagged, metadata, hasmetadata,
     enabletagging, @overdub, overdub, canrecurse, similarcontext, fallback
 using JuliaInterpreter
 using Espresso
+using Distributions
 using CUDAapi
 
 

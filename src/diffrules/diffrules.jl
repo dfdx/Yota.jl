@@ -8,6 +8,13 @@ const CONSTRUCTORS = Vector{Tuple}()
 const DIFF_PHS = Set([:x, :u, :v, :w, :t, :i, :j, :k,])
 
 
+function reset_rules!()
+    empty!(DIFF_RULES)
+    empty!(NO_DIFF_RULES)
+    empty!(CONSTRUCTORS)    
+end
+
+
 function resolve_old_broadcast(ex)
     # rewrite dot op symbols like .*, .+, etc. into broadcasting
     for (pat, rpat) in [
@@ -48,7 +55,14 @@ function resolve_functions_and_types!(mod::Module, ex)
 end
 
 
-add_diff_rule(rule) = push!(DIFF_RULES, rule)
+function add_diff_rule(rule)
+    if !in(rule, DIFF_RULES)
+        push!(DIFF_RULES, rule)
+    else
+        @warn "Skipping duplicate diff rule $rule"
+    end
+end
+
 add_primitive(primitive) = push!(PRIMITIVES, primitive)
 add_constructor(ctor) = push!(CONSTRUCTORS, ctor)
 
@@ -322,3 +336,4 @@ end
 
 
 include("basic.jl")
+include("distributions.jl")
