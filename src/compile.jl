@@ -124,11 +124,11 @@ function generate_function_expr(tape::Tape)
     body = generate_body(tape)
     epilogue = generate_epilogue(tape)
     # abusing LineNumberNode to insert comments
-    push!(fn_ex_body.args, LineNumberNode(0, "prologue"))
+    push!(fn_ex_body.args, LineNumberNode(0, :prologue))
     push!(fn_ex_body.args, prologue.args...)
-    push!(fn_ex_body.args, LineNumberNode(0, "body"))
+    push!(fn_ex_body.args, LineNumberNode(0, :body))
     push!(fn_ex_body.args, body.args...)
-    push!(fn_ex_body.args, LineNumberNode(0, "epilogue"))
+    push!(fn_ex_body.args, LineNumberNode(0, :epilogue))
     push!(fn_ex_body.args, epilogue.args...)
     return fn_ex
 end

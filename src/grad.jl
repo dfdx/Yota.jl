@@ -95,19 +95,29 @@ to_unbroadcast_expr(tape::Tape, op::Call) =
 function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     ex = to_expr(tape, op)
     dep_types = [tape[arg].typ for arg in op.args]
-    dex = deriv_expr(ex, dep_types, i)
+    dex_fldnames = deriv_exprs(ex, dep_types, i)    
     st = Dict(Symbol("%$i") => i for i in op.args)
     st[:dy] = dy.id
     st[:y] = op.id
-    ret_id = record_expr!(tape, dex; st=st)
-    return tape[ret_id]
+    if dex_fldnames[1][2] == nothing
+        # not a derivative of a field - take only the 1st match
+        dex_fldnames = dex_fldnames[1:1]
+    end
+    op_deriv_attrs = Tuple[]
+    for (dex, fldname) in dex_fldnames
+        ret_id = record_expr!(tape, dex; st=st)
+        derivative_of = (fldname == nothing ? tape[op.args[i]] :
+                         field_var_from_ctor_op(tape, tape[op.args[i]], fldname))
+        push!(op_deriv_attrs, (tape[ret_id], derivative_of))
+    end
+    return op_deriv_attrs
 end
 
 
 function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     ex = to_unbroadcast_expr(tape, op)
     dep_eltypes = [eltype(tape[arg].typ) for arg in op.args[2:end]]
-    dex = deriv_expr(ex, dep_eltypes, i-1)
+    dex = deriv_exprs(ex, dep_eltypes, i-1)[1][1]
     st = Dict(Symbol("%$id") => id for id in op.args)
     st[:dy] = dy.id
     st[:y] = op.id
@@ -138,15 +148,24 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     # we handle broadcasting for a few built-in functions like normal derivatives
     # all other cases are handled by a generic bcast mechanism
     use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+, *]))
-    dx = try
-        use_bcast_rules ? deriv_broadcast!(tape, op, i, dy) : deriv!(tape, op, i, dy)
+    try
+        if use_bcast_rules
+            dx = deriv_broadcast!(tape, op, i, dy)
+            set_or_add_deriv!(tape, x, dx)
+        else
+            # in most cases derivative_of == x, however for diffrules over struct field
+            # it points to that field's source var; see @ctor macro for details
+            op_deriv_attrs = deriv!(tape, op, i, dy)
+            for (dx, derivative_of) in op_deriv_attrs
+                set_or_add_deriv!(tape, derivative_of, dx)
+            end
+        end
     catch
         @error("Failed to find a derivative for $op at position $i, " *
                "current state of backpropagation saved to Yota.DEBUG_STATE")
         push!(DEBUG_STATE, (tape, op, i))
         rethrow()
     end
-    set_or_add_deriv!(tape, x, dx)
 end
 
 
