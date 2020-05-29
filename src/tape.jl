@@ -141,6 +141,14 @@ Keyword params:
  * bcast::Bool - replace all function calls with corresponding broadcasting
 """
 function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
+    # special case: x => identity(x)
+    if ex isa Symbol
+        ex = :($identity($ex))
+    end
+    # special case: x[i] => getindex(x, i)
+    if Meta.isexpr(ex, :ref)
+        ex = rewrite(ex, :(_x[_i]), :($getindex(_x, _i)))
+    end
     @assert Meta.isexpr(ex, :call) "Expression isn't a call"
     new_op_args = Vector{Int}(undef, length(ex.args) - 1)
     for (i, x) in enumerate(ex.args[2:end])

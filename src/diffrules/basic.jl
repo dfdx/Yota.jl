@@ -131,6 +131,9 @@
 @nodiff getindex(u::AbstractArray, i, j, k)   j
 @nodiff getindex(u::AbstractArray, i, j, k)   k
 
+@diffrule getindex(u::Tuple, i) u ungetindex(u, dy, i)
+@nodiff getindex(u::Tuple, i) i
+
 
 # view - in non-mutating world behaves like getting subarrays using getindex
 @diffrule view(u::AbstractArray, i)         u    ungetindex(u, dy, i)
@@ -294,6 +297,10 @@ get_val_param(::Val{v}) where v = v
 @diffrule transpose(u::AbstractArray)              u     transpose(dy)
 @diffrule adjoint(u::AbstractVector)             u     untranspose_vec(dy)
 @diffrule adjoint(u::AbstractArray)              u     adjoint(dy)
+
+# permutedims
+@diffrule permutedims(x, _perm) x ∇permutedims(dy, _perm)
+@nodiff permutedims(x, _perm) _perm
 
 # # erf, erfc, gamma, beta, lbeta, lgamma
 # @diffrule erf(u::Real)                       u     2.0/sqrt(π) * exp(-u  * u)  * dy
