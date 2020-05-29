@@ -15,6 +15,14 @@ function ungetindex(x::AbstractArray, ds, i...)
 end
 
 
+function ungetindex(x::Tuple, dy, I...)
+    dx = map(1:length(x)) do i
+        i in I ? dy : zero(x[i])
+    end
+    return dx
+end
+
+
 function sum_grad(x::AbstractArray, ds)
     dx = similar(x)
     dx .= ds
@@ -113,3 +121,17 @@ end
 
 
 namedtuple(names, values) = NamedTuple{names}(values)
+
+
+function rev_perm(perm::NTuple{N, Int}) where N
+    rperm = Vector{Int}(undef, length(perm))
+    for (i, j) in enumerate(perm)
+        rperm[j] = i
+    end
+    return tuple(rperm...)
+end
+
+function ∇permutedims(dy, perm)
+    rperm = rev_perm(perm)
+    return permutedims(dy, rperm)
+end
