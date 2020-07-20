@@ -252,6 +252,7 @@ deriv_exprs(:($sin(x)), [Float64], 1)
 ```
 """
 function deriv_exprs(ex, dep_types, idx::Int)
+    # try Yota diffrules
     result = Tuple[]   # list of tuples (rewritten_expr, field_name | nothing)
     for rule in DIFF_RULES
         m, fldname = match_rule(rule, ex, dep_types, idx)
@@ -261,11 +262,21 @@ function deriv_exprs(ex, dep_types, idx::Int)
             push!(result, (rex, fldname))
         end
     end
-    if isempty(result)
-        error("Can't find differentiation rule for $ex at $idx " *
-              "with types $dep_types)")
+    if !isempty(result)
+        return result
     end
-    return result
+    # try ChainRules
+    # since pullback is a closure, we can't just extract pullback function and
+    # record it to the tape as constant; instead we must rewrite forward pass as well
+    # replacing all f(args...) with _, pb = rrule(f, args...)
+    # which breaks significant part of codebase
+    @assert Meta.isexpr(ex, :call)   
+    _, df = rrule(ex.args[1], 2.0)
+    dex = Expr(:call, df, )
+    
+    
+    error("Can't find differentiation rule for $ex at $idx " *
+              "with types $dep_types)")
 end
 
 

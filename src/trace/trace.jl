@@ -35,7 +35,8 @@ const PRIMITIVES = Set{Any}(vcat(
 
 
 include("cassette.jl")
-include("interp.jl")
+# include("interp.jl")
+include("irtools.jl")
 
 
 trace = ctrace
