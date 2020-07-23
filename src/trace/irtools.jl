@@ -29,14 +29,20 @@ end
 
 """Frame of a call stack"""
 mutable struct Frame
-    ssa2tape::Dict{Int, Int}   # SSA var ID to Tape var ID
+    # SSA var ID to Tape var ID. Note that SSA ID refers to the _original_ IR,
+    # not the transformed one. In fact, any unique name of SSA instructions
+    # would fit, using SSA IDs is just convenient
+    ssa2tape::Dict{Int, Int}
+    # result ID - tape ID corresponding to latest return value
+    # from this call frame
+    resultid::Int
 end
 
-Frame(tape_ids...) = Frame(Dict(tid => ssa for (ssa, tid) in enumerate(tape_ids)))
+# Frame(tape_ids...) = Frame(Dict(tid => ssa for (ssa, tid) in enumerate(tape_ids)), -1)
 
 function Base.show(io::IO, fr::Frame)
     map_str = join(["$k=>$v" for (k, v) in fr.ssa2tape], ",")
-    print(io, "Frame($map_str)")
+    print(io, "Frame($map_str, $(fr.resultid))")
 end
 
 
@@ -81,21 +87,42 @@ function record!(t::IRTracer, ssa_id::Int, ssa_val::Any, optype::Type, fn, ssa_a
     ret_id = record!(t.tape, optype, ssa_val, fn, tape_ids)
     # update mapping from SSA var to tape var
     # note that in functions with loops this mapping may change over time
-    t.frames[end].ssa2tape[ssa_id] = ret_id    
+    t.frames[end].ssa2tape[ssa_id] = ret_id
 end
 
 
+"""Push a new call frame to tracer, setting function params accordingly"""
 function push_frame!(t::IRTracer, ssa_args...)
     tape_ids = ssa_args_to_tape_vars!(t, ssa_args)
-    frame = Frame(Dict(i + 1 => tape_id for (i, tape_id) in enumerate(tape_ids)))
+    frame = Frame(Dict(i + 1 => tape_id for (i, tape_id) in enumerate(tape_ids)), -1)
     push!(t.frames, frame)
 end
 
 
+"""Pop call frame from tracer"""
 function pop_frame!(t::IRTracer, ssa_id::Int)
-    pop!(t.frames)
+    frame = pop!(t.frames)
     # create mapping from the current SSA ID to the last instruction on the tape
-    t.frames[end].ssa2tape[ssa_id] = length(t.tape)
+    t.frames[end].ssa2tape[ssa_id] = (frame.resultid == -1 ?
+                                      length(t.tape) :
+                                      frame.resultid)
+end
+
+
+"""Set target branch parameters to vaiables corresponding to SSA args"""
+function set_branch_params!(t::IRTracer, ssa_args, target_params)
+    tape_vars = ssa_args_to_tape_vars!(t, ssa_args)
+    ssa2tape = t.frames[end].ssa2tape
+    for (v, p) in zip(tape_vars, target_params)
+        ssa2tape[p] = v
+    end
+end
+
+
+"""Set return variable for the current frame"""
+function set_return!(t::IRTracer, ssa_arg)
+    tape_var = ssa_args_to_tape_vars!(t, [ssa_arg])[1]
+    t.frames[end].resultid = tape_var
 end
 
 
@@ -111,7 +138,11 @@ end
 const PRIMITIVE_GREFS = union(
     Set(GlobalRef(Base.parentmodule(p), Base.nameof(p)) for p in PRIMITIVES),
     Set(GlobalRef(@__MODULE__, Base.nameof(p)) for p in PRIMITIVES),
-)
+    Set(GlobalRef(Base, x) for x in (:+, :*, :(:), :iterate, :not_int)),
+    Set(GlobalRef(Core, x) for x in (:(===),)),
+    Set(GlobalRef(@__MODULE__, x) for x in (:+, :*, :(:), :iterate, :not_int)),
+    
+);
 
 
 
@@ -121,33 +152,49 @@ const PRIMITIVE_GREFS = union(
     for (v, st) in ir
         Meta.isexpr(st.expr, :call) || continue
         fn = st.expr.args[1]
-        ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in st.expr.args[2:end]]        
+        ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in st.expr.args[2:end]]
         # insertafter!(ir, v, Expr(:call, println, fn.mod, " ", fn.name))
         if fn in PRIMITIVE_GREFS
             record_ex = Expr(:call, record!, self, v.id, v, Call, fn, ssa_args...)
-            r = insertafter!(ir, v, record_ex)           
+            r = insertafter!(ir, v, record_ex)
         else
             ir[v] = Expr(:call, self, st.expr.args...)
             insert!(ir, v, Expr(:call, push_frame!, self, ssa_args...))
             insertafter!(ir, v, Expr(:call, pop_frame!, self, v.id))
         end
-        # TODO: to support branches, we need to insert a call to a function
-        # which re-maps target block args to the current tape vars corresponding
-        # to branch arguments, e.g.:
-        #
-        #    br 2 (%5, 1)
-        #  2: (%8, %9)
-        #
-        # we need to update state as ssa2tape[8] = ssa2tape[5].
-        # If there's another entry point to block 2, another updating instruction
-        # will be added too.
-        #
-        # The question is: is it possible to insert an instruction between branches or
-        # should we just push to the end of block?
     end
-    # println(ir)
-    # println("")
+    # if a block ends with a branch, we map its parameters to tape IDs
+    # which currently correspond to argument SSA IDs
+    for block in IRTools.blocks(ir)
+        for branch in IRTools.branches(block)
+            if IRTools.isreturn(branch)
+                ssa_arg_ = branch.args[1]
+                ssa_arg = ssa_arg_ isa IRTools.Variable ? ssa_arg_.id : ssa_arg_
+                push!(ir, Expr(:call, set_return!, self, ssa_arg))
+            else
+                ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in branch.args]
+                target_params = [v.id for v in ir.blocks[branch.block].args]
+                push!(block, Expr(:call, set_branch_params!, self, ssa_args, target_params))
+            end
+        end
+    end
     return ir
+end
+
+
+function irtrace(f, args...; optimize=true)
+    t = IRTracer()
+    for arg in args
+        record!(t.tape, Input, arg)
+    end
+    push!(t.frames, Frame(Dict(i + 1 => i for i in 1:length(args)), -1))
+    val = t(f, args...)
+    t.tape.resultid = t.frames[1].resultid
+    tape = t.tape
+    if optimize 
+        tape = simplify(tape)
+    end
+    return val, tape
 end
 
 
@@ -156,15 +203,24 @@ function main()
     fargs = (add_mul, 8.0, 9.0)
     record!(t.tape, Input, 8.0)
     record!(t.tape, Input, 9.0)
-    push!(t.frames, Frame(2, 3))
+    push!(t.frames, Frame(Dict(2 => 1, 3 => 2), -1))
     # @code_ir add(8.0, 9.0)
     ir = @code_ir t(add, 8.0, 9.0)
     t(add_mul, 8.0, 9.0)
 
     @code_lowered t(with_loop, 2.0, 4)
     @code_ir t(with_loop, 2.0, 4)
-    @code_ir with_loop(2.0, 4)
+    ir = @code_ir with_loop(2.0, 4)
+
+    t = IRTracer()
+    record!(t.tape, Input, 2.0)
+    record!(t.tape, Input, 4)
+    push!(t.frames, Frame(Dict(2 => 1, 3 => 2), -1))
+    ir = @code_ir with_loop(2.0, 4)
+    @code_ir t(with_loop, 2.0, 4)
     t(with_loop, 2.0, 4)
+    t.tape.resultid = t.frames[1].resultid
+    simplify(t.tape)
 
 
     @time t(add, 8.0, 9.0)
