@@ -19,7 +19,7 @@ function module_functions(modl)
     for s in Base.names(modl; all=true)
         isdefined(modl, s) || continue
         fn = getfield(modl, s)
-        if fn isa Function && match(r"^[a-z#]+$", string(s)) != nothing
+        if fn isa Function # && match(r"^[a-z#]+$", string(s)) != nothing
             push!(res, fn)
         end
     end
@@ -29,9 +29,10 @@ end
 const PRIMITIVES = Set{Any}(vcat(
     module_functions(Base),
     module_functions(Core),
-    [Broadcast.materialize, Broadcast.broadcasted, Colon(),
+    [Broadcast.materialize, Broadcast.broadcasted, Colon(), (:),
+     Base.not_int,
      # our own special functions
-     __new__, __tuple__, __getfield__, namedtuple]))
+     __new__, __tuple__, __getfield__, namedtuple]));
 
 
 include("cassette.jl")
@@ -39,4 +40,4 @@ include("cassette.jl")
 include("irtools.jl")
 
 
-trace = ctrace
+trace = irtrace

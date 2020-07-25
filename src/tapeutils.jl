@@ -274,7 +274,8 @@ function find_tuple_field_source_var(tape::Tape, getf_op::Call)
     getf_base_op = tape[getf_op.args[1]]
     if getf_base_op.fn == Base.indexed_iterate
         tuple_op = tape[getf_base_op.args[1]]
-        tuple_idx = tape[ind_it_op.args[2]].val
+        # tuple_idx = tape[ind_it_op.args[2]].val
+        tuple_idx = tape[getf_base_op.args[2]].val
     elseif getf_base_op.fn == __tuple__
         tuple_op = getf_base_op
         tuple_idx = tape[getf_op.args[2]].val

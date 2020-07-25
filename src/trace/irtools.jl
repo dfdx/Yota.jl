@@ -1,26 +1,15 @@
-# import MacroTools
 import IRTools
-import IRTools: IR, @dynamo, recurse!, xcall, self, @code_ir, insertafter!
+import IRTools: IR, @dynamo, self, insertafter!
 
 
-# const PRIMITIVE_TYPES = Set([typeof(f) for f in PRIMITIVES])
+################################################################################
+#                                Utils                                         #
+################################################################################
 
-add(x, y) = x + y
-mul(x, y) = x * y
-add_mul(x, y) = add(mul(x, y), y)
-
-logistic(x::Real) = one(x) / (one(x) + exp(-x))
-softplus(x::Real) = log(exp(x) + one(x))
-logsigmoid(x::Real) = -softplus(-x)
-
-function with_loop(x, n)
-    r = 1
-    for i=1:n
-        r *= x
-    end
-    return r
+# simple wrapper to distinguish constant values from SSA IDs
+struct Value
+    val::Any
 end
-
 
 
 ################################################################################
@@ -38,31 +27,28 @@ mutable struct Frame
     resultid::Int
 end
 
-# Frame(tape_ids...) = Frame(Dict(tid => ssa for (ssa, tid) in enumerate(tape_ids)), -1)
-
 function Base.show(io::IO, fr::Frame)
     map_str = join(["$k=>$v" for (k, v) in fr.ssa2tape], ",")
     print(io, "Frame($map_str, $(fr.resultid))")
 end
 
 
+
+################################################################################
+#                        IRTracer (defs and utils)                             #
+################################################################################
+
 mutable struct IRTracer
-    primitive_types::Set{Type}
     tape::Tape
     frames::Vector{Frame}
 end
 
 function IRTracer(;primitives=PRIMITIVES)
-    primitive_types = Set([typeof(f) for f in primitives])
     tape = Tape()
-    return IRTracer(primitive_types, tape, [])
+    return IRTracer(tape, [])
 end
 
 Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
-
-# push_frame!(t::IRTracer, ssa2tape::Dict{Int, Int}) = push!(t.frames, Frame(ssa2tape))
-# pop_frame!(t::IRTracer) = pop!(t.frames)
-# get_current_frame(t::IRTracer) = t.frames[end]
 
 
 function ssa_args_to_tape_vars!(t::IRTracer, ssa_args)
@@ -70,7 +56,8 @@ function ssa_args_to_tape_vars!(t::IRTracer, ssa_args)
     for (i, arg) in enumerate(ssa_args)
         # println("result = $result; i = $i; arg = $arg")
         if arg isa Value
-            arg_var = record!(t.tape, Constant, arg.val)
+            val = arg.val isa QuoteNode ? arg.val.value : arg.val
+            arg_var = record!(t.tape, Constant, val)
             result[i] = arg_var
         else
             # println("ssa2tape = $(t.frames[end].ssa2tape)")
@@ -81,10 +68,22 @@ function ssa_args_to_tape_vars!(t::IRTracer, ssa_args)
 end
 
 
-function record!(t::IRTracer, ssa_id::Int, ssa_val::Any, optype::Type, fn, ssa_args...)
-    tape_ids = ssa_args_to_tape_vars!(t, ssa_args)
-    # record corresponding op to the tape
-    ret_id = record!(t.tape, optype, ssa_val, fn, tape_ids)
+function record!(t::IRTracer, ssa_id::Int, ssa_val::Any, optype::Type, ssa_args...)
+    if optype == Call
+        fn = ssa_args[1]
+        tape_ids = ssa_args_to_tape_vars!(t, ssa_args[2:end])
+        # record corresponding op to the tape
+        ret_id = record!(t.tape, optype, ssa_val, fn, tape_ids)
+    elseif optype == Constant
+        @assert length(ssa_args) == 1
+        # @show (t.tape, optype, ssa_args[1])
+        val = ssa_args[1]
+        val = val isa QuoteNode ? val.value : val
+        # println(val, " ", typeof(val))
+        ret_id = record!(t.tape, optype, val)
+    else
+        throw(ArgumentError("Cannot record to tracer's tape operation of type $optype"))
+    end
     # update mapping from SSA var to tape var
     # note that in functions with loops this mapping may change over time
     t.frames[end].ssa2tape[ssa_id] = ret_id
@@ -126,43 +125,47 @@ function set_return!(t::IRTracer, ssa_arg)
 end
 
 
-# simple wrapper for constant values
-struct Value
-    val::Any
+################################################################################
+#                        IRTracer (body) + irtrace()                           #
+################################################################################
+
+function rewrite_special_cases!(ir::IR)
+    for (v, st) in ir
+        if Meta.isexpr(st.expr, :new)
+            ir[v] = Expr(:call, GlobalRef(@__MODULE__, :__new__), st.expr.args...)
+        end
+    end
 end
 
 
-# GlobalRefs should take into account true module of a function
-# as well as current module. An alernative is to resolve function in compile time,
-# but I'm not sure it's possible
-const PRIMITIVE_GREFS = union(
-    Set(GlobalRef(Base.parentmodule(p), Base.nameof(p)) for p in PRIMITIVES),
-    Set(GlobalRef(@__MODULE__, Base.nameof(p)) for p in PRIMITIVES),
-    Set(GlobalRef(Base, x) for x in (:+, :*, :(:), :iterate, :not_int)),
-    Set(GlobalRef(Core, x) for x in (:(===),)),
-    Set(GlobalRef(@__MODULE__, x) for x in (:+, :*, :(:), :iterate, :not_int)),
-    
-);
-
-
-
-@dynamo function (t::IRTracer)(fargs...)
-    ir = IR(fargs...)
-    ir == nothing && return   # intrinsic functions
+function trace_statements!(ir::IR)
     for (v, st) in ir
-        Meta.isexpr(st.expr, :call) || continue
-        fn = st.expr.args[1]
-        ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in st.expr.args[2:end]]
-        # insertafter!(ir, v, Expr(:call, println, fn.mod, " ", fn.name))
-        if fn in PRIMITIVE_GREFS
-            record_ex = Expr(:call, record!, self, v.id, v, Call, fn, ssa_args...)
-            r = insertafter!(ir, v, record_ex)
-        else
-            ir[v] = Expr(:call, self, st.expr.args...)
-            insert!(ir, v, Expr(:call, push_frame!, self, ssa_args...))
-            insertafter!(ir, v, Expr(:call, pop_frame!, self, v.id))
+        ex = st.expr
+        if Meta.isexpr(ex, :call)
+            # record primitive and recurse into non-primitive calls
+            fn_gref = ex.args[1]
+            fn = getproperty(fn_gref.mod, fn_gref.name)
+            ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in ex.args[2:end]]
+            # insertafter!(ir, v, Expr(:call, println, fn.mod, " ", fn.name))
+            # println(fn.mod, " ", fn.name)
+            if fn in PRIMITIVES
+                record_ex = Expr(:call, record!, self, v.id, v, Call, fn, ssa_args...)
+                r = insertafter!(ir, v, record_ex)
+            else
+                ir[v] = Expr(:call, self, ex.args...)
+                insert!(ir, v, Expr(:call, push_frame!, self, ssa_args...))
+                insertafter!(ir, v, Expr(:call, pop_frame!, self, v.id))
+            end
+        elseif ex isa GlobalRef
+            # resolve GlobalRef's and record as constants
+            val = getproperty(ex.mod, ex.name)
+            insertafter!(ir, v, Expr(:call, record!, self, v.id, v, Constant, val))
         end
     end
+end
+
+
+function trace_branches!(ir::IR)
     # if a block ends with a branch, we map its parameters to tape IDs
     # which currently correspond to argument SSA IDs
     for block in IRTools.blocks(ir)
@@ -178,6 +181,15 @@ const PRIMITIVE_GREFS = union(
             end
         end
     end
+end
+
+
+@dynamo function (t::IRTracer)(fargs...)
+    ir = IR(fargs...)
+    ir == nothing && return   # intrinsic functions
+    rewrite_special_cases!(ir)
+    trace_statements!(ir)
+    trace_branches!(ir)
     return ir
 end
 
@@ -191,44 +203,12 @@ function irtrace(f, args...; optimize=true)
     val = t(f, args...)
     t.tape.resultid = t.frames[1].resultid
     tape = t.tape
-    if optimize 
+    if optimize
         tape = simplify(tape)
     end
     return val, tape
 end
 
 
-function main()
-    t = IRTracer()
-    fargs = (add_mul, 8.0, 9.0)
-    record!(t.tape, Input, 8.0)
-    record!(t.tape, Input, 9.0)
-    push!(t.frames, Frame(Dict(2 => 1, 3 => 2), -1))
-    # @code_ir add(8.0, 9.0)
-    ir = @code_ir t(add, 8.0, 9.0)
-    t(add_mul, 8.0, 9.0)
-
-    @code_lowered t(with_loop, 2.0, 4)
-    @code_ir t(with_loop, 2.0, 4)
-    ir = @code_ir with_loop(2.0, 4)
-
-    t = IRTracer()
-    record!(t.tape, Input, 2.0)
-    record!(t.tape, Input, 4)
-    push!(t.frames, Frame(Dict(2 => 1, 3 => 2), -1))
-    ir = @code_ir with_loop(2.0, 4)
-    @code_ir t(with_loop, 2.0, 4)
-    t(with_loop, 2.0, 4)
-    t.tape.resultid = t.frames[1].resultid
-    simplify(t.tape)
-
-
-    @time t(add, 8.0, 9.0)
-    @time ctrace(add, 8.0, 9.0)
-
-    @time t(softplus, 8.0)
-    @time ctrace(softplus, 8.0)
-
-    @time t(logsigmoid, 8.0)
-    @time ctrace(logsigmoid, 8.0)
-end
+# TODO:
+# * new()
