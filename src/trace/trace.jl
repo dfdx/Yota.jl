@@ -29,6 +29,7 @@ end
 const PRIMITIVES = Set{Any}(vcat(
     module_functions(Base),
     module_functions(Core),
+    module_functions(Core.Intrinsics),
     [Broadcast.materialize, Broadcast.broadcasted, Colon(), (:),
      Base.not_int,
      # our own special functions

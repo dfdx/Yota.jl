@@ -1,15 +1,24 @@
 import IRTools
 import IRTools: IR, @dynamo, self, insertafter!
 
+# Some abbreviations used in this file
+# * sid : SSA ID, ID of a variable in SSA form of IR
+# * tid : Tape ID, ID of a variable on a Tape
+# * fn : function being called
+# * args : arguments to a function
+# * fargs : array of [fn, args...]
+# * farg_defs : SSA definitions of fargs, i.e. IRTools.Variable or objects
+# * res / ret - result or return value
+
 
 ################################################################################
 #                                Utils                                         #
 ################################################################################
 
-# simple wrapper to distinguish constant values from SSA IDs
-struct Value
-    val::Any
-end
+# # simple wrapper to distinguish constant values from SSA IDs
+# struct Value
+#     val::Any
+# end
 
 
 ################################################################################
@@ -39,76 +48,57 @@ end
 ################################################################################
 
 mutable struct IRTracer
+    primitives::Set{Any}
     tape::Tape
     frames::Vector{Frame}
 end
 
 function IRTracer(;primitives=PRIMITIVES)
     tape = Tape()
-    return IRTracer(tape, [])
+    return IRTracer(primitives, tape, [])
 end
 
 Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
 
 
-function ssa_args_to_tape_vars!(t::IRTracer, ssa_args)
-    result = Vector{Int}(undef, length(ssa_args))
-    for (i, arg) in enumerate(ssa_args)
-        # println("result = $result; i = $i; arg = $arg")
-        if arg isa Value
-            val = arg.val isa QuoteNode ? arg.val.value : arg.val
+promote_const_value(x::QuoteNode) = x.value
+promote_const_value(x::GlobalRef) = getproperty(x.mod, x.name)
+promote_const_value(x) = x
+
+
+function ssa_args_to_tape_vars!(t::IRTracer, arg_defs::Union{Vector, Tuple})
+    result = Vector{Int}(undef, length(arg_defs))
+    for (i, arg) in enumerate(arg_defs)
+        if arg isa IRTools.Variable
+            result[i] = t.frames[end].ssa2tape[arg.id]
+        else
+            val = promote_const_value(arg)
             arg_var = record!(t.tape, Constant, val)
             result[i] = arg_var
-        else
-            # println("ssa2tape = $(t.frames[end].ssa2tape)")
-            result[i] = t.frames[end].ssa2tape[arg]
         end
     end
     return result
 end
 
 
-function record!(t::IRTracer, ssa_id::Int, ssa_val::Any, optype::Type, ssa_args...)
-    if optype == Call
-        fn = ssa_args[1]
-        tape_ids = ssa_args_to_tape_vars!(t, ssa_args[2:end])
-        # record corresponding op to the tape
-        ret_id = record!(t.tape, optype, ssa_val, fn, tape_ids)
-    elseif optype == Constant
-        @assert length(ssa_args) == 1
-        # @show (t.tape, optype, ssa_args[1])
-        val = ssa_args[1]
-        val = val isa QuoteNode ? val.value : val
-        # println(val, " ", typeof(val))
-        ret_id = record!(t.tape, optype, val)
-    else
-        throw(ArgumentError("Cannot record to tracer's tape operation of type $optype"))
-    end
-    # update mapping from SSA var to tape var
-    # note that in functions with loops this mapping may change over time
-    t.frames[end].ssa2tape[ssa_id] = ret_id
-end
-
-
 """Push a new call frame to tracer, setting function params accordingly"""
-function push_frame!(t::IRTracer, ssa_args...)
-    tape_ids = ssa_args_to_tape_vars!(t, ssa_args)
+function push_frame!(t::IRTracer, arg_defs...)
+    tape_ids = ssa_args_to_tape_vars!(t, arg_defs)
     frame = Frame(Dict(i + 1 => tape_id for (i, tape_id) in enumerate(tape_ids)), -1)
     push!(t.frames, frame)
 end
 
 
 """Pop call frame from tracer"""
-function pop_frame!(t::IRTracer, ssa_id::Int)
+function pop_frame!(t::IRTracer, res_sid::Int)
     frame = pop!(t.frames)
     # create mapping from the current SSA ID to the last instruction on the tape
-    t.frames[end].ssa2tape[ssa_id] = (frame.resultid == -1 ?
-                                      length(t.tape) :
-                                      frame.resultid)
+    t.frames[end].ssa2tape[res_sid] =
+        (frame.resultid == -1 ? length(t.tape) : frame.resultid)
 end
 
 
-"""Set target branch parameters to vaiables corresponding to SSA args"""
+"""Set target branch parameters to variables corresponding to SSA args"""
 function set_branch_params!(t::IRTracer, ssa_args, target_params)
     tape_vars = ssa_args_to_tape_vars!(t, ssa_args)
     ssa2tape = t.frames[end].ssa2tape
@@ -119,8 +109,8 @@ end
 
 
 """Set return variable for the current frame"""
-function set_return!(t::IRTracer, ssa_arg)
-    tape_var = ssa_args_to_tape_vars!(t, [ssa_arg])[1]
+function set_return!(t::IRTracer, arg_sid_ref)
+    tape_var = ssa_args_to_tape_vars!(t, [arg_sid_ref[]])[1]
     t.frames[end].resultid = tape_var
 end
 
@@ -132,36 +122,39 @@ end
 function rewrite_special_cases!(ir::IR)
     for (v, st) in ir
         if Meta.isexpr(st.expr, :new)
-            ir[v] = Expr(:call, GlobalRef(@__MODULE__, :__new__), st.expr.args...)
+            ir[v] = Expr(:call, __new__, st.expr.args...)
         end
     end
 end
 
 
-function trace_statements!(ir::IR)
-    for (v, st) in ir
-        ex = st.expr
-        if Meta.isexpr(ex, :call)
-            # record primitive and recurse into non-primitive calls
-            fn_gref = ex.args[1]
-            fn = getproperty(fn_gref.mod, fn_gref.name)
-            ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in ex.args[2:end]]
-            # insertafter!(ir, v, Expr(:call, println, fn.mod, " ", fn.name))
-            # println(fn.mod, " ", fn.name)
-            if fn in PRIMITIVES
-                record_ex = Expr(:call, record!, self, v.id, v, Call, fn, ssa_args...)
-                r = insertafter!(ir, v, record_ex)
-            else
-                ir[v] = Expr(:call, self, ex.args...)
-                insert!(ir, v, Expr(:call, push_frame!, self, ssa_args...))
-                insertafter!(ir, v, Expr(:call, pop_frame!, self, v.id))
-            end
-        elseif ex isa GlobalRef
-            # resolve GlobalRef's and record as constants
-            val = getproperty(ex.mod, ex.name)
-            insertafter!(ir, v, Expr(:call, record!, self, v.id, v, Constant, val))
-        end
+function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
+    fn, args = fargs[1], fargs[2:end]
+    # ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in ex.args]
+    if fn in t.primitives || (fn isa Type && fn <: NamedTuple)
+        res = fn(args...)
+        tape_ids = ssa_args_to_tape_vars!(t, farg_defs[2:end])
+        # record corresponding op to the tape
+        res_tid = record!(t.tape, Call, res, fn, tape_ids)
+        # update mapping from SSA var to tape var
+        # note that in functions with loops this mapping may change over time
+        t.frames[end].ssa2tape[res_sid] = res_tid
+    else
+        push_frame!(t, farg_defs[2:end]...)
+        res = t(fn, args...)
+        pop_frame!(t, res_sid)
+        # res_tid = ssa_args_to_tape_vars!(t, [res_sid])[1]
     end
+    return res
+end
+
+
+function record_const!(t::IRTracer, res_sid, val)
+    val = val isa QuoteNode ? val.value : val
+    # println(val, " ", typeof(val))
+    res_tid = record!(t.tape, Constant, val)
+    t.frames[end].ssa2tape[res_sid] = res_tid
+    return val
 end
 
 
@@ -171,11 +164,11 @@ function trace_branches!(ir::IR)
     for block in IRTools.blocks(ir)
         for branch in IRTools.branches(block)
             if IRTools.isreturn(branch)
-                ssa_arg_ = branch.args[1]
-                ssa_arg = ssa_arg_ isa IRTools.Variable ? ssa_arg_.id : ssa_arg_
-                push!(ir, Expr(:call, set_return!, self, ssa_arg))
+                ret_v = branch.args[1]
+                # ssa_arg = ssa_arg_ isa IRTools.Variable ? ssa_arg_.id : ssa_arg_
+                push!(ir, Expr(:call, set_return!, self, Ref(ret_v)))
             else
-                ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in branch.args]
+                ssa_args = branch.args
                 target_params = [v.id for v in ir.blocks[branch.block].args]
                 push!(block, Expr(:call, set_branch_params!, self, ssa_args, target_params))
             end
@@ -188,14 +181,27 @@ end
     ir = IR(fargs...)
     ir == nothing && return   # intrinsic functions
     rewrite_special_cases!(ir)
-    trace_statements!(ir)
+    for (v, st) in ir
+        ex = st.expr
+        # note the difference:
+        # * `ex.args` is an array and thus will be passed to a function as is,
+        # including definitions of IRTools.Variable;
+        # * `ex.args...` is top-level to this expression and thus all Variable's
+        # will be replaced with actual values during runtime
+        if Meta.isexpr(ex, :call)
+            ir[v] = Expr(:call, record_or_recurse!, self, v.id, ex.args, ex.args...)
+        else
+            # elseif ex isa GlobalRef
+            ir[v] = Expr(:call, record_const!, self, v.id, ex)
+        end
+    end
     trace_branches!(ir)
     return ir
 end
 
 
-function irtrace(f, args...; optimize=true)
-    t = IRTracer()
+function irtrace(f, args...; primitives=PRIMITIVES, optimize=true)
+    t = IRTracer(; primitives=primitives)
     for arg in args
         record!(t.tape, Input, arg)
     end
@@ -208,7 +214,3 @@ function irtrace(f, args...; optimize=true)
     end
     return val, tape
 end
-
-
-# TODO:
-# * new()

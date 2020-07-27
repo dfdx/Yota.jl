@@ -6,14 +6,14 @@ non_primitive(x) = 2x + 1
 non_primitive_caller(x) = sin(non_primitive(x))
 
 
-@testset "tracer: calls" begin
+@testset "ctracer: calls" begin
     val, tape = ctrace(inc_mul, 2.0, 3.0)
     @test val == inc_mul(2.0, 3.0)
     @test length(tape) == 5
     @test tape[3] isa Constant
 end
 
-@testset "tracer: bcast" begin
+@testset "ctracer: bcast" begin
     A = rand(3)
     B = rand(3)
     val, tape = ctrace(inc_mul, A, B)
@@ -25,7 +25,7 @@ end
     @test val == inc_mul2(A, B)
 end
 
-@testset "tracer: primitives" begin
+@testset "ctracer: primitives" begin
     x = 3.0
     val1, tape1 = ctrace(non_primitive_caller, x)
     val2, tape2 = ctrace(non_primitive_caller, x; primitives=Set([non_primitive, sin]))

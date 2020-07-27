@@ -270,13 +270,11 @@ function deriv_exprs(ex, dep_types, idx::Int)
     # record it to the tape as constant; instead we must rewrite forward pass as well
     # replacing all f(args...) with _, pb = rrule(f, args...)
     # which breaks significant part of codebase
-    @assert Meta.isexpr(ex, :call)   
-    _, df = rrule(ex.args[1], 2.0)
-    dex = Expr(:call, df, )
-    
-    
+    # @assert Meta.isexpr(ex, :call)   
+    # _, df = rrule(ex.args[1], 2.0)
+    # dex = Expr(:call, df, )    
     error("Can't find differentiation rule for $ex at $idx " *
-              "with types $dep_types)")
+          "with types $dep_types)")
 end
 
 

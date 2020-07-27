@@ -7,7 +7,9 @@ function field_paths(tape::Tape)
     for op in reverse(tape.ops)
         _op = op
         path = []
-        while _op isa Call && _op.fn in (Base.getproperty, __getfield__)
+        while _op isa Call && _op.fn in (Base.getproperty,
+                                         Base.getfield,
+                                         __getfield__)
             field_name = tape[_op.args[2]].val
             push!(path, field_name)
             _op_id = _op.args[1]
@@ -200,7 +202,7 @@ function back!(tape::Tape)
                         # tape.derivs[x_id] = dy_id
                     end
                 end
-            elseif op.fn == __getfield__
+            elseif op.fn in (__getfield__, getfield)
                 # unstructuring of tuples is lowered into pretty weird code sequence
                 # ending with __getfield__; similar to getproperty(), we find source var
                 # for the corresponding tuple argument and backprop to it
