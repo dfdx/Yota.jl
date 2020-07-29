@@ -12,16 +12,6 @@ import IRTools: IR, @dynamo, self, insertafter!
 
 
 ################################################################################
-#                                Utils                                         #
-################################################################################
-
-# # simple wrapper to distinguish constant values from SSA IDs
-# struct Value
-#     val::Any
-# end
-
-
-################################################################################
 #                                Frame                                         #
 ################################################################################
 
@@ -40,7 +30,6 @@ function Base.show(io::IO, fr::Frame)
     map_str = join(["$k=>$v" for (k, v) in fr.ssa2tape], ",")
     print(io, "Frame($map_str, $(fr.resultid))")
 end
-
 
 
 ################################################################################
@@ -84,7 +73,7 @@ end
 """Push a new call frame to tracer, setting function params accordingly"""
 function push_frame!(t::IRTracer, arg_defs...)
     tape_ids = ssa_args_to_tape_vars!(t, arg_defs)
-    frame = Frame(Dict(i + 1 => tape_id for (i, tape_id) in enumerate(tape_ids)), -1)
+    frame = Frame(Dict(i => tape_id for (i, tape_id) in enumerate(tape_ids)), -1)
     push!(t.frames, frame)
 end
 
@@ -130,7 +119,6 @@ end
 
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    # ssa_args = [v isa IRTools.Variable ? v.id : Value(v) for v in ex.args]
     if fn in t.primitives || (fn isa Type && fn <: NamedTuple)
         res = fn(args...)
         tape_ids = ssa_args_to_tape_vars!(t, farg_defs[2:end])
@@ -140,10 +128,9 @@ function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
         # note that in functions with loops this mapping may change over time
         t.frames[end].ssa2tape[res_sid] = res_tid
     else
-        push_frame!(t, farg_defs[2:end]...)
+        push_frame!(t, farg_defs...)
         res = t(fn, args...)
         pop_frame!(t, res_sid)
-        # res_tid = ssa_args_to_tape_vars!(t, [res_sid])[1]
     end
     return res
 end
@@ -151,7 +138,6 @@ end
 
 function record_const!(t::IRTracer, res_sid, val)
     val = val isa QuoteNode ? val.value : val
-    # println(val, " ", typeof(val))
     res_tid = record!(t.tape, Constant, val)
     t.frames[end].ssa2tape[res_sid] = res_tid
     return val
@@ -165,7 +151,6 @@ function trace_branches!(ir::IR)
         for branch in IRTools.branches(block)
             if IRTools.isreturn(branch)
                 ret_v = branch.args[1]
-                # ssa_arg = ssa_arg_ isa IRTools.Variable ? ssa_arg_.id : ssa_arg_
                 push!(ir, Expr(:call, set_return!, self, Ref(ret_v)))
             else
                 ssa_args = branch.args
