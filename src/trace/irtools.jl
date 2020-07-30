@@ -99,6 +99,7 @@ end
 
 """Set return variable for the current frame"""
 function set_return!(t::IRTracer, arg_sid_ref)
+    # global STATE = (t, arg_sid_ref)
     tape_var = ssa_args_to_tape_vars!(t, [arg_sid_ref[]])[1]
     t.frames[end].resultid = tape_var
 end

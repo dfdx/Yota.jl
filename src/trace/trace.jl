@@ -33,7 +33,7 @@ const PRIMITIVES = Set{Any}(vcat(
     [Broadcast.materialize, Broadcast.broadcasted, Colon(), (:),
      Base.not_int,
      # our own special functions
-     __new__, __tuple__, __getfield__, namedtuple]));
+     __new__, __tuple__, __getfield__, namedtuple, guess_device]));
 
 
 include("cassette.jl")
