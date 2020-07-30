@@ -1,3 +1,8 @@
+using Cassette
+using Cassette: Tagged, tag, untag, istagged, metadata, hasmetadata,
+    enabletagging, @overdub, overdub, canrecurse, similarcontext, fallback
+
+
 ########################################################################
 #                       SETTING THE SCENE                              #
 ########################################################################

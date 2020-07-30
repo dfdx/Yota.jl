@@ -336,7 +336,7 @@ so remove_unused() should be called after it.
 function unwind_iterate(tape::Tape)
     tape = copy_with(tape)
     for op in tape
-        if (op isa Call && op.fn == __getfield__
+        if (op isa Call && op.fn in (getfield, __getfield__)
             && tape[op.args[1]] isa Call && tape[op.args[1]].fn == Base.iterate
             && tape[op.args[2]] isa Constant && tape[op.args[2]].val == 1)
             iterate_op = tape[op.args[1]]
