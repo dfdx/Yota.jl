@@ -1,3 +1,6 @@
+import ChainRulesCore.Composite
+    
+
 mutable struct A
     t::Array{Float64, 1}
     s::Float64
@@ -24,6 +27,7 @@ end
     g = Dict((:a, :t) => [1.0, 2.0, 3.0],
              (:a, :s) => 4.0,
              (:s,) => 5.0)
+    g = Composite{B}(s=5.0, a=Composite{A}(t=[1.0, 2.0, 3.0], s=4.0))
     update!(b, g)
     @test b.a.t == [-2.0, -4.0, -6.0]
     @test b.a.s == -8.0
@@ -46,4 +50,11 @@ end
     update!(x, x, (x, g) -> x - 2g)
     @test x == -xo
 
+    # with actual grad update
+    b = B(A(ones(4), 1.0), 1.0) 
+    _, g = grad(b -> sum(b.a.t) + b.a.s + b.s, b)
+    update!(b, g[1], (x, gx) -> x .- 0.5gx)
+    @test b.a.t == [0.5, 0.5, 0.5, 0.5]
+    @test b.a.s == 0.5
+    @test b.s == 0.5
 end

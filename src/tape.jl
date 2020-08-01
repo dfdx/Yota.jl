@@ -86,17 +86,17 @@ mutable struct Tape
     # derivs[var_id] == grad_id
     derivs::Dict{Int,Int}
     # mapping of argid -> Dict(struct field paths -> var id)
-    fieldpaths::Dict{Int, Dict}
+    # fieldpaths::Dict{Int, Dict}
     # compiled tape or nothing
     compiled::MaybeFunction
     # device of the tape
     device::AbstractDevice
 end
 
-Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), Dict(), nothing, device)
+Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device)
 Tape() = Tape(CPU())
 Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
-                                tape.fieldpaths, tape.compiled, tape.device)
+                                tape.compiled, tape.device)
 
 
 function Base.show(io::IO, tape::Tape)

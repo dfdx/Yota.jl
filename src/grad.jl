@@ -2,54 +2,46 @@
 #                            GRAD RESULT                               #
 ########################################################################
 
-function field_paths(tape::Tape)
-    paths = Dict()
-    for op in reverse(tape.ops)
-        _op = op
-        path = []
-        while _op isa Call && _op.fn in (Base.getproperty,
-                                         Base.getfield,
-                                         __getfield__)
-            field_name = tape[_op.args[2]].val
-            push!(path, field_name)
-            _op_id = _op.args[1]
-            _op = tape[_op_id]
-        end
-        if !isempty(path)
-            struct_id = _op.id
-            if !haskey(paths, struct_id)
-                paths[struct_id] = Dict()
-            end
-            paths[struct_id][(reverse(path)...,)] = op.id
-        end
-    end
-    return paths
-end
+# function field_paths(tape::Tape)
+#     paths = Dict()
+#     for op in reverse(tape.ops)
+#         _op = op
+#         path = []
+#         while _op isa Call && _op.fn in (Base.getproperty,
+#                                          Base.getfield,
+#                                          __getfield__)
+#             field_name = tape[_op.args[2]].val
+#             push!(path, field_name)
+#             _op_id = _op.args[1]
+#             _op = tape[_op_id]
+#         end
+#         if !isempty(path)
+#             struct_id = _op.id
+#             if !haskey(paths, struct_id)
+#                 paths[struct_id] = Dict()
+#             end
+#             paths[struct_id][(reverse(path)...,)] = op.id
+#         end
+#     end
+#     return paths
+# end
 
 
 struct GradResult
     tape::Tape
-    gvars::Dict{Int, Any}  # gradient vars: argid -> gradient var
+    gvars::Vector{Any}  # gradient vars
 end
 
 
 function GradResult(tape::Tape)
-    tape.fieldpaths = field_paths(tape)
-    gvars = Dict{Int,Any}()
-    # struct fields
-    for (argid, dct) in tape.fieldpaths
-        tape[argid] isa Input || continue  # skip non-input struct fields
-        gvars[argid] = Dict(field_path => tape.derivs[var_id]
-                            for (field_path, var_id) in dct
-                            if haskey(tape.derivs, var_id))  # not all fields may have derivatives
-    end
-    # other arguments
-    struct_arg_ids = Set(keys(tape.fieldpaths))
+    gvars = Vector{Any}()
     for op in tape
-        if (op isa Input                    # if operation is an Input
-            && !in(op.id, struct_arg_ids)   # and not a struct
-            && haskey(tape.derivs, op.id))  # and there's derivative for this var
-            gvars[op.id] = tape.derivs[op.id]
+        if op isa Input
+            if haskey(tape.derivs, op.id)
+                push!(gvars, tape.derivs[op.id])
+            else
+                push!(gvars, undef)
+            end            
         end
     end
     return GradResult(tape, gvars)
@@ -61,11 +53,7 @@ Base.show(io::IO, g::GradResult) = print(io, "GradResult($(length(g.gvars)))")
 function Base.getindex(g::GradResult, argid::Int)
     tape = g.tape
     gvar = g.gvars[argid]
-    if isa(gvar, Dict)
-        return Dict(f => tape[id].val for (f, id) in gvar)
-    else
-        return tape[gvar].val
-    end
+    return tape[gvar].val
 end
 
 Base.length(g::GradResult) = length(g.gvars)
