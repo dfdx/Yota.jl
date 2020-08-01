@@ -1,3 +1,22 @@
+function ∇getproperty(dy, s, f::Symbol)
+    T = typeof(s)
+    nt = NamedTuple{(f,)}((dy,))
+    return Composite{T}(; nt...)
+end
+
+
+function ∇getfield(dy, s::Tuple, f::Int)
+    T = typeof(s)
+    return Composite{T}([i == f ? dy : Zero() for i=1:length(s)]...)
+end
+
+
+function ∇__new__(dy, T, idx)
+    fldname = fieldnames(T)[idx]
+    return getproperty(dy, fldname)
+end
+
+
 function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i...)
     dx[i...] = ds
     return dx
@@ -121,6 +140,7 @@ end
 
 
 namedtuple(names, values) = NamedTuple{names}(values)
+namedtuple(d::Dict) = NamedTuple{tuple(keys(d)...)}(values(d))
 
 
 function rev_perm(perm::NTuple{N, Int}) where N

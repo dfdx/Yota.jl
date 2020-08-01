@@ -120,6 +120,41 @@
 @diffrule vec(u::AbstractArray)    u    reshape(dy, size(u))
 
 
+# getproperty & __new__
+
+@diffrule getproperty(_s, _f) _s ∇getproperty(dy, _s, _f)
+@nodiff getproperty(_s, _f) _f
+
+@diffrule getfield(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
+@nodiff getfield(_s, _f::Tuple) _f
+
+# @nodiff __new__(t, u) t
+# @nodiff __new__(t, u, v) t
+# @nodiff __new__(t, u, v, w) t
+# @nodiff __new__(t, u, v) t
+# @diffrule __new__(t, u, v) u ∇__new__(dy, t, 1)
+# @diffrule __new__(t, u, v) v ∇__new__(dy, t, 2)
+
+const LONG_VAR_NAME_LIST = (:x, :u, :v, :w, :_a, :_b, :_c, :_d, :_e, :_f, :_g)
+for n=1:length(LONG_VAR_NAME_LIST)
+    vn = LONG_VAR_NAME_LIST[1:n]
+    for i=1:length(vn)
+        @eval begin
+            @nodiff $(Expr(:call, __new__, :t, vn...)) t
+            @diffrule $(Expr(:call, __new__, :t, vn...)) $(vn[i]) ∇__new__(dy, t, $i)
+        end
+    end
+end
+
+# Base.indexed_iterate (tuple unpacking)
+
+@diffrule Base.indexed_iterate(t::Tuple, i::Int) t ∇getfield(getindex(dy, 1), t, i)
+@nodiff Base.indexed_iterate(t::Tuple, i::Int) i
+@diffrule Base.indexed_iterate(t::Tuple, i::Int, _state::Int) t ∇getfield(getindex(dy, 1), t, i)
+@nodiff Base.indexed_iterate(t::Tuple, i::Int, _state::Int) i
+@nodiff Base.indexed_iterate(t::Tuple, i::Int, _state::Int) _state
+
+
 # getindex
 @diffrule getindex(u::AbstractArray, i)         u    ungetindex(u, dy, i)
 @diffrule getindex(u::AbstractArray, i, j)      u    ungetindex(u, dy, i, j)

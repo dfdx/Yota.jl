@@ -2,6 +2,7 @@ import Statistics
 using LinearAlgebra
 using Espresso
 using Distributions
+using ChainRulesCore
 using CUDAapi
 
 
