@@ -65,7 +65,7 @@ Base.iterate(g::GradResult, state) = length(g) >= state ? (g[state], state + 1) 
 #                              GRAD                                    #
 ########################################################################
 
-const DEBUG_STATE = Any[]
+const DEBUG_STATE = Ref{Any}()
 
 
 getderiv(tape::Tape, id::Int) = haskey(tape.derivs, id) ? tape[tape.derivs[id]] : nothing
@@ -144,6 +144,11 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     x = tape[op.args[i]]
     dy = getderiv(tape, y)
     dy == nothing && return   # op is not part of computation graph, e.g. range in loop
+    if dy.val isa Zero
+        # propagate zero to dx (reuse dy node)
+        set_or_add_deriv!(tape, x, dy)
+        return
+    end
     # we handle broadcasting for a few built-in functions like normal derivatives
     # all other cases are handled by a generic bcast mechanism
     use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+, *]))
@@ -161,8 +166,8 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
         end
     catch
         @error("Failed to find a derivative for $op at position $i, " *
-               "current state of backpropagation saved to Yota.DEBUG_STATE")
-        push!(DEBUG_STATE, (tape, op, i))
+               "current state of backpropagation saved to Yota.DEBUG_STATE[]")
+        DEBUG_STATE[] = (tape, op, i)
         rethrow()
     end
 end
@@ -239,8 +244,9 @@ has the same size as the input.
 """
 function check_deriv_sizes(tape::Tape)
     for (var_id, grad_var_id) in tape.derivs
-        # global STATE = (tape, var_id, grad_var_id)
-        if !isstruct(tape[var_id].val)
+        # type of var and grad var may differ e.g. when grad_var is Zero()
+        # if !isstruct(tape[var_id].val) && !isstruct(tape[grad_var_id].val)
+        if tape[var_id].val isa AbstractArray && tape[grad_var_id].val isa AbstractArray
             var_size = size(tape[var_id].val)
             grad_var_size = size(tape[grad_var_id].val)
             if  var_size != grad_var_size

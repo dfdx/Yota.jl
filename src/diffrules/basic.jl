@@ -303,12 +303,12 @@ end
 
 # multiplication
 @diffrule *(u::Real         , v::Real )            u     v * dy
-# @diffrule *(u::Real         , v::AbstractArray)    u     sum(v .* dy)
-# @diffrule *(u::AbstractArray, v::Real )            u     v .* dy
+@diffrule *(u::Real         , v::AbstractArray)    u     sum(v .* dy)
+@diffrule *(u::AbstractArray, v::Real )            u     v .* dy
 @diffrule *(u::AbstractArray, v::AbstractArray)    u     dy * transpose(v)
 
 @diffrule *(u::Real         , v::Real )            v     u * dy
-# @diffrule *(u::Real         , v::AbstractArray)    v     u .* dy
+@diffrule *(u::Real         , v::AbstractArray)    v     u .* dy
 @diffrule *(u::AbstractArray, v::Real )            v     sum(u .* dy)
 @diffrule *(u::AbstractArray, v::AbstractArray)    v     transpose(u) * dy
 
