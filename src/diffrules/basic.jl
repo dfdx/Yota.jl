@@ -120,13 +120,16 @@
 @diffrule vec(u::AbstractArray)    u    reshape(dy, size(u))
 
 
-# getproperty & __new__
+# getproperty, getfield, __new__
 
 @diffrule getproperty(_s, _f) _s ∇getproperty(dy, _s, _f)
 @nodiff getproperty(_s, _f) _f
 
 @diffrule getfield(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
 @nodiff getfield(_s, _f::Tuple) _f
+
+@diffrule __getfield__(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
+@nodiff __getfield__(_s, _f::Tuple) _f
 
 # @nodiff __new__(t, u) t
 # @nodiff __new__(t, u, v) t
