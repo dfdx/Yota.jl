@@ -110,7 +110,7 @@ end
 
 
 """
-Define a differentiation rule for a functioin with keyword arguments.
+Define a differentiation rule for a function with keyword arguments.
 Keyword arguments need not to be specified; instead all kw args are passed to
 the gradient functions as is.
 
