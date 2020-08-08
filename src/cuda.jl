@@ -1,14 +1,14 @@
-import CUDAnative
-using CuArrays
+# import CUDAnative
+# using CuArrays
 
 
 # CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
 
-@diffrule CUDAnative.exp(u::Real) u CUDAnative.exp(u) * dy
-@diffrule CUDAnative.pow(u::Real, v::Real) u (v * CUDAnative.pow(u, (v-1)) * dy)
-@diffrule CUDAnative.pow(u::Real, v::Real) v CUDAnative.log(u) * CUDAnative.pow(u, v) * dy
-@diffrule CUDAnative.log(u::Real) u dy / u
-@diffrule CUDAnative.sqrt(u::Real) u (0.5f0 * CUDAnative.pow(u, -0.5f0) * dy)
+@diffrule CUDA.exp(u::Real) u CUDAnative.exp(u) * dy
+@diffrule CUDA.pow(u::Real, v::Real) u (v * CUDAnative.pow(u, (v-1)) * dy)
+@diffrule CUDA.pow(u::Real, v::Real) v CUDAnative.log(u) * CUDAnative.pow(u, v) * dy
+@diffrule CUDA.log(u::Real) u dy / u
+@diffrule CUDA.sqrt(u::Real) u (0.5f0 * CUDAnative.pow(u, -0.5f0) * dy)
 
 
 # # const NON_DISPATCHED_OPS = [log, exp, sqrt, ^, ones]
