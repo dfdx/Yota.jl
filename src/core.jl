@@ -2,7 +2,8 @@ import Statistics
 using LinearAlgebra
 using Espresso
 using Distributions
-using CUDAapi
+using ChainRulesCore
+using CUDA
 
 
 include("utils.jl")
@@ -24,17 +25,13 @@ include("transform.jl")
 
 const BEST_AVAILABLE_DEVICE = Ref{AbstractDevice}(CPU())
 
-if has_cuda()
+if CUDA.functional()
     try
-        using CuArrays
-        using CUDAnative
-
         BEST_AVAILABLE_DEVICE[] = GPU(1)
-
         include("cuda.jl")
     catch ex
         # something is wrong with the user's set-up (or there's a bug in CuArrays)
-        @warn "CUDA is installed, but CuArrays.jl fails to load" exception=(ex,catch_backtrace())
+        @warn "CUDA is installed, but CUDA.jl fails to load" exception=(ex,catch_backtrace())
 
     end
 end

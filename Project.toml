@@ -1,13 +1,12 @@
 name = "Yota"
 uuid = "cd998857-8626-517d-b929-70ad188a48f0"
 authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
-version = "0.3.1"
+version = "0.4.0"
 
 [deps]
-CUDAapi = "3895d2a7-ec45-59b8-82bb-cfc6a382f9b3"
-CUDAnative = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Cassette = "7057c7e9-c182-5462-911a-8362d720325c"
-CuArrays = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Espresso = "6912e4f1-e036-58b0-9138-08d1e6358ea9"
 IRTools = "7869d1d1-7146-5819-86e3-90919afe41df"
@@ -18,11 +17,11 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-CUDAapi = "2.0, 4"
-CUDAnative = "2.6, 3"
 Cassette = "0.2.6, 0.3"
-CuArrays = "1.5, 2"
+IRTools = "0.4.0"
+JuliaInterpreter = "0.7.2"
+ChainRulesCore = "0.9.5"
 Distributions = "0.23.2"
 Espresso = "0.6.0"
-JuliaInterpreter = "0.7.2"
-julia = "1"
+CUDA = "1.2.1"
+julia = "1.4"

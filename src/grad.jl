@@ -2,54 +2,46 @@
 #                            GRAD RESULT                               #
 ########################################################################
 
-function field_paths(tape::Tape)
-    paths = Dict()
-    for op in reverse(tape.ops)
-        _op = op
-        path = []
-        while _op isa Call && _op.fn in (Base.getproperty,
-                                         Base.getfield,
-                                         __getfield__)
-            field_name = tape[_op.args[2]].val
-            push!(path, field_name)
-            _op_id = _op.args[1]
-            _op = tape[_op_id]
-        end
-        if !isempty(path)
-            struct_id = _op.id
-            if !haskey(paths, struct_id)
-                paths[struct_id] = Dict()
-            end
-            paths[struct_id][(reverse(path)...,)] = op.id
-        end
-    end
-    return paths
-end
+# function field_paths(tape::Tape)
+#     paths = Dict()
+#     for op in reverse(tape.ops)
+#         _op = op
+#         path = []
+#         while _op isa Call && _op.fn in (Base.getproperty,
+#                                          Base.getfield,
+#                                          __getfield__)
+#             field_name = tape[_op.args[2]].val
+#             push!(path, field_name)
+#             _op_id = _op.args[1]
+#             _op = tape[_op_id]
+#         end
+#         if !isempty(path)
+#             struct_id = _op.id
+#             if !haskey(paths, struct_id)
+#                 paths[struct_id] = Dict()
+#             end
+#             paths[struct_id][(reverse(path)...,)] = op.id
+#         end
+#     end
+#     return paths
+# end
 
 
 struct GradResult
     tape::Tape
-    gvars::Dict{Int, Any}  # gradient vars: argid -> gradient var
+    gvars::Vector{Any}  # gradient vars
 end
 
 
 function GradResult(tape::Tape)
-    tape.fieldpaths = field_paths(tape)
-    gvars = Dict{Int,Any}()
-    # struct fields
-    for (argid, dct) in tape.fieldpaths
-        tape[argid] isa Input || continue  # skip non-input struct fields
-        gvars[argid] = Dict(field_path => tape.derivs[var_id]
-                            for (field_path, var_id) in dct
-                            if haskey(tape.derivs, var_id))  # not all fields may have derivatives
-    end
-    # other arguments
-    struct_arg_ids = Set(keys(tape.fieldpaths))
+    gvars = Vector{Any}()
     for op in tape
-        if (op isa Input                    # if operation is an Input
-            && !in(op.id, struct_arg_ids)   # and not a struct
-            && haskey(tape.derivs, op.id))  # and there's derivative for this var
-            gvars[op.id] = tape.derivs[op.id]
+        if op isa Input
+            if haskey(tape.derivs, op.id)
+                push!(gvars, tape.derivs[op.id])
+            else
+                push!(gvars, undef)
+            end            
         end
     end
     return GradResult(tape, gvars)
@@ -61,11 +53,7 @@ Base.show(io::IO, g::GradResult) = print(io, "GradResult($(length(g.gvars)))")
 function Base.getindex(g::GradResult, argid::Int)
     tape = g.tape
     gvar = g.gvars[argid]
-    if isa(gvar, Dict)
-        return Dict(f => tape[id].val for (f, id) in gvar)
-    else
-        return tape[gvar].val
-    end
+    return tape[gvar].val
 end
 
 Base.length(g::GradResult) = length(g.gvars)
@@ -77,7 +65,7 @@ Base.iterate(g::GradResult, state) = length(g) >= state ? (g[state], state + 1) 
 #                              GRAD                                    #
 ########################################################################
 
-const DEBUG_STATE = Any[]
+const DEBUG_STATE = Ref{Any}()
 
 
 getderiv(tape::Tape, id::Int) = haskey(tape.derivs, id) ? tape[tape.derivs[id]] : nothing
@@ -97,7 +85,7 @@ to_unbroadcast_expr(tape::Tape, op::Call) =
 function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     ex = to_expr(tape, op)
     dep_types = [tape[arg].typ for arg in op.args]
-    dex_fldnames = deriv_exprs(ex, dep_types, i)    
+    dex_fldnames = deriv_exprs(ex, dep_types, i)
     st = Dict(Symbol("%$i") => i for i in op.args)
     st[:dy] = dy.id
     st[:y] = op.id
@@ -129,13 +117,22 @@ end
 
 
 function set_or_add_deriv!(tape::Tape, x::AbstractOp, dx::AbstractOp)
+    # if length(tape) == 15
+    #     global STATE = (tape, x, dx)
+    #     error("stop!")
+    # end
     if !haskey(tape.derivs, x.id)
         setderiv!(tape, x, dx)
     else
         old_dx = getderiv(tape, x)
-        val = dx.val .+ old_dx.val
-        dot_add_id = record!(tape, Constant, +)
-        new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
+        if dx.val isa Composite || old_dx.val isa Composite
+            val = dx.val + old_dx.val
+            new_dx_id = record!(tape, Call, val, (+), [dx.id, old_dx.id])
+        else
+            val = dx.val .+ old_dx.val
+            dot_add_id = record!(tape, Constant, +)
+            new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
+        end
         new_dx = tape[new_dx_id]
         setderiv!(tape, x, new_dx)
     end
@@ -147,6 +144,11 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     x = tape[op.args[i]]
     dy = getderiv(tape, y)
     dy == nothing && return   # op is not part of computation graph, e.g. range in loop
+    if dy.val isa Zero
+        # propagate zero to dx (reuse dy node)
+        set_or_add_deriv!(tape, x, dy)
+        return
+    end
     # we handle broadcasting for a few built-in functions like normal derivatives
     # all other cases are handled by a generic bcast mechanism
     use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+, *]))
@@ -164,8 +166,8 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
         end
     catch
         @error("Failed to find a derivative for $op at position $i, " *
-               "current state of backpropagation saved to Yota.DEBUG_STATE")
-        push!(DEBUG_STATE, (tape, op, i))
+               "current state of backpropagation saved to Yota.DEBUG_STATE[]")
+        DEBUG_STATE[] = (tape, op, i)
         rethrow()
     end
 end
@@ -187,38 +189,39 @@ function back!(tape::Tape)
     tape.derivs[z.id] = dy.id
     for op in reverse(tape.ops[1:end-1])
         if op isa Call
-            if op.fn == Base.getproperty
-                # since first argument of getproperty is a struct,
-                # we treat it in a special way: instead of inventing some kind
-                # of "struct derivative", we look for the call to __new__()
-                # that created this struct; if found, we add current derivative to
-                # the variable used as the field when instantiating the struct
-                if haskey(tape.derivs, op.id)
-                    dy_id = tape.derivs[op.id]
-                    dy_id != nothing || continue
-                    x = find_field_source_var(tape, op)
-                    if x != nothing
-                        set_or_add_deriv!(tape, x, tape[dy_id])
-                        # tape.derivs[x_id] = dy_id
-                    end
-                end
-            elseif op.fn in (__getfield__, getfield)
-                # unstructuring of tuples is lowered into pretty weird code sequence
-                # ending with __getfield__; similar to getproperty(), we find source var
-                # for the corresponding tuple argument and backprop to it
-                if haskey(tape.derivs, op.id)
-                    dy_id = tape.derivs[op.id]
-                    dy_id != nothing || continue
-                    x = find_tuple_field_source_var(tape, op)
-                    if x != nothing
-                        set_or_add_deriv!(tape, x, tape[dy_id])
-                        # tape.derivs[x_id] = dy_id
-                    end
-                end
-            elseif op.fn in (__new__, Base.indexed_iterate)
-                # we take care of these operations somewhere else
-                # so just skip them here
-            else
+            # if op.fn == Base.getproperty
+            #     # since first argument of getproperty is a struct,
+            #     # we treat it in a special way: instead of inventing some kind
+            #     # of "struct derivative", we look for the call to __new__()
+            #     # that created this struct; if found, we add current derivative to
+            #     # the variable used as the field when instantiating the struct
+            #     if haskey(tape.derivs, op.id)
+            #         dy_id = tape.derivs[op.id]
+            #         dy_id != nothing || continue
+            #         x = find_field_source_var(tape, op)
+            #         if x != nothing
+            #             set_or_add_deriv!(tape, x, tape[dy_id])
+            #             # tape.derivs[x_id] = dy_id
+            #         end
+            #     end
+            # elseif op.fn in (__getfield__, getfield)
+            #     # unstructuring of tuples is lowered into pretty weird code sequence
+            #     # ending with __getfield__; similar to getproperty(), we find source var
+            #     # for the corresponding tuple argument and backprop to it
+            #     if haskey(tape.derivs, op.id)
+            #         dy_id = tape.derivs[op.id]
+            #         dy_id != nothing || continue
+            #         x = find_tuple_field_source_var(tape, op)
+            #         if x != nothing
+            #             set_or_add_deriv!(tape, x, tape[dy_id])
+            #             # tape.derivs[x_id] = dy_id
+            #         end
+            #     end
+            # elseif op.fn in (__new__, Base.indexed_iterate)
+            #     # we take care of these operations somewhere else
+            #     # so just skip them here
+            # else
+            if true
                 # ordinary function call
                 for i=1:length(op.args)
                     # backpropagate only non-constant vars
@@ -241,7 +244,9 @@ has the same size as the input.
 """
 function check_deriv_sizes(tape::Tape)
     for (var_id, grad_var_id) in tape.derivs
-        if !isstruct(tape[var_id].val)
+        # type of var and grad var may differ e.g. when grad_var is Zero()
+        # if !isstruct(tape[var_id].val) && !isstruct(tape[grad_var_id].val)
+        if tape[var_id].val isa AbstractArray && tape[grad_var_id].val isa AbstractArray
             var_size = size(tape[var_id].val)
             grad_var_size = size(tape[grad_var_id].val)
             if  var_size != grad_var_size

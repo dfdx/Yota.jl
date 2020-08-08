@@ -120,6 +120,7 @@ end
 
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
     fn, args = fargs[1], fargs[2:end]
+    # global STATE = (t, res_sid, farg_defs, fargs)
     if fn in t.primitives || (fn isa Type && fn <: NamedTuple)
         res = fn(args...)
         tape_ids = ssa_args_to_tape_vars!(t, farg_defs[2:end])

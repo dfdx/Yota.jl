@@ -181,7 +181,7 @@ Base.hash(op::Call, h::UInt) = hash(op.id, hash(op.fn, hash(op.args, h)))
 function Base.hash(tape::Tape, h::UInt)
     h = hash(tape.resultid)
     h = hash(tape.derivs, h)
-    h = hash(tape.fieldpaths, h)
+    # h = hash(tape.fieldpaths, h)
     h = hash(tape.device, h)
     for op in tape
         h = hash(op, h)
@@ -198,7 +198,7 @@ Base.:(==)(op1::Call, op2::Call) = (op1.id == op2.id && op1.fn == op2.fn && op1.
 function Base.:(==)(tape1::Tape, tape2::Tape)
     return tape1.resultid == tape2.resultid &&
         tape1.derivs == tape2.derivs &&
-        tape1.fieldpaths == tape2.fieldpaths &&
+        # tape1.fieldpaths == tape2.fieldpaths &&
         tape1.device == tape2.device &&
         tape1.ops == tape2.ops
 end

@@ -53,7 +53,7 @@ end
 
 ## Custom derivatives
 
-You can add custom derivatives using `@diffrule` macro.
+You can add custom derivatives using `@diffrule` macro (see list of allowed variable names below).
 
 ```julia
 logistic(x) = 1 / (1 + exp(-x))
@@ -90,6 +90,15 @@ corresponding derivative will be:
 
 There's also `@nodiff(call_pattern, variable)` macro which stops Yota from backpropagating through that variable.
 
+### Allowed variable names
+
+To distinguish between variable names that can be matched to (a.k.a. placeholders) and fixed symbols (e.g. function names), `@diffrule` uses several rules:
+
+* `y` means return value of a primal expression, e.g. `y = f(x)`
+* `dy` means derivative of a loss function w.r.t. to `y`
+* `t`, `u`, `v`, `w`, `x`, as well as `i`, `j`, `k` (all listed in `Yota.DIFF_PHS`) are "placeholders" and can be used as names of variables, e.g. `@diffrule foo(u, v) u ∇foo(dy, u, v)`
+* anything starting with `_` is also considered a placeholder, e.g. `@diffrule bar(u, _state) _state ∇bar(dy, u, _state)`
+
 ## Tracer and the Tape
 
 Being a reverse-mode AD package, Yota works in 2 steps:
@@ -111,7 +120,7 @@ print(tape)
 #   %3 = broadcast(%2, %1)::Array{Float64,1}
 #   %4 = sum(%3)::Float64
 ```
-`trace` uses [Cassette.jl](https://github.com/jrevels/Cassette.jl) to collect function calls during execution. Functions are divided into 2 groups:
+`trace` uses [IRTools.jl](https://github.com/FluxML/IRTools.jl) to collect function calls during execution. Functions are divided into 2 groups:
 
  * primitive, which are recorded to the tape;
  * non-primitive, which are traced-through down to primitive ones.
@@ -136,14 +145,16 @@ compile!(tape)
 # 492.063 ns (2 allocations: 144 bytes)
 ```
 
-Note that `trace()` is an alias to `ctrace()` - Cassette-based tracer. There's also an alternative implementation with identical interface and capabilities, but based on [JuliaInterpreter.jl](https://github.com/JuliaDebug/JuliaInterpreter.jl). This implementation is available by name `itrace()` and is currently supported on Julia 1.0-1.3.
+Note that `trace()` is an alias to `irtrace()` - IRTools-based tracer. As of Yota 0.4.0, two other tracers are available:
 
-## CuArrays support (experimental)
+ * `ctrace()`, based on [Cassette.jl](https://github.com/jrevels/Cassette.jl)
+ * `itrace()`, based on [JuliaInterpreter.jl](https://github.com/JuliaDebug/JuliaInterpreter.jl)
 
-Yota should work with CuArrays out of the box, although integration is not well tested yet.
+These tracers can be used for experimental purposes, but **their reliability or even existence is not guaranteed in future**. For any long-term code please use alias `trace()` which always points to the most recent and well-tested implementation.
 
-In addition, you can use function `to_cuda()` to transform arrays and structs into CUDA-compatible, see [cu_vae.jl](https://github.com/dfdx/Yota.jl/blob/master/examples/cu_vae.jl) for an example. Note that this API is highly experimental and will most likely change to something more device-agnostic.
+## CUDA support
 
+`CuArray` is fully supported. If you encounter an issue with CUDA arrays which you don't have with ordinary arrays, please file a bug.
 
 ## Static vs. dynamic (experimental)
 
@@ -177,37 +188,3 @@ _, g = grad(iterative, x, 3; dynamic=true)   # g[1] == [8.0, 8.0, 8.0, 8.0]
 ```
 
 Note that this feature is experimental and may be removed in future versions.
-
-
-## Simple grad (experimental)
-
-`grad()` uses a number of optimizations and buffering to make gradient calculation as fast as possible. Sometimes, however, all we need is a simple gradient function that accepts all the same argument as the original one and returns gradients of its arguments, without attached buffers, additional data structures or whatever. You can create such a function using `simplegrad()`:
-
-```julia
-import Yota: simplegrad
-
-loss(W::AbstractMatrix, b::AbstractVector, x::AbstractArray) = sum(W * x .+ b)
-
-W, b, x = rand(128, 784), rand(128), rand(784, 100)
-∇loss = simplegrad(loss, W, b, x)   # note: ∇loss is a new _function_, world age concerns apply
-
-val, dW, db, dx = ∇loss(W, b, x)
-
-@code_lowered ∇loss(W, b, x)
-# CodeInfo(
-# 1 ─       %4 = (*)(%1, %3)
-# │         %5 = +
-# │         %6 = (broadcast)(%5, %4, %2)
-# │         %7 = (sum)(%6)
-# │         %8 = 1.0
-# │         %9 = (Yota.sum_grad)(%6, %8)
-# │         %10 = (Yota.unbroadcast)(%4, %9)
-# │         %11 = (Yota.unbroadcast)(%2, %9)
-# │         %12 = (transpose)(%3)
-# │         %13 = (*)(%10, %12)
-# │         %14 = (transpose)(%1)
-# │         %15 = (*)(%14, %10)
-# │         %13 = (Core.tuple)(%7, %13, %11, %15)
-# └──       return %13
-# )
-```
