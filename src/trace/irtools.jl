@@ -176,10 +176,13 @@ end
         # * `ex.args...` is top-level to this expression and thus all Variable's
         # will be replaced with actual values during runtime
         if Meta.isexpr(ex, :call)
-            ir[v] = Expr(:call, record_or_recurse!, self, v.id, ex.args, ex.args...)
+            ir[v] = IRTools.xcall(record_or_recurse!, self, v.id, ex.args, ex.args...)
         else
-            # elseif ex isa GlobalRef
-            ir[v] = Expr(:call, record_const!, self, v.id, ex)
+            # e.g. GlobalRef
+            # note: using insertafter!() due to
+            # https://github.com/FluxML/IRTools.jl/issues/78
+            # ir[v] = Expr(:call, record_const!, self, v.id, v)
+            insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
         end
     end
     trace_branches!(ir)

@@ -1,25 +1,25 @@
-import CUDAnative
-using CuArrays
+# import CUDAnative
+# using CuArrays
 
 
 # CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
 
-@diffrule CUDAnative.exp(u::Real) u CUDAnative.exp(u) * dy
-@diffrule CUDAnative.pow(u::Real, v::Real) u (v * CUDAnative.pow(u, (v-1)) * dy)
-@diffrule CUDAnative.pow(u::Real, v::Real) v CUDAnative.log(u) * CUDAnative.pow(u, v) * dy
-@diffrule CUDAnative.log(u::Real) u dy / u
-@diffrule CUDAnative.sqrt(u::Real) u (0.5f0 * CUDAnative.pow(u, -0.5f0) * dy)
+@diffrule CUDA.exp(u::Real) u CUDA.exp(u) * dy
+@diffrule CUDA.pow(u::Real, v::Real) u (v * CUDA.pow(u, (v-1)) * dy)
+@diffrule CUDA.pow(u::Real, v::Real) v CUDA.log(u) * CUDA.pow(u, v) * dy
+@diffrule CUDA.log(u::Real) u dy / u
+@diffrule CUDA.sqrt(u::Real) u (0.5f0 * CUDA.pow(u, -0.5f0) * dy)
 
 
 # # const NON_DISPATCHED_OPS = [log, exp, sqrt, ^, ones]
 # # const CUDA_NATIVE_OPS = Dict{Function,Function}(op => op for op in NON_DISPATCHED_OPS)
 const CUDANATIVE_OPS = Dict{Function,Function}()
 
-CUDANATIVE_OPS[log] = CUDAnative.log
-CUDANATIVE_OPS[exp] = CUDAnative.exp
-CUDANATIVE_OPS[sqrt] = CUDAnative.sqrt
-CUDANATIVE_OPS[^] = CUDAnative.pow
-CUDANATIVE_OPS[ones] = CUDAnative.ones
+CUDANATIVE_OPS[log] = CUDA.log
+CUDANATIVE_OPS[exp] = CUDA.exp
+CUDANATIVE_OPS[sqrt] = CUDA.sqrt
+CUDANATIVE_OPS[^] = CUDA.pow
+CUDANATIVE_OPS[ones] = CUDA.ones
 
 device_function(device::GPU, f::Function) = get(CUDANATIVE_OPS, f, f)
 
