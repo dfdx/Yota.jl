@@ -18,12 +18,12 @@ end
 
 
 function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i...)
-    dx[i...] = ds
+    dx[i...] .+= ds
     return dx
 end
 
 function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i::AbstractArray{Int})
-    dx[i] = ds
+    dx[i] .+= ds
     return dx
 end
 
