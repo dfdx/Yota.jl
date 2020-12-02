@@ -79,7 +79,7 @@ Arguments:
 Examples:
 
     @diffrule +(u::Real, v::Real) u dy
-    @diffrule sum(u::AbstractArray) u sum_grad(u, dy)
+    @diffrule sum(u::AbstractArray) u ∇sum(u, dy)
     @diffrule Statistics.mean(u::AbstractArray) u ∇mean(u, dy)
     @diffrule logpdf(_d::MvNormal, x) _d.μ ∇logpdf(dy, _d, x)
 

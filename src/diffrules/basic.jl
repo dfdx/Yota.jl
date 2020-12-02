@@ -213,15 +213,15 @@ end
 
 
 # sum() and mean()
-@diffrule sum(u::AbstractArray)                     u     sum_grad(u, dy)
-@diffrule Base._sum(u::AbstractArray, v::Int)             u     sum_grad(u, dy)
+@diffrule sum(u::AbstractArray)                     u     ∇sum(u, dy)
+@diffrule Base._sum(u::AbstractArray, v::Int)             u     ∇sum(u, dy)
 @diffrule Base._sum(u::AbstractArray, v::Int)             v     zero(eltype(u))
-@diffrule Core.kwfunc(sum)(_dims, _, u::AbstractArray)     u     sum_grad(u, dy)
+@diffrule Core.kwfunc(sum)(_dims, _, u::AbstractArray)     u     ∇sum(u, dy)
 @nodiff Core.kwfunc(sum)(_dims, _, u::AbstractArray)     _dims
 @nodiff Core.kwfunc(sum)(_dims, _, u::AbstractArray)     _
 
 # special sums
-@diffrule sum(_fn::typeof(log), u::AbstractArray)    u    sum_grad(u, dy) ./ u
+@diffrule sum(_fn::typeof(log), u::AbstractArray)    u    ∇sum(u, dy) ./ u
 
 @diffrule Statistics.mean(u::AbstractArray)                u     ∇mean(u, dy)
 @diffrule Statistics._mean(u::AbstractArray, v::Int)       u     ∇mean(u, dy)

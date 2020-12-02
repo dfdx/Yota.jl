@@ -3,7 +3,12 @@ using Yota
 using Yota: Tape, Input, Call, Constant, trace, ctrace, irtrace, play!, transform, binarize_ops
 using Yota: ∇mean, setfield_nested!, copy_with, simplegrad, remove_unused
 using Yota: find_field_source_var, unwind_iterate, eliminate_common
-using Yota: unvcat, unhcat, uncat
+using Yota: unvcat, unhcat, uncat, ungetindex!, ungetindex
+using CUDA
+
+
+CUDA.allowscalar(false)
+
 
 include("test_trace_cassette.jl")
 include("test_trace_irtools.jl")
