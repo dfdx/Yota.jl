@@ -1,7 +1,7 @@
 name = "Yota"
 uuid = "cd998857-8626-517d-b929-70ad188a48f0"
 authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
-version = "0.4.1"
+version = "0.4.2"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -17,7 +17,7 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-CUDA = "1.2.1"
+CUDA = "1.2, 2.3"
 Cassette = "0.2.6, 0.3"
 ChainRulesCore = "0.9.5"
 Distributions = "0.23.2"

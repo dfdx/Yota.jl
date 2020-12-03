@@ -217,6 +217,8 @@ end
 @diffrule Base._sum(u::AbstractArray, v::Int)             u     sum_grad(u, dy)
 @diffrule Base._sum(u::AbstractArray, v::Int)             v     zero(eltype(u))
 @diffrule Core.kwfunc(sum)(_dims, _, u::AbstractArray)     u     sum_grad(u, dy)
+@nodiff Core.kwfunc(sum)(_dims, _, u::AbstractArray)     _dims
+@nodiff Core.kwfunc(sum)(_dims, _, u::AbstractArray)     _
 
 # special sums
 @diffrule sum(_fn::typeof(log), u::AbstractArray)    u    sum_grad(u, dy) ./ u

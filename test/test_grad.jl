@@ -13,6 +13,8 @@ loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
     val, g = grad(loss_kw_mean, args...)
     @test val == loss_kw_mean(args...)
     @test gradcheck(loss_kw_mean, args...)
+
+    @test gradcheck(x -> sum(sum(x, dims=1)), rand(2, 3))
 end
 
 
