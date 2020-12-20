@@ -41,7 +41,7 @@ function GradResult(tape::Tape)
                 push!(gvars, tape.derivs[op.id])
             else
                 push!(gvars, undef)
-            end            
+            end
         end
     end
     return GradResult(tape, gvars)
@@ -117,10 +117,6 @@ end
 
 
 function set_or_add_deriv!(tape::Tape, x::AbstractOp, dx::AbstractOp)
-    # if length(tape) == 15
-    #     global STATE = (tape, x, dx)
-    #     error("stop!")
-    # end
     if !haskey(tape.derivs, x.id)
         setderiv!(tape, x, dx)
     else
@@ -143,7 +139,7 @@ function step_back!(tape::Tape, op::Union{Call}, i::Int)
     y = op
     x = tape[op.args[i]]
     dy = getderiv(tape, y)
-    dy == nothing && return   # op is not part of computation graph, e.g. range in loop
+    dy === nothing && return   # op is not part of computation graph, e.g. range in loop
     if dy.val isa Zero
         # propagate zero to dx (reuse dy node)
         set_or_add_deriv!(tape, x, dy)
@@ -183,54 +179,21 @@ function back!(tape::Tape)
     # dy - derivative of z w.r.t. y
     z = tape[tape.resultid]
     # using one() of type of the result for seed to keep type stability
+    @assert ndims(tape[tape.resultid].val) == 0 "Function must return scalar!"
     dy_id = record!(tape, Constant, one(tape[tape.resultid].val))
     dy = tape[dy_id]
     # set initial derivative value
     tape.derivs[z.id] = dy.id
     for op in reverse(tape.ops[1:end-1])
         if op isa Call
-            # if op.fn == Base.getproperty
-            #     # since first argument of getproperty is a struct,
-            #     # we treat it in a special way: instead of inventing some kind
-            #     # of "struct derivative", we look for the call to __new__()
-            #     # that created this struct; if found, we add current derivative to
-            #     # the variable used as the field when instantiating the struct
-            #     if haskey(tape.derivs, op.id)
-            #         dy_id = tape.derivs[op.id]
-            #         dy_id != nothing || continue
-            #         x = find_field_source_var(tape, op)
-            #         if x != nothing
-            #             set_or_add_deriv!(tape, x, tape[dy_id])
-            #             # tape.derivs[x_id] = dy_id
-            #         end
-            #     end
-            # elseif op.fn in (__getfield__, getfield)
-            #     # unstructuring of tuples is lowered into pretty weird code sequence
-            #     # ending with __getfield__; similar to getproperty(), we find source var
-            #     # for the corresponding tuple argument and backprop to it
-            #     if haskey(tape.derivs, op.id)
-            #         dy_id = tape.derivs[op.id]
-            #         dy_id != nothing || continue
-            #         x = find_tuple_field_source_var(tape, op)
-            #         if x != nothing
-            #             set_or_add_deriv!(tape, x, tape[dy_id])
-            #             # tape.derivs[x_id] = dy_id
-            #         end
-            #     end
-            # elseif op.fn in (__new__, Base.indexed_iterate)
-            #     # we take care of these operations somewhere else
-            #     # so just skip them here
-            # else
-            if true
-                # ordinary function call
-                for i=1:length(op.args)
-                    # backpropagate only non-constant vars
-                    # note that it also prevents backprop on 1st param of broadcast
-                    arg_op = tape[op.args[i]]
-                    if !isa(arg_op, Constant) && !dont_diff(tape, op, i)
-                        # println(op, " ", i)
-                        step_back!(tape, op, i)
-                    end
+            # ordinary function call
+            for i=1:length(op.args)
+                # backpropagate only non-constant vars
+                # note that it also prevents backprop on 1st param of broadcast
+                arg_op = tape[op.args[i]]
+                if !isa(arg_op, Constant) && !dont_diff(tape, op, i)
+                    # println(op, " ", i)
+                    step_back!(tape, op, i)
                 end
             end
         end

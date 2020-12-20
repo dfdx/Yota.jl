@@ -17,20 +17,20 @@ function ∇__new__(dy, T, idx)
 end
 
 
-function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i...)
-    dx[i...] = ds
-    return dx
-end
-
-function ungetindex!(dx::AbstractArray, x::AbstractArray, ds, i::AbstractArray{Int})
-    dx[i] = ds
-    return dx
+function ungetindex!(dx::AbstractArray, ::AbstractArray, dy, I...)
+    return Scatter.scatter_add2!(dx, dy, I...)
 end
 
 
-function ungetindex(x::AbstractArray, ds, i...)
+function ungetindex!(dx::AbstractArray, x::AbstractArray, dy::Number, I::Integer...)
+    device = device_of(dx)
+    return ungetindex!(dx, x, device([dy]), I...)
+end
+
+
+function ungetindex(x::AbstractArray, dy, I...)
     dx = zero(x)
-    return ungetindex!(dx, x, ds, i...)
+    return ungetindex!(dx, x, dy, I...)
 end
 
 
@@ -42,18 +42,11 @@ function ungetindex(x::Tuple, dy, I...)
 end
 
 
-function sum_grad(x::AbstractArray, ds)
+function ∇sum(x::AbstractArray, dy)
     dx = similar(x)
-    dx .= ds
+    dx .= dy
     return dx
 end
-
-
-# function mean_grad(x::AbstractArray, ds)
-#     dx = similar(x)
-#     dx .= ds ./ length(x)
-#     return dx
-# end
 
 
 function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
@@ -86,7 +79,7 @@ function unbroadcast(x::AbstractArray, Δ)
     end
 end
 
-unbroadcast(x::Number, Δ) = sum(Δ)
+unbroadcast(::Number, Δ) = sum(Δ)
 
 function unbroadcast_prod_x(x::AbstractArray, y::AbstractArray, Δ)
     if size(x) == size(Δ)

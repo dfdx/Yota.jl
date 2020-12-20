@@ -29,6 +29,7 @@ is_cuarray(x) = startswith(string(typeof(x)), "CuArray")
 
 # currently GPU's ID is just a placeholder
 guess_device(args) = any(is_cuarray, args) ? GPU(1) : CPU()
+device_of(A) = A isa CuArray ? GPU(1) : CPU()
 
 """
 Retrieve function compatible with specified device

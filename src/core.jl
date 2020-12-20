@@ -7,6 +7,7 @@ using CUDA
 
 
 include("utils.jl")
+include("scatter/scatter.jl")
 include("helpers.jl")
 include("devices.jl")
 include("tape.jl")
@@ -19,10 +20,6 @@ include("update.jl")
 include("transform.jl")
 include("cuda.jl")
 
-
-# function __init__()
-#     @require CuArrays="3a865a2d-5b23-5a0f-bc46-62713ec82fae" include("cuda.jl")
-# end
 
 const BEST_AVAILABLE_DEVICE = Ref{AbstractDevice}(CPU())
 
