@@ -145,13 +145,6 @@ compile!(tape)
 # 492.063 ns (2 allocations: 144 bytes)
 ```
 
-Note that `trace()` is an alias to `irtrace()` - IRTools-based tracer. As of Yota 0.4.0, two other tracers are available:
-
- * `ctrace()`, based on [Cassette.jl](https://github.com/jrevels/Cassette.jl)
- * `itrace()`, based on [JuliaInterpreter.jl](https://github.com/JuliaDebug/JuliaInterpreter.jl)
-
-These tracers can be used for experimental purposes, but **their reliability or even existence is not guaranteed in future**. For any long-term code please use alias `trace()` which always points to the most recent and well-tested implementation.
-
 ## CUDA support
 
 `CuArray` is fully supported. If you encounter an issue with CUDA arrays which you don't have with ordinary arrays, please file a bug.

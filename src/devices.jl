@@ -9,27 +9,13 @@ end
 
 GPU() = GPU(1)
 
-
-"""
-Check if the argument is of type CuArray. Doesn't require CuArrays.jl to be loaded
-"""
-is_cuarray(x) = startswith(string(typeof(x)), "CuArray")
-
-# function has_cuda_inputs(tape::Tape)
-#     res = false
-#     for op in tape
-#         if op isa Input && op.val isa CuArray
-#             res = true
-#             break
-#         end
-#     end
-#     return res
-# end
+is_cuarray(x) = x isa CuArray
 
 
 # currently GPU's ID is just a placeholder
 guess_device(args) = any(is_cuarray, args) ? GPU(1) : CPU()
 device_of(A) = A isa CuArray ? GPU(1) : CPU()
+
 
 """
 Retrieve function compatible with specified device
@@ -56,3 +42,6 @@ to_device(device::CPU, f::Function, args) = f
 
 (device::CPU)(x) = to_device(device, x)
 (device::GPU)(x) = to_device(device, x)
+
+
+to_same_device(A, example) = device_of(example)(A)
