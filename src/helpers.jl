@@ -93,11 +93,13 @@ function unbroadcast_prod_x(x::AbstractArray, y::AbstractArray, Δ)
 end
 unbroadcast_prod_y(x::AbstractArray, y::AbstractArray, Δ) = unbroadcast_prod_x(y, x, Δ)
 
-device_like(example, a) = (device = guess_device([example]); device(a))
-unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(device_like(y, [x]), y, Δ)[1]
-unbroadcast_prod_x(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_x(x, device_like(x, [y]), Δ)
-unbroadcast_prod_y(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_y(x, device_like(x, [y]), Δ)[1]
-unbroadcast_prod_y(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_y(device_like(y, [x]), y, Δ)
+# device_like(example, a) = (device = guess_device([example]); device(a))
+
+# unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(device_like(y, [x]), y, Δ)[1]
+unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(to_same_device([x], y), y, Δ)[1]
+unbroadcast_prod_x(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_x(x, to_same_device([y], x), Δ)
+unbroadcast_prod_y(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_y(x, to_same_device([y], x), Δ)[1]
+unbroadcast_prod_y(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_y(to_same_device([x], y), y, Δ)
 
 
 untranspose_vec(ds::Transpose{T, <:AbstractVector{T}}) where T = transpose(ds)
