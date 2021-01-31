@@ -147,6 +147,75 @@ function set_return!(t::IRTracer, arg_sid_ref)
 end
 
 
+# TODO: check on several examples
+function is_loop(block::IRTools.Block)
+    for br in IRTools.branches(block)
+        # if a branch refers to an earlier block and is not return
+        # then it must be a loop
+        if br.block <= block.id && br.block != 0
+            return true
+        end
+    end
+    return false
+end
+
+
+function block_input_ssa_ids(block::IRTools.Block)
+    result = []
+    for (stmt_id, (block_id, arg_id)) in enumerate(block.ir.defs)
+        if block_id == block.id && arg_id < 0
+            push!(result, stmt_id)
+        end
+    end
+    return result
+end
+
+
+function enter_loop!(t::IRTracer, input_ssa_ids::Vector)  # Int or IRTools.Variable?
+
+    # TODO:
+    # 1.
+    # 2.
+    # 3.
+    # 4. replace IRTracer.tape with subtape
+    # 5. Set .traced = false (?)
+
+    # create subtape, with the current tape as parent
+    subtape = Tape()
+    subtape.parent = t.tape
+    t.tape = subtape
+    # create and push a new frame
+    # frame = Frame(Dict(), -1)
+    # push!(t.frames, frame)
+    # record inputs to the subtape & populate the new frame's ssa2id
+
+    # TODO: current error happens because loop IR refers to SSA vars from outside
+    # the loop. We should either use the same frame, or copy parent
+    # frame's ssa2tape to the child's
+    
+    for ssa_id in input_ssa_ids
+        parent_tape_id = t.frames[end].ssa2tape[ssa_id]
+        val = t.tape.parent[parent_tape_id].val
+        tape_id = record!(t.tape, Input, val)
+        t.frames[end].ssa2tape[ssa_id] = tape_id
+    end
+
+
+end
+
+
+function exit_loop!(t::IRTracer)
+    # TODO:
+    # 1. Set .traced = true (?)
+    # 2. Record a tuple of output branch targets as return value
+    # 3. Create a loop operator on the current tape,
+    # 4. Optimize the loop / record conditions / finish the loop logic
+    # 5. t.tape = t.tape.parent
+    
+end
+
+
+
 ################################################################################
 #                        IRTracer (body) + irtrace()                           #
 ################################################################################
@@ -206,9 +275,20 @@ function trace_branches!(ir::IR)
 end
 
 
+function trace_loops!(ir::IR)
+    for block in IRTools.blocks(ir)
+        if is_loop(block)
+            pushfirst!(block, Expr(:call, enter_loop!, self, block_input_ssa_ids(block)))
+            push!(block, Expr(:call, exit_loop!, self))
+        end
+    end
+end
+
+
+
 @dynamo function (t::IRTracer)(fargs...)
     ir = IR(fargs...)
-    ir == nothing && return   # intrinsic functions
+    ir === nothing && return   # intrinsic functions
     rewrite_special_cases!(ir)
     for (v, st) in ir
         ex = st.expr
@@ -228,11 +308,42 @@ end
         end
     end
     trace_branches!(ir)
+    trace_loops!(ir)
     return ir
 end
 
 
-function irtrace(f, args...; primitives=PRIMITIVES, optimize=true)
+# @dynamo function (t::IRTracer)(fargs...)
+#     ir = IR(fargs...)
+#     ir === nothing && return   # intrinsic functions
+#     rewrite_special_cases!(ir)
+#     for block in IRTools.blocks(ir)
+#         ex = st.expr
+#         # note the difference:
+#         # * `ex.args` is an array and thus will be passed to a function as is,
+#         # including definitions of IRTools.Variable;
+#         # * `ex.args...` is top-level to this expression and thus all Variable's
+#         # will be replaced with actual values during runtime
+#         if Meta.isexpr(ex, :call)
+#             ir[v] = IRTools.xcall(record_or_recurse!, self, v.id, ex.args, ex.args...)
+#         elseif is_loop(block)
+#         else
+#             # e.g. GlobalRef
+#             # note: using insertafter!() due to
+#             # https://github.com/FluxML/IRTools.jl/issues/78
+#             # ir[v] = Expr(:call, record_const!, self, v.id, v)
+#             insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
+#         end
+#     end
+#     trace_branches!(ir)
+#     return ir
+# end
+
+
+"""
+Trace function execution, returning its value and the generated tape.
+"""
+function trace(f, args...; primitives=PRIMITIVES, optimize=true)
     t = IRTracer(; primitives=primitives)
     for arg in args
         record!(t.tape, Input, arg)
@@ -246,6 +357,3 @@ function irtrace(f, args...; primitives=PRIMITIVES, optimize=true)
     end
     return val, tape
 end
-
-
-trace = irtrace
