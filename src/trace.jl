@@ -147,6 +147,11 @@ function set_return!(t::IRTracer, arg_sid_ref)
 end
 
 
+################################################################################
+#                                  Loop utils                                  #
+################################################################################
+
+
 # TODO: check on several examples
 function is_loop(block::IRTools.Block)
     for br in IRTools.branches(block)
@@ -160,6 +165,7 @@ function is_loop(block::IRTools.Block)
 end
 
 
+"""Get SSA IDs of a block's inputs"""
 function block_input_ssa_ids(block::IRTools.Block)
     result = []
     for (stmt_id, (block_id, arg_id)) in enumerate(block.ir.defs)
@@ -171,47 +177,53 @@ function block_input_ssa_ids(block::IRTools.Block)
 end
 
 
-function enter_loop!(t::IRTracer, input_ssa_ids::Vector)  # Int or IRTools.Variable?
+function loop_exit_branch(block::IRTools.Block)
+    branches = IRTools.branches(block)
+    return branches[findfirst([br.block > block.id for br in branches])]
+end
 
-    # TODO:
-    # 1.
-    # 2.
-    # 3.
-    # 4. replace IRTracer.tape with subtape
-    # 5. Set .traced = false (?)
 
+function loop_condition_ssa_id(block::IRTools.Block)
+    br = loop_exit_branch(block)
+    return br.condition
+end
+
+
+"""Get SSA IDs of exit arguments of a loop block"""
+function loop_exit_ssa_ids(block::IRTools.Block)
+    br = loop_exit_branch(block)
+    return br.args
+end
+
+
+function enter_loop!(t::IRTracer, input_ssa_ids::Vector)
     # create subtape, with the current tape as parent
     subtape = Tape()
     subtape.parent = t.tape
-    t.tape = subtape
-    # create and push a new frame
-    # frame = Frame(Dict(), -1)
-    # push!(t.frames, frame)
     # record inputs to the subtape & populate the new frame's ssa2id
-
-    # TODO: current error happens because loop IR refers to SSA vars from outside
-    # the loop. We should either use the same frame, or copy parent
-    # frame's ssa2tape to the child's
-    
     for ssa_id in input_ssa_ids
         parent_tape_id = t.frames[end].ssa2tape[ssa_id]
-        val = t.tape.parent[parent_tape_id].val
-        tape_id = record!(t.tape, Input, val)
+        val = subtape.parent[parent_tape_id].val
+        tape_id = record!(subtape, Input, val)
         t.frames[end].ssa2tape[ssa_id] = tape_id
     end
+    # replace IRTracer.tape with subtape
+    t.tape = subtape
+
+    # TODO: Set .traced = false (?)
 
 
 end
 
 
-function exit_loop!(t::IRTracer)
+function exit_loop!(t::IRTracer, loop_exit_ssa_ids::Vector)
     # TODO:
     # 1. Set .traced = true (?)
     # 2. Record a tuple of output branch targets as return value
     # 3. Create a loop operator on the current tape,
     # 4. Optimize the loop / record conditions / finish the loop logic
     # 5. t.tape = t.tape.parent
-    
+
 end
 
 
@@ -278,8 +290,11 @@ end
 function trace_loops!(ir::IR)
     for block in IRTools.blocks(ir)
         if is_loop(block)
+            # loop block start
             pushfirst!(block, Expr(:call, enter_loop!, self, block_input_ssa_ids(block)))
-            push!(block, Expr(:call, exit_loop!, self))
+            # loop block end
+
+            push!(block, Expr(:call, exit_loop!, self, loop_block_))
         end
     end
 end
