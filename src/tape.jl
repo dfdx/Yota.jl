@@ -171,6 +171,7 @@ end
 mutable struct Tape{C}
     # linearized execution graph
     ops::Vector{<:AbstractOp}
+<<<<<<< HEAD
     # result variable
     result::Variable
     # application-specific context
@@ -184,6 +185,26 @@ end
 Tape(c::C) where C = Tape(AbstractOp[], Variable(0), c)
 # by default context is just a Dict{Any, Any}
 Tape() = Tape(Dict{Any,Any}())
+=======
+    # id of result variable
+    resultid::Int
+    # derivs[var_id] == grad_id
+    derivs::Dict{Int,Int}
+    # compiled tape or nothing
+    compiled::MaybeFunction
+    # device of the tape
+    device::AbstractDevice
+    # for subtapes - parent tape
+    parent::Union{Tape, Nothing}
+    # for loop - if it has already been traced once
+    traced::Bool
+end
+
+Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device, nothing, false)
+Tape() = Tape(CPU())
+Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
+                                tape.compiled, tape.device, tape.parent, tape.traced)
+>>>>>>> 8631569 (Partially implement exit_loop!() in the new tracer)
 
 
 function Base.show(io::IO, tape::Tape{C}) where C
@@ -299,12 +320,18 @@ end
 """Returned version of the var bound to the tape op"""
 bound(tape::Tape, v::Variable) = Variable(tape[v])
 
+<<<<<<< HEAD
 
 """
     rebind!(tape::Tape, op, st::Dict)
     rebind!(tape::Tape, st::Dict; from, to)
 
 Rebind all variables according to substitution table. Example:
+=======
+########################################################################
+#                           TRANSFORMATIONS                            #
+########################################################################
+>>>>>>> 8631569 (Partially implement exit_loop!() in the new tracer)
 
     tape = Tape()
     v1, v2 = inputs!(tape, nothing, 3.0, 5.0)

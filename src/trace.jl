@@ -185,6 +185,18 @@ function enter_loop!(t::IRTracer, input_ssa_ids::Vector)  # Int or IRTools.Varia
     # 4. replace IRTracer.tape with subtape
     # 5. Set .traced = false (?)
 
+<<<<<<< HEAD
+=======
+"""Pseudo op to designate loop end. Removed after Loop op is created"""
+mutable struct _LoopEnd <: AbstractOp
+    id::Int
+end
+
+
+function enter_loop!(t::IRTracer, input_ssa_ids::Vector)
+    # skip if it's not the first iteration
+    t.tape.traced && return
+>>>>>>> 8631569 (Partially implement exit_loop!() in the new tracer)
     # create subtape, with the current tape as parent
     subtape = Tape()
     subtape.parent = t.tape
@@ -204,6 +216,7 @@ function enter_loop!(t::IRTracer, input_ssa_ids::Vector)  # Int or IRTools.Varia
         tape_id = record!(t.tape, Input, val)
         t.frames[end].ssa2tape[ssa_id] = tape_id
     end
+<<<<<<< HEAD
 
 
 end
@@ -212,6 +225,19 @@ end
 function exit_loop!(t::IRTracer)
     # TODO:
     # 1. Set .traced = true (?)
+=======
+    # replace IRTracer.tape with subtape
+    t.tape = subtape
+end
+
+
+function exit_loop!(t::IRTracer, exit_ssa_ids::Vector)
+    # set flag to stop creatnig new subtapes
+    t.tape.traced = true
+    # record a special op to designate the loop end
+    record!(t.tape, _LoopEnd)
+    # TODO:   
+>>>>>>> 8631569 (Partially implement exit_loop!() in the new tracer)
     # 2. Record a tuple of output branch targets as return value
     # 3. Create a loop operator on the current tape,
     # 4. Optimize the loop / record conditions / finish the loop logic
@@ -295,7 +321,12 @@ function trace_loops!(ir::IR)
     for block in IRTools.blocks(ir)
         if is_loop(block)
             pushfirst!(block, Expr(:call, enter_loop!, self, block_input_ssa_ids(block)))
+<<<<<<< HEAD
             push!(block, Expr(:call, exit_loop!, self))
+=======
+            # loop block end
+            push!(block, Expr(:call, exit_loop!, self, loop_exit_ssa_ids(block)))
+>>>>>>> 8631569 (Partially implement exit_loop!() in the new tracer)
         end
     end
 end
