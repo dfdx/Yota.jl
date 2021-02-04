@@ -196,7 +196,15 @@ function loop_exit_ssa_ids(block::IRTools.Block)
 end
 
 
+"""Pseudo op to designate loop end. Removed after Loop op is created"""
+mutable struct _LoopEnd <: AbstractOp
+    id::Int
+end
+
+
 function enter_loop!(t::IRTracer, input_ssa_ids::Vector)
+    # skip if it's not the first iteration
+    t.tape.traced && return
     # create subtape, with the current tape as parent
     subtape = Tape()
     subtape.parent = t.tape
@@ -209,16 +217,15 @@ function enter_loop!(t::IRTracer, input_ssa_ids::Vector)
     end
     # replace IRTracer.tape with subtape
     t.tape = subtape
-
-    # TODO: Set .traced = false (?)
-
-
 end
 
 
-function exit_loop!(t::IRTracer, loop_exit_ssa_ids::Vector)
-    # TODO:
-    # 1. Set .traced = true (?)
+function exit_loop!(t::IRTracer, exit_ssa_ids::Vector)
+    # set flag to stop creatnig new subtapes
+    t.tape.traced = true
+    # record a special op to designate the loop end
+    record!(t.tape, _LoopEnd)
+    # TODO:   
     # 2. Record a tuple of output branch targets as return value
     # 3. Create a loop operator on the current tape,
     # 4. Optimize the loop / record conditions / finish the loop logic
@@ -293,8 +300,7 @@ function trace_loops!(ir::IR)
             # loop block start
             pushfirst!(block, Expr(:call, enter_loop!, self, block_input_ssa_ids(block)))
             # loop block end
-
-            push!(block, Expr(:call, exit_loop!, self, loop_block_))
+            push!(block, Expr(:call, exit_loop!, self, loop_exit_ssa_ids(block)))
         end
     end
 end
