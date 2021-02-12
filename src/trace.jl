@@ -177,6 +177,26 @@ function block_input_ssa_ids(block::IRTools.Block)
 end
 
 
+"""
+Get SSA IDs of arguments which are not part of this block
+(e.g. come from outside of a loop)
+"""
+function block_outsider_ssa_ids(block::IRTools.Block)
+    result = []
+    min_id = minimum(block_input_ssa_ids(block))
+    for (v, stmt) in block
+        ex = stmt.expr
+        @assert Meta.isexpr(ex, :call)
+        for arg in ex.args[2:end]
+            if arg isa IRTools.Variable && arg.id < min_id
+                push!(result, arg.id)
+            end
+        end
+    end
+    return result
+end
+
+
 function loop_exit_branch(block::IRTools.Block)
     branches = IRTools.branches(block)
     return branches[findfirst([br.block > block.id for br in branches])]
@@ -202,15 +222,30 @@ mutable struct _LoopEnd <: AbstractOp
 end
 
 
-function enter_loop!(t::IRTracer, input_ssa_ids::Vector)
+"""
+Trigger loop start operations. 
+
+Arguments:
+----------
+
+ * t :: IRTracer
+    Current tracer
+ * loop_input_ssa_ids :: Vector{Int}
+    SSA IDs of variables which will be used as loop inputs. Includes
+    loop block inputs and any outside IDs
+"""
+function enter_loop!(t::IRTracer, loop_input_ssa_ids::Vector{Int})
     # skip if it's not the first iteration
     t.tape.traced && return
     # create subtape, with the current tape as parent
     subtape = Tape()
     subtape.parent = t.tape
+    # create a new frame and push to the list
+    frame = Frame(Dict(), -1)
+    push!(t.frames, frame)
     # record inputs to the subtape & populate the new frame's ssa2id
-    for ssa_id in input_ssa_ids
-        parent_tape_id = t.frames[end].ssa2tape[ssa_id]
+    for ssa_id in loop_input_ssa_ids
+        parent_tape_id = t.frames[end - 1].ssa2tape[ssa_id]
         val = subtape.parent[parent_tape_id].val
         tape_id = record!(subtape, Input, val)
         t.frames[end].ssa2tape[ssa_id] = tape_id
@@ -225,7 +260,7 @@ function exit_loop!(t::IRTracer, exit_ssa_ids::Vector)
     t.tape.traced = true
     # record a special op to designate the loop end
     record!(t.tape, _LoopEnd)
-    # TODO:   
+    # TODO:
     # 2. Record a tuple of output branch targets as return value
     # 3. Create a loop operator on the current tape,
     # 4. Optimize the loop / record conditions / finish the loop logic
@@ -297,9 +332,16 @@ end
 function trace_loops!(ir::IR)
     for block in IRTools.blocks(ir)
         if is_loop(block)
-            # loop block start
-            pushfirst!(block, Expr(:call, enter_loop!, self, block_input_ssa_ids(block)))
+            # loop block start            
+            loop_input_ssa_ids = vcat(
+                block_input_ssa_ids(block),
+                block_outsider_ssa_ids(block),
+            )
+            pushfirst!(block, Expr(:call, enter_loop!, self, loop_input_ssa_ids))
             # loop block end
+            # TODO: find all variables with id less than the first input
+            # pass them as additional inputs (ssa2tape[arg_id] = new_tape_id)
+            # When creating LoopOp pass these additional inputs as well
             push!(block, Expr(:call, exit_loop!, self, loop_exit_ssa_ids(block)))
         end
     end

@@ -390,6 +390,10 @@ exec!(tape::Tape, op::Constant) = ()
 exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
 exec!(tape::Tape, op::Call) = (op.val = op.fn([tape[id].val for id in op.args]...))
 
+function exec!(tape::Tape, op::Loop)
+
+end
+
 
 function play!(tape::Tape, args...; use_compiled=true, debug=false)
     for (i, val) in enumerate(args)
