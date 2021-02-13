@@ -321,10 +321,26 @@ end
 bound(tape::Tape, v::Variable) = Variable(tape[v])
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 """
     rebind!(tape::Tape, op, st::Dict)
     rebind!(tape::Tape, st::Dict; from, to)
+=======
+mutable struct Loop <: AbstractOp
+    id::Int
+    parent_input_ids::Vector{Int}
+    cond_id::Int
+    exit_id::Int
+    subtape::Tape
+end
+
+function Base.show(io::IO, loop::Loop)
+    input_id_str = join(["%$id" for id in loop.parent_input_ids], ", ")
+    print(io, "%$(loop.id) = Loop($input_id_str)")
+end
+
+>>>>>>> a745a45 (Create (incomplete) Loop op on parent tape)
 
 Rebind all variables according to substitution table. Example:
 =======
