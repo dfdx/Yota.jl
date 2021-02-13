@@ -204,7 +204,15 @@ end
 
 mutable struct Loop <: AbstractOp
     id::Int
+    parent_input_ids::Vector{Int}
+    cond_id::Int
+    exit_id::Int
     subtape::Tape
+end
+
+function Base.show(io::IO, loop::Loop)
+    input_id_str = join(["%$id" for id in loop.parent_input_ids], ", ")
+    print(io, "%$(loop.id) = Loop($input_id_str)")
 end
 
 

@@ -205,7 +205,7 @@ end
 
 function loop_condition_ssa_id(block::IRTools.Block)
     br = loop_exit_branch(block)
-    return br.condition
+    return br.condition.id
 end
 
 
@@ -223,7 +223,7 @@ end
 
 
 """
-Trigger loop start operations. 
+Trigger loop start operations.
 
 Arguments:
 ----------
@@ -234,7 +234,7 @@ Arguments:
     SSA IDs of variables which will be used as loop inputs. Includes
     loop block inputs and any outside IDs
 """
-function enter_loop!(t::IRTracer, loop_input_ssa_ids::Vector{Int})
+function enter_loop!(t::IRTracer, loop_input_ssa_ids::Vector)
     # skip if it's not the first iteration
     t.tape.traced && return
     # create subtape, with the current tape as parent
@@ -255,11 +255,36 @@ function enter_loop!(t::IRTracer, loop_input_ssa_ids::Vector{Int})
 end
 
 
-function exit_loop!(t::IRTracer, exit_ssa_ids::Vector)
+"""
+Trigget loop end operations
+"""
+function exit_loop!(t::IRTracer,
+                    input_ssa_ids::Vector,
+                    cond_ssa_id::Any,
+                    exit_ssa_ids::Vector)
     # set flag to stop creatnig new subtapes
     t.tape.traced = true
-    # record a special op to designate the loop end
+    # record a special op to designate the end of the loop code
+    # tracer will continue to record ops, but later we truncate
+    # the tape to get only ops before _LoopEnd
     record!(t.tape, _LoopEnd)
+    # loop subtape already contains a variable designating condition
+    # of loop continuation; if this condition is false,
+    # we are ready to exit the loop and record Loop operation
+    cond_var = t.tape[t.frames[end].ssa2tape[cond_ssa_id]]
+    if !cond_var.val
+        # swap active tape back
+        loop_frame = pop!(t.frames)
+        ssa2tape = loop_frame.ssa2tape
+        parent_ssa2tape = t.frames[end].ssa2tape
+        subtape = t.tape
+        t.tape = t.tape.parent
+        # record loop operation        
+        parent_input_ids = [parent_ssa2tape[ssa_id] for ssa_id in input_ssa_ids]
+        cond_id = ssa2tape[cond_ssa_id]
+        exit_id = -1   # TODO: fill these
+        loop_id = record!(t.tape, Loop, parent_input_ids, cond_id, exit_id, subtape)
+    end
     # TODO:
     # 2. Record a tuple of output branch targets as return value
     # 3. Create a loop operator on the current tape,
@@ -332,7 +357,7 @@ end
 function trace_loops!(ir::IR)
     for block in IRTools.blocks(ir)
         if is_loop(block)
-            # loop block start            
+            # loop block start
             loop_input_ssa_ids = vcat(
                 block_input_ssa_ids(block),
                 block_outsider_ssa_ids(block),
@@ -342,7 +367,10 @@ function trace_loops!(ir::IR)
             # TODO: find all variables with id less than the first input
             # pass them as additional inputs (ssa2tape[arg_id] = new_tape_id)
             # When creating LoopOp pass these additional inputs as well
-            push!(block, Expr(:call, exit_loop!, self, loop_exit_ssa_ids(block)))
+            push!(block, Expr(:call, exit_loop!, self,
+                              loop_input_ssa_ids,
+                              loop_condition_ssa_id(block),
+                              loop_exit_ssa_ids(block)))
         end
     end
 end
