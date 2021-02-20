@@ -91,14 +91,14 @@ mutable struct Tape
     device::AbstractDevice
     # for subtapes - parent tape
     parent::Union{Tape, Nothing}
-    # for loop - if it has already been traced once
-    traced::Bool
+    # tape metadata (depends on the context)
+    meta::Dict
 end
 
-Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device, nothing, false)
+Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device, nothing, Dict())
 Tape() = Tape(CPU())
 Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
-                                tape.compiled, tape.device, tape.parent, tape.traced)
+                                tape.compiled, tape.device, tape.parent, tape.meta)
 
 
 function Base.show(io::IO, tape::Tape)

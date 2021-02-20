@@ -212,7 +212,7 @@ end
 """Get SSA IDs of exit arguments of a loop block"""
 function loop_exit_ssa_ids(block::IRTools.Block)
     br = loop_exit_branch(block)
-    return br.args
+    return [arg.id for arg in br.args]
 end
 
 
@@ -220,6 +220,11 @@ end
 mutable struct _LoopEnd <: AbstractOp
     id::Int
 end
+
+
+const LOOP_TRACED_FLAG = "loop_already_traced"
+const LOOP_EXIT_TAPE_IDS = "loop_exit_tape_ids"
+const LOOP_COND_ID = "loop_cond_id"
 
 
 """
@@ -233,10 +238,21 @@ Arguments:
  * loop_input_ssa_ids :: Vector{Int}
     SSA IDs of variables which will be used as loop inputs. Includes
     loop block inputs and any outside IDs
+
+This function is added to the very beginning of the loop block(s).
+During the first iteration we initialize a subtape which will be used
+later to create the Loop operation on the parent tape. Since all iterations
+of the loop produce identical operations, we only need to trace it once.
+However, it turns out to be easier to record all iterations (seprated by 
+a special _LoopEnd op) and then prune unused iterations.
+
+Another important detail is that Loop's subtape is a completely valid
+and independent tape with its own call frame and inputs which include
+all explicit and implicit inputs to the loop's block in the original IR.
 """
 function enter_loop!(t::IRTracer, loop_input_ssa_ids::Vector)
     # skip if it's not the first iteration
-    t.tape.traced && return
+    haskey(t.tape.meta, LOOP_TRACED_FLAG) && return
     # create subtape, with the current tape as parent
     subtape = Tape()
     subtape.parent = t.tape
@@ -256,14 +272,25 @@ end
 
 
 """
-Trigget loop end operations
+Trigget loop end operations. 
+
+This function is added just before the end of the loop block. 
+Since we record all iterations of the loop, we must remember tape IDs 
+of continuation condition and exit variables during the first run.
 """
 function exit_loop!(t::IRTracer,
                     input_ssa_ids::Vector,
                     cond_ssa_id::Any,
                     exit_ssa_ids::Vector)
-    # set flag to stop creatnig new subtapes
-    t.tape.traced = true
+    if !haskey(t.tape.meta, LOOP_TRACED_FLAG)
+        # record exit tape IDs as of first iteration
+        # we will use them later
+        t.tape.meta[LOOP_EXIT_TAPE_IDS] =
+            [t.frames[end].ssa2tape[ssa_id] for ssa_id in exit_ssa_ids]
+        t.tape.meta[LOOP_COND_ID] = t.frames[end].ssa2tape[cond_ssa_id]
+        # set flag to stop creatnig new subtapes
+        t.tape.meta[LOOP_TRACED_FLAG] = true
+    end
     # record a special op to designate the end of the loop code
     # tracer will continue to record ops, but later we truncate
     # the tape to get only ops before _LoopEnd
@@ -279,18 +306,19 @@ function exit_loop!(t::IRTracer,
         parent_ssa2tape = t.frames[end].ssa2tape
         subtape = t.tape
         t.tape = t.tape.parent
-        # record loop operation        
+        # remove repeating blocks
+        first_loop_end = findfirst(op -> isa(op, _LoopEnd), subtape.ops)
+        subtape.ops = subtape.ops[1:first_loop_end-1]
+        # record output tuple
+        exit_tape_ids = subtape.meta[LOOP_EXIT_TAPE_IDS]
+        exit_val = tuple([subtape[id].val for id in exit_tape_ids]...)
+        exit_id = record!(subtape, Call, exit_val, tuple, exit_tape_ids)
+        subtape.resultid = exit_id
+        # record the loop operation
         parent_input_ids = [parent_ssa2tape[ssa_id] for ssa_id in input_ssa_ids]
-        cond_id = ssa2tape[cond_ssa_id]
-        exit_id = -1   # TODO: fill these
+        cond_id = subtape.meta[LOOP_COND_ID]
         loop_id = record!(t.tape, Loop, parent_input_ids, cond_id, exit_id, subtape)
     end
-    # TODO:
-    # 2. Record a tuple of output branch targets as return value
-    # 3. Create a loop operator on the current tape,
-    # 4. Optimize the loop / record conditions / finish the loop logic
-    # 5. t.tape = t.tape.parent
-
 end
 
 
