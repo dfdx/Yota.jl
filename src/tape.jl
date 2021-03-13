@@ -206,8 +206,10 @@ mutable struct Loop <: AbstractOp
     id::Int
     parent_input_ids::Vector{Int}
     cond_id::Int
+    continue_ids::Vector{Int}
     exit_id::Int
     subtape::Tape
+    val::Any
 end
 
 function Base.show(io::IO, loop::Loop)
@@ -399,7 +401,13 @@ exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
 exec!(tape::Tape, op::Call) = (op.val = op.fn([tape[id].val for id in op.args]...))
 
 function exec!(tape::Tape, op::Loop)
-
+    subtape = op.subtape    
+    # note: not passing play! options
+    play!(subtape, [tape[id].val for id in op.parent_input_ids]...)
+    while op.subtape[op.cond_id].val        
+        play!(subtape, [subtape[id].val for id in op.continue_ids]...)        
+    end
+    op.val = subtape[op.exit_id].val
 end
 
 
