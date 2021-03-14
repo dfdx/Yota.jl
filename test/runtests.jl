@@ -5,6 +5,7 @@ using Yota: ∇mean, setfield_nested!, copy_with, simplegrad, remove_unused
 using Yota: find_field_source_var, eliminate_common  # unwind_iterate
 using Yota: unvcat, unhcat, uncat, ungetindex!, ungetindex
 using CUDA
+import ChainRulesCore: Composite, Zero
 
 
 CUDA.allowscalar(false)
