@@ -152,17 +152,32 @@ end
 ################################################################################
 
 
-# TODO: check on several examples
-function is_loop(block::IRTools.Block)
-    for br in IRTools.branches(block)
+function get_loop_start_block(end_block::IRTools.Block)
+    for br in IRTools.branches(end_block)
         # if a branch refers to an earlier block and is not return
         # then it must be a loop
-        if br.block <= block.id && br.block != 0
-            return true
+        if br.block <= end_block.id && br.block != 0
+            return IRTools.blocks(end_block.ir)[br.block]
         end
     end
-    return false
+    return nothing
 end
+
+
+# TODO: replace with something like loop_start_block()
+# which returns:
+# * nothing, if block is not part of loop
+# * this or earlier block if they are part of the same loop
+# function is_loop(block::IRTools.Block)
+#     for br in IRTools.branches(block)
+#         # if a branch refers to an earlier block and is not return
+#         # then it must be a loop
+#         if br.block <= block.id && br.block != 0
+#             return true
+#         end
+#     end
+#     return false
+# end
 
 
 """Get SSA IDs of a block's inputs"""
@@ -177,13 +192,28 @@ function block_input_ssa_ids(block::IRTools.Block)
 end
 
 
+"""Get SSA IDs of a block's statements"""
+function block_stmt_ssa_ids(block::IRTools.Block)
+    result = []
+    for (stmt_id, (block_id, arg_id)) in enumerate(block.ir.defs)
+        if block_id == block.id && arg_id > 0
+            push!(result, stmt_id)
+        end
+    end
+    return result
+end
+
+
 """
 Get SSA IDs of arguments which are not part of this block
 (e.g. come from outside of a loop)
 """
 function block_outsider_ssa_ids(block::IRTools.Block)
     result = []
-    min_id = minimum(block_input_ssa_ids(block))
+    block_inputs = block_input_ssa_ids(block)
+    min_id = (!isempty(block_inputs) ?
+              minimum(block_inputs) :
+              minimum(block_stmt_ssa_ids(block)))
     for (v, stmt) in block
         ex = stmt.expr
         @assert Meta.isexpr(ex, :call)
@@ -197,33 +227,33 @@ function block_outsider_ssa_ids(block::IRTools.Block)
 end
 
 
-function loop_exit_branch(block::IRTools.Block)
+function get_loop_exit_branch(block::IRTools.Block)
     branches = IRTools.branches(block)
     return branches[findfirst([br.block > block.id for br in branches])]
 end
 
 
-function loop_continue_branch(block::IRTools.Block)
+function get_loop_continue_branch(block::IRTools.Block)
     branches = IRTools.branches(block)
     return branches[findfirst([br.block <= block.id for br in branches])]
 end
 
 
-function loop_condition_ssa_id(block::IRTools.Block)
-    br = loop_exit_branch(block)
+function get_loop_condition_ssa_id(block::IRTools.Block)
+    br = get_loop_exit_branch(block)
     return br.condition.id
 end
 
 
 """Get SSA IDs of exit arguments of a loop block"""
-function loop_exit_ssa_ids(block::IRTools.Block)
-    br = loop_exit_branch(block)
+function get_loop_exit_ssa_ids(block::IRTools.Block)
+    br = get_loop_exit_branch(block)
     return [arg.id for arg in br.args]
 end
 
 
-function loop_continue_ssa_ids(block::IRTools.Block)
-    br = loop_continue_branch(block)
+function get_loop_continue_ssa_ids(block::IRTools.Block)
+    br = get_loop_continue_branch(block)
     return [arg.id for arg in br.args]
 end
 
@@ -329,6 +359,8 @@ function exit_loop!(t::IRTracer,
     # we are ready to exit the loop and record Loop operation
     cond_var = t.tape[t.frames[end].ssa2tape[cond_ssa_id]]
     if !cond_var.val
+        # global STATE = (t, input_ssa_ids, cond_ssa_id, cont_ssa_ids, exit_ssa_ids, exit_target_ssa_ids)
+        # error("stop here")
         # swap active tape back
         loop_frame = pop!(t.frames)
         ssa2tape = loop_frame.ssa2tape
@@ -346,7 +378,21 @@ function exit_loop!(t::IRTracer,
         # record the loop operation
         parent_input_ids = [parent_ssa2tape[ssa_id] for ssa_id in input_ssa_ids]
         cond_id = subtape.meta[LOOP_COND_ID]
+<<<<<<< HEAD
         loop_id = record!(t.tape, Loop, parent_input_ids, cond_id, exit_id, subtape)
+=======
+        continue_ids = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
+        loop_id = record!(t.tape, Loop, parent_input_ids,
+                          cond_id, continue_ids,
+                          exit_id, subtape, exit_val)
+        # destructure loop return values to separate vars on the main tape
+        # and map branch arguments to these vars
+        for i=1:length(exit_val)
+            idx_id = record!(t.tape, Constant, i)
+            res_id = record!(t.tape, Call, exit_val[i], getfield, [loop_id, idx_id])
+            parent_ssa2tape[exit_target_ssa_ids[i]] = res_id
+        end
+>>>>>>> d1f353a (Towards tracing of WHILE loops)
     end
 end
 
@@ -446,14 +492,17 @@ end
 
 function trace_loops!(ir::IR)
     for block in IRTools.blocks(ir)
-        if is_loop(block)
+        end_block = block
+        start_block = get_loop_start_block(end_block)
+        if start_block !== nothing
             # loop block start
             loop_input_ssa_ids = vcat(
-                block_input_ssa_ids(block),
-                block_outsider_ssa_ids(block),
+                block_input_ssa_ids(start_block),
+                block_outsider_ssa_ids(start_block),
             )
-            pushfirst!(block, Expr(:call, enter_loop!, self, loop_input_ssa_ids))
+            pushfirst!(start_block, Expr(:call, enter_loop!, self, loop_input_ssa_ids))
             # loop block end
+<<<<<<< HEAD
             # TODO: find all variables with id less than the first input
             # pass them as additional inputs (ssa2tape[arg_id] = new_tape_id)
             # When creating LoopOp pass these additional inputs as well
@@ -461,6 +510,14 @@ function trace_loops!(ir::IR)
                               loop_input_ssa_ids,
                               loop_condition_ssa_id(block),
                               loop_exit_ssa_ids(block)))
+=======
+            push!(end_block, Expr(:call, exit_loop!, self,
+                              loop_input_ssa_ids,
+                              get_loop_condition_ssa_id(start_block),
+                              get_loop_continue_ssa_ids(end_block),
+                              get_loop_exit_ssa_ids(start_block),  # empty for while?
+                              branch_target_params(ir, get_loop_exit_branch(start_block))))
+>>>>>>> d1f353a (Towards tracing of WHILE loops)
         end
     end
 end
