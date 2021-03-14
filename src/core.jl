@@ -19,6 +19,7 @@ include("compile.jl")
 include("update.jl")
 include("transform.jl")
 include("cuda.jl")
+include("gradcheck.jl")
 
 
 const BEST_AVAILABLE_DEVICE = Ref{AbstractDevice}(CPU())
