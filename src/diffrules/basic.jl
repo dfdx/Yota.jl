@@ -131,12 +131,6 @@
 @diffrule __getfield__(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
 @nodiff __getfield__(_s, _f::Tuple) _f
 
-# @nodiff __new__(t, u) t
-# @nodiff __new__(t, u, v) t
-# @nodiff __new__(t, u, v, w) t
-# @nodiff __new__(t, u, v) t
-# @diffrule __new__(t, u, v) u ∇__new__(dy, t, 1)
-# @diffrule __new__(t, u, v) v ∇__new__(dy, t, 2)
 
 const LONG_VAR_NAME_LIST = (:x, :u, :v, :w, :_a, :_b, :_c, :_d, :_e, :_f, :_g)
 for n=1:length(LONG_VAR_NAME_LIST)

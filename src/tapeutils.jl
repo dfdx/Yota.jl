@@ -216,7 +216,7 @@ function field_var_from_ctor_op(tape::Tape, ctor_op::Call, fldname::Symbol)
     for ctor_def in CONSTRUCTORS
         if ctor_typ == ctor_def[1]
             fld_idx_in_ctor_def = findfirst(isequal(fldname), ctor_def[2:end])
-            if fld_idx_in_ctor_def != nothing
+            if fld_idx_in_ctor_def !== nothing
                 # tape ID of corresponding argument to the constructor
                 arg_id = ctor_op.args[fld_idx_in_ctor_def]
                 return tape[arg_id]
@@ -227,9 +227,6 @@ function field_var_from_ctor_op(tape::Tape, ctor_op::Call, fldname::Symbol)
 end
 
 
-# TODO: make unified API for 2 versions of this function
-# 1st - for __new__ constuctor
-# 2nd - for primitive constructor created using @ctor macro
 function field_var_from_ctor_op(tape::Tape, ctor::Call, getprop_op::Call)
     @assert ctor.fn == __new__
     @assert getprop_op.fn == Base.getproperty
@@ -241,54 +238,54 @@ function field_var_from_ctor_op(tape::Tape, ctor::Call, getprop_op::Call)
 end
 
 
-"""
-Given a tape and getproperty() operation, try to find a variable
-that was used to create that field
-"""
-function find_field_source_var(tape::Tape, getprop_op::Call)
-    parent = tape[getprop_op.args[1]]
-    if parent isa Call && parent.fn == __new__
-        # found constructor for this field, return variable that made up getprop_op's field
-        return field_var_from_ctor_op(tape, parent, getprop_op)
-    elseif parent isa Call && parent.fn == Base.getproperty
-        # nested getproperty, find constructor for the current struct recursively
-        ctor = find_field_source_var(tape, parent)
-        if ctor != nothing
-            return field_var_from_ctor_op(tape, ctor, getprop_op)
-        else
-            return nothing
-        end
-    else
-        # can't find source field - give up and return nothing
-        return nothing
-    end
-end
+# """
+# Given a tape and getproperty() operation, try to find a variable
+# that was used to create that field
+# """
+# function find_field_source_var(tape::Tape, getprop_op::Call)
+#     parent = tape[getprop_op.args[1]]
+#     if parent isa Call && parent.fn == __new__
+#         # found constructor for this field, return variable that made up getprop_op's field
+#         return field_var_from_ctor_op(tape, parent, getprop_op)
+#     elseif parent isa Call && parent.fn == Base.getproperty
+#         # nested getproperty, find constructor for the current struct recursively
+#         ctor = find_field_source_var(tape, parent)
+#         if ctor != nothing
+#             return field_var_from_ctor_op(tape, ctor, getprop_op)
+#         else
+#             return nothing
+#         end
+#     else
+#         # can't find source field - give up and return nothing
+#         return nothing
+#     end
+# end
 
 
-"""
-Given a tape and getfield() operation, try to find a variable
-that was used to create that field.
-NOTE: This works only with getfield() on tuples
-"""
-function find_tuple_field_source_var(tape::Tape, getf_op::Call)
-    getf_base_op = tape[getf_op.args[1]]
-    if getf_base_op.fn == Base.indexed_iterate
-        tuple_op = tape[getf_base_op.args[1]]
-        # tuple_idx = tape[ind_it_op.args[2]].val
-        tuple_idx = tape[getf_base_op.args[2]].val
-    elseif getf_base_op.fn == __tuple__
-        tuple_op = getf_base_op
-        tuple_idx = tape[getf_op.args[2]].val
-    elseif getf_base_op.fn == namedtuple
-        tuple_op = tape[getf_base_op.args[2]]
-        tuple_fld = tape[getf_op.args[2]].val
-        flds = fieldnames(typeof(getf_base_op.val))
-        tuple_idx = findfirst(x -> x == tuple_fld, flds)
-        # should make recursive?
-    else
-        throw(AssertionError("Unexpected base op for __getfield__: $(getf_base_op.fn)"))
-    end
-    # @assert tuple_op isa Call && tuple_op.fn == __tuple__
-    src_var = tape[tuple_op.args[tuple_idx]]
-    return src_var
-end
+# """
+# Given a tape and getfield() operation, try to find a variable
+# that was used to create that field.
+# NOTE: This works only with getfield() on tuples
+# """
+# function find_tuple_field_source_var(tape::Tape, getf_op::Call)
+#     getf_base_op = tape[getf_op.args[1]]
+#     if getf_base_op.fn == Base.indexed_iterate
+#         tuple_op = tape[getf_base_op.args[1]]
+#         # tuple_idx = tape[ind_it_op.args[2]].val
+#         tuple_idx = tape[getf_base_op.args[2]].val
+#     elseif getf_base_op.fn == __tuple__
+#         tuple_op = getf_base_op
+#         tuple_idx = tape[getf_op.args[2]].val
+#     elseif getf_base_op.fn == namedtuple
+#         tuple_op = tape[getf_base_op.args[2]]
+#         tuple_fld = tape[getf_op.args[2]].val
+#         flds = fieldnames(typeof(getf_base_op.val))
+#         tuple_idx = findfirst(x -> x == tuple_fld, flds)
+#         # should make recursive?
+#     else
+#         throw(AssertionError("Unexpected base op for __getfield__: $(getf_base_op.fn)"))
+#     end
+#     # @assert tuple_op isa Call && tuple_op.fn == __tuple__
+#     src_var = tape[tuple_op.args[tuple_idx]]
+#     return src_var
+# end

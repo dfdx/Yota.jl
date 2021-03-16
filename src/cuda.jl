@@ -1,8 +1,3 @@
-# import CUDAnative
-# using CuArrays
-
-
-# CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
 
 @diffrule CUDA.exp(u::Real) u CUDA.exp(u) * dy
 @diffrule CUDA.pow(u::Real, v::Real) u (v * CUDA.pow(u, (v-1)) * dy)

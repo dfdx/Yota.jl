@@ -2,7 +2,7 @@ using Test
 using Yota
 using Yota: Tape, Input, Call, Constant, trace, play!, transform, binarize_ops
 using Yota: ∇mean, setfield_nested!, copy_with, simplegrad, remove_unused
-using Yota: find_field_source_var, eliminate_common  # unwind_iterate
+using Yota: eliminate_common  # unwind_iterate, find_field_source_var
 using Yota: unvcat, unhcat, uncat, ungetindex!, ungetindex
 using Yota: gradcheck
 using CUDA

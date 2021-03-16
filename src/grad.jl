@@ -96,7 +96,7 @@ function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     op_deriv_attrs = Tuple[]
     for (dex, fldname) in dex_fldnames
         ret_id = record_expr!(tape, dex; st=st)
-        derivative_of = (fldname == nothing ? tape[op.args[i]] :
+        derivative_of = (fldname === nothing ? tape[op.args[i]] :
                          field_var_from_ctor_op(tape, tape[op.args[i]], fldname))
         push!(op_deriv_attrs, (tape[ret_id], derivative_of))
     end

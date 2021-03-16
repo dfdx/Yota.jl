@@ -144,16 +144,11 @@ function add_points(x)
     return 2*l.p1.x + 5*l.p2.y
 end
 
+# TODO: make a better test for constructors, not related to find_field_source_var
 
 @testset "grad: structs/new" begin
     # find_field_source_var
     _, tape = trace(add_points, rand())
-    src_op = find_field_source_var(tape, tape[15])
-    @test src_op.id == 1
-    @test src_op.val isa Real
-    src_op = find_field_source_var(tape, tape[13])
-    @test src_op.id == 3
-    @test src_op.val isa Point
 
     @test grad(add_points, rand())[2][1] == 7
 end
