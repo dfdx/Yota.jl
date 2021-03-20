@@ -1,8 +1,3 @@
-# import CUDAnative
-# using CuArrays
-
-
-# CuArrays.cufunc(::typeof(^)) = CUDAnative.pow
 
 @diffrule CUDA.exp(u::Real) u CUDA.exp(u) * dy
 @diffrule CUDA.pow(u::Real, v::Real) u (v * CUDA.pow(u, (v-1)) * dy)
@@ -45,31 +40,3 @@ function to_device(device::GPU, x)
         return T(fld_vals...)
     end
 end
-
-
-# function cuarray_compatible_tform(tape::Tape)
-#     new_tape = similar(tape)
-#     changed = false
-#     for op in tape
-#         if op isa Call && haskey(CUDANATIVE_OPS, op.fn)
-#             changed = true
-#             push!(new_tape, copy_with(op, fn=CUDANATIVE_OPS[op.fn]))
-#         else
-#             push!(new_tape, op)
-#         end
-#     end
-#     return new_tape, changed
-# end
-
-
-# """
-# Transform function to CuArrays compatible.
-# """
-# function cuda_compatible(f, args)
-#     cf = CuArrays.cufunc(f)
-#     if f === cf
-#         return cf
-#     else
-#         return transform(cuarray_compatible_tform, f, args)
-#     end
-# end

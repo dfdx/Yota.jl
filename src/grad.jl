@@ -2,31 +2,6 @@
 #                            GRAD RESULT                               #
 ########################################################################
 
-# function field_paths(tape::Tape)
-#     paths = Dict()
-#     for op in reverse(tape.ops)
-#         _op = op
-#         path = []
-#         while _op isa Call && _op.fn in (Base.getproperty,
-#                                          Base.getfield,
-#                                          __getfield__)
-#             field_name = tape[_op.args[2]].val
-#             push!(path, field_name)
-#             _op_id = _op.args[1]
-#             _op = tape[_op_id]
-#         end
-#         if !isempty(path)
-#             struct_id = _op.id
-#             if !haskey(paths, struct_id)
-#                 paths[struct_id] = Dict()
-#             end
-#             paths[struct_id][(reverse(path)...,)] = op.id
-#         end
-#     end
-#     return paths
-# end
-
-
 struct GradResult
     tape::Tape
     gvars::Vector{Any}  # gradient vars
@@ -89,14 +64,14 @@ function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
     st = Dict(Symbol("%$i") => i for i in op.args)
     st[:dy] = dy.id
     st[:y] = op.id
-    if dex_fldnames[1][2] == nothing
+    if dex_fldnames[1][2] === nothing
         # not a derivative of a field - take only the 1st match
         dex_fldnames = dex_fldnames[1:1]
     end
     op_deriv_attrs = Tuple[]
     for (dex, fldname) in dex_fldnames
         ret_id = record_expr!(tape, dex; st=st)
-        derivative_of = (fldname == nothing ? tape[op.args[i]] :
+        derivative_of = (fldname === nothing ? tape[op.args[i]] :
                          field_var_from_ctor_op(tape, tape[op.args[i]], fldname))
         push!(op_deriv_attrs, (tape[ret_id], derivative_of))
     end

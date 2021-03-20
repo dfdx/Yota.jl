@@ -43,5 +43,9 @@ to_device(device::CPU, f::Function, args) = f
 (device::CPU)(x) = to_device(device, x)
 (device::GPU)(x) = to_device(device, x)
 
+to_cpu(A) = A
+to_cpu(A::CuArray) = convert(Array, A)
+to_cuda(A) = cu(A)
+to_cuda(A::CuArray) = A
 
 to_same_device(A, example) = device_of(example)(A)

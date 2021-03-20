@@ -19,19 +19,19 @@ include("compile.jl")
 include("update.jl")
 include("transform.jl")
 include("cuda.jl")
+include("gradcheck.jl")
 
 
 const BEST_AVAILABLE_DEVICE = Ref{AbstractDevice}(CPU())
 
 if CUDA.functional()
     try
-        BEST_AVAILABLE_DEVICE[] = GPU(1)        
+        BEST_AVAILABLE_DEVICE[] = GPU(1)
     catch ex
         # something is wrong with the user's set-up (or there's a bug in CuArrays)
         @warn "CUDA is installed, but not working properly" exception=(ex,catch_backtrace())
 
     end
 end
-
 
 best_available_device() = BEST_AVAILABLE_DEVICE[]

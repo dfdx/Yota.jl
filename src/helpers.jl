@@ -17,8 +17,32 @@ function ∇__new__(dy, T, idx)
 end
 
 
+# TODO (when https://github.com/FluxML/NNlib.jl/pull/296 is done):
+# 1. uncomment this implementation
+# 2. remove the next 2 functions
+#
+# function ungetindex!(dx::AbstractArray, ::AbstractArray, dy, I...)
+#     if dy isa Number
+#         dy = to_same_device([dy], dx)
+#     end
+#     I = Any[i for i in I]
+#     for (d, i) in enumerate(I)
+#         if i == (:)
+#             I[d] = 1:size(dx, d)
+#         end
+#         if i isa Number
+#             I[d] = [i]
+#         end
+#         I[d] = to_cpu(I[d])
+#     end
+#     # cartesian product of all concerned indices
+#     idx = collect(Iterators.product(I...))
+#     idx = to_same_device(idx, dx)
+#     return scatter!(+, dx, dy, idx)
+# end
+
 function ungetindex!(dx::AbstractArray, ::AbstractArray, dy, I...)
-    return Scatter.scatter_add2!(dx, dy, I...)
+   return Scatter.scatter_add2!(dx, dy, I...)
 end
 
 

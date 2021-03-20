@@ -49,8 +49,6 @@ mutable struct Call <: AbstractOp
     args::Vector{Int}
 end
 
-# Call(id::Int, val::Any, fn::Union{Function, Type}, args::Vector{Int}) =
-#     Call(id, val, fn, args)
 Base.getproperty(op::Input, f::Call) = f == :typ ? typeof(op.val) : getfield(op, f)
 
 
@@ -107,9 +105,6 @@ function Base.show(io::IO, tape::Tape)
 end
 
 Base.getindex(tape::Tape, i...) = getindex(tape.ops, i...)
-# Base.getindex(tape::Tape, i::String...) =
-#     getindex(tape.ops, [parse(Int, s[2:end]) for s in i]...)
-# Base.getindex(tape::Tape, i::Symbol...) = getindex(tape, map(string, i)...)
 Base.setindex!(tape::Tape, op::AbstractOp, i::Integer) = (tape.ops[i] = op)
 Base.lastindex(tape::Tape) = lastindex(tape.ops)
 Base.length(tape::Tape) = length(tape.ops)
@@ -192,8 +187,6 @@ end
 function record_expr!(tape::Tape, x; st, bcast=false)
     return record!(tape, Constant, x)
 end
-
-
 
 
 ########################################################################
@@ -284,7 +277,6 @@ end
 # end
 
 
-
 function squash_assigned(tape::Tape)
     new_tape = copy_with(tape, ops=AbstractOp[])
     st = Dict{Int, Int}()  # substitution table for op indices
@@ -328,40 +320,40 @@ end
 
 
 
-"""
-Unwind iterate() sequences into plain __getfield__ expressions.
-unwind_iterate() doesn't remove unused elements for performance reasons,
-so remove_unused() should be called after it.
-"""
-function unwind_iterate(tape::Tape)
-    tape = copy_with(tape)
-    for op in tape
-        if (op isa Call && op.fn in (getfield, __getfield__)
-            && tape[op.args[1]] isa Call && tape[op.args[1]].fn == Base.iterate
-            && tape[op.args[2]] isa Constant && tape[op.args[2]].val == 1)
-            iterate_op = tape[op.args[1]]
-            iterable_op = tape[iterate_op.args[1]]
-            idx = length(iterate_op.args) > 1 ? tape[iterate_op.args[2]].val : 1
-            if iterable_op.val isa Tuple || iterable_op.val isa Vector || iterable_op.val isa UnitRange
-                # 1. Replace iterable op with index in the original iterable
-                tape[iterate_op.id] = Constant(iterate_op.id, idx)
-                # 2. Replace __getfield__ on iterator with __getfield__ or getindex on original iterable
-                idx_id = iterate_op.id
-                obj_id = iterable_op.id
-                # TODO: in which other cases getindex is better than __getfield__?
-                get_op = iterable_op.val isa UnitRange ? getindex : __getfield__
-                tape[op.id] = Call(op.id, op.val, get_op, [obj_id, idx_id])
-            end
-        end
-    end
-    return tape
-end
+# """
+# Unwind iterate() sequences into plain __getfield__ expressions.
+# unwind_iterate() doesn't remove unused elements for performance reasons,
+# so remove_unused() should be called after it.
+# """
+# function unwind_iterate(tape::Tape)
+#     tape = copy_with(tape)
+#     for op in tape
+#         if (op isa Call && op.fn in (getfield, __getfield__)
+#             && tape[op.args[1]] isa Call && tape[op.args[1]].fn == Base.iterate
+#             && tape[op.args[2]] isa Constant && tape[op.args[2]].val == 1)
+#             iterate_op = tape[op.args[1]]
+#             iterable_op = tape[iterate_op.args[1]]
+#             idx = length(iterate_op.args) > 1 ? tape[iterate_op.args[2]].val : 1
+#             if iterable_op.val isa Tuple || iterable_op.val isa Vector || iterable_op.val isa UnitRange
+#                 # 1. Replace iterable op with index in the original iterable
+#                 tape[iterate_op.id] = Constant(iterate_op.id, idx)
+#                 # 2. Replace __getfield__ on iterator with __getfield__ or getindex on original iterable
+#                 idx_id = iterate_op.id
+#                 obj_id = iterable_op.id
+#                 # TODO: in which other cases getindex is better than __getfield__?
+#                 get_op = iterable_op.val isa UnitRange ? getindex : __getfield__
+#                 tape[op.id] = Call(op.id, op.val, get_op, [obj_id, idx_id])
+#             end
+#         end
+#     end
+#     return tape
+# end
 
 
 function simplify(tape::Tape)
     tape = recover_broadcast(tape)
     tape = squash_assigned(tape)
-    tape = unwind_iterate(tape)
+    # tape = unwind_iterate(tape)
     tape = eliminate_common(tape)
     tape = remove_unused(tape)
     return tape
@@ -373,8 +365,8 @@ end
 ########################################################################
 
 
-exec!(tape::Tape, op::Input) = ()
-exec!(tape::Tape, op::Constant) = ()
+exec!(::Tape, ::Input) = ()
+exec!(::Tape, ::Constant) = ()
 exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
 exec!(tape::Tape, op::Call) = (op.val = op.fn([tape[id].val for id in op.args]...))
 
@@ -384,7 +376,7 @@ function play!(tape::Tape, args...; use_compiled=true, debug=false)
         @assert(tape[i] isa Input, "More arguments than the original function had")
         tape[i].val = val
     end
-    if use_compiled && tape.compiled != nothing
+    if use_compiled && tape.compiled !== nothing
         Base.invokelatest(tape.compiled)
     else
         for op in tape

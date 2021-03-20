@@ -29,6 +29,28 @@ end
 end
 
 
+@testset "grad: iterate" begin
+    # iterate over tuple, e.g. for x in (1.0, 2.0, 3.0)
+    x = (1.0, 2.0, 3.0)
+    CT = Composite{typeof(x)}
+    @test grad(x -> iterate(x)[1], x)[2][1] == CT(1.0, Zero(), Zero())
+    @test grad(x -> iterate(x, 2)[1], x)[2][1] == CT(Zero(), 1.0, Zero())
+    @test grad(x -> iterate(x, 3)[1], x)[2][1] == CT(Zero(), Zero(), 1.0)
+
+    # iterate over array, e.g. for x in [1.0, 2.0, 3.0]
+    x = [1.0, 2.0, 3.0]
+    # TODO (uncomment when scatter_add is fixed)
+    # @test grad(x -> iterate(x)[1], x)[2][1] == [1.0, 0, 0]
+    # @test grad(x -> iterate(x, 2)[1], x)[2][1] == [0, 1, 0]
+    # @test grad(x -> iterate(x, 3)[1], x)[2][1] == [0, 0, 1.0]
+
+    x = (1:3)
+    @test !isdefined(grad(x -> iterate(x)[1], x)[2].gvars, 1)
+    @test !isdefined(grad(x -> iterate(x, 1)[1], x)[2].gvars, 1)
+
+end
+
+
 sum_bcast(x, y) = sum(x .+ y)
 
 @testset "special bcast" begin
@@ -122,16 +144,11 @@ function add_points(x)
     return 2*l.p1.x + 5*l.p2.y
 end
 
+# TODO: make a better test for constructors, not related to find_field_source_var
 
 @testset "grad: structs/new" begin
     # find_field_source_var
     _, tape = trace(add_points, rand())
-    src_op = find_field_source_var(tape, tape[15])
-    @test src_op.id == 1
-    @test src_op.val isa Real
-    src_op = find_field_source_var(tape, tape[13])
-    @test src_op.id == 3
-    @test src_op.val isa Point
 
     @test grad(add_points, rand())[2][1] == 7
 end

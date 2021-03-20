@@ -15,9 +15,9 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-CUDA = "1.2, 2.3"
+CUDA = "1.2, 2"
 ChainRulesCore = "0.9.5"
 Distributions = "0.23.2"
 Espresso = "0.6.0"
-IRTools = "0.4.0"
+IRTools = "0.4"
 julia = "1.4"

@@ -131,12 +131,6 @@
 @diffrule __getfield__(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
 @nodiff __getfield__(_s, _f::Tuple) _f
 
-# @nodiff __new__(t, u) t
-# @nodiff __new__(t, u, v) t
-# @nodiff __new__(t, u, v, w) t
-# @nodiff __new__(t, u, v) t
-# @diffrule __new__(t, u, v) u ∇__new__(dy, t, 1)
-# @diffrule __new__(t, u, v) v ∇__new__(dy, t, 2)
 
 const LONG_VAR_NAME_LIST = (:x, :u, :v, :w, :_a, :_b, :_c, :_d, :_e, :_f, :_g)
 for n=1:length(LONG_VAR_NAME_LIST)
@@ -148,6 +142,23 @@ for n=1:length(LONG_VAR_NAME_LIST)
         end
     end
 end
+
+# Base.iterate
+
+# here we explicitely stop propagation in iteration
+# over ranges (e.g for i=1:3 ... end)
+@nodiff Base.iterate(x::UnitRange) x
+@nodiff Base.iterate(x::UnitRange, i::Int) x
+@nodiff Base.iterate(x::UnitRange, i::Int) i
+
+@diffrule Base.iterate(t::Tuple) t ∇getfield(getindex(dy, 1), t, 1)
+@diffrule Base.iterate(t::Tuple, i::Int) t ∇getfield(getindex(dy, 1), t, i)
+@nodiff Base.iterate(t::Tuple, i::Int) i
+
+@diffrule Base.iterate(x::AbstractArray) x ungetindex(x, dy, 1)
+@diffrule Base.iterate(x::AbstractArray, i::Int) x ungetindex(x, dy, i)
+@nodiff Base.iterate(x::AbstractArray, i::Int) i
+
 
 # Base.indexed_iterate (tuple unpacking)
 
