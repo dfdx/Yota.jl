@@ -1,5 +1,5 @@
 import ChainRulesCore.Composite
-    
+
 
 mutable struct A
     t::Array{Float64, 1}
@@ -51,7 +51,7 @@ end
     @test x == -xo
 
     # with actual grad update
-    b = B(A(ones(4), 1.0), 1.0) 
+    b = B(A(ones(4), 1.0), 1.0)
     _, g = grad(b -> sum(b.a.t) + b.a.s + b.s, b)
     update!(b, g[1], (x, gx) -> x .- 0.5gx)
     @test b.a.t == [0.5, 0.5, 0.5, 0.5]

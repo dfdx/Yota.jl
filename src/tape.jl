@@ -376,7 +376,7 @@ function play!(tape::Tape, args...; use_compiled=true, debug=false)
         @assert(tape[i] isa Input, "More arguments than the original function had")
         tape[i].val = val
     end
-    if use_compiled && tape.compiled != nothing
+    if use_compiled && tape.compiled !== nothing
         Base.invokelatest(tape.compiled)
     else
         for op in tape

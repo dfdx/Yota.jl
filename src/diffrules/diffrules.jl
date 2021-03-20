@@ -11,7 +11,7 @@ const DIFF_PHS = Set([:x, :u, :v, :w, :t, :i, :j, :k,])
 function reset_rules!()
     empty!(DIFF_RULES)
     empty!(NO_DIFF_RULES)
-    empty!(CONSTRUCTORS)    
+    empty!(CONSTRUCTORS)
 end
 
 
@@ -142,7 +142,7 @@ end
 Define a type constructor that should not be traced, but instead recorded
 to the tape as is. Here's an example:
 
-    @ctor MvNormal(μ, Σ)    
+    @ctor MvNormal(μ, Σ)
 
 This should be read as:
 
@@ -158,7 +158,7 @@ Yota will _completely bypass_ internals of the constructor and jump directly to 
 1st variable passed to MvNormal().
 
 Note that if you don't want to bypass the constructor (which you normally shouldn't do),
-you can rely on Yota handling it automatically. 
+you can rely on Yota handling it automatically.
 
 """
 macro ctor(ex)
@@ -256,7 +256,7 @@ function deriv_exprs(ex, dep_types, idx::Int)
     result = Tuple[]   # list of tuples (rewritten_expr, field_name | nothing)
     for rule in DIFF_RULES
         m, fldname = match_rule(rule, ex, dep_types, idx)
-        if m != nothing
+        if m !== nothing
             pat, rpat = m
             rex = rewrite_with_keywords(ex, pat, rpat)
             push!(result, (rex, fldname))
@@ -270,9 +270,9 @@ function deriv_exprs(ex, dep_types, idx::Int)
     # record it to the tape as constant; instead we must rewrite forward pass as well
     # replacing all f(args...) with _, pb = rrule(f, args...)
     # which breaks significant part of codebase
-    # @assert Meta.isexpr(ex, :call)   
+    # @assert Meta.isexpr(ex, :call)
     # _, df = rrule(ex.args[1], 2.0)
-    # dex = Expr(:call, df, )    
+    # dex = Expr(:call, df, )
     error("Can't find differentiation rule for $ex at $idx " *
           "with types $dep_types)")
 end
@@ -331,7 +331,7 @@ function dont_diff(tape::Tape, op::AbstractOp, idx::Int)
         dep_types = [eltype(tape[arg].typ) for arg in op.args[2:end]]
         idx_ = idx - 1
     else
-        ex =  to_expr(tape, op)
+        ex = to_expr(tape, op)
         dep_types = [tape[arg].typ for arg in op.args]
         idx_ = idx
     end

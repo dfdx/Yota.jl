@@ -16,14 +16,6 @@ function ngradient(f, xs::AbstractArray...)
 end
 
 
-# function gradcheck(f, xs...)
-#     n_grads = ngradient(f, xs...)
-#     y_grads = Yota._grad(f, xs...)[2] |> collect
-#     all(isapprox.(n_grads, y_grads, rtol = 1e-5, atol = 1e-5))
-# end
-
-
-
 function ngradient2(f, xs, n)
     x = xs[n]
     Δ = zero(x)
@@ -42,7 +34,7 @@ end
 
 
 function gradcheck2(f, xs...; var_idxs=1:length(xs))
-    y_grads = Yota._grad(f, xs...)[2] |> collect
+    y_grads = _grad(f, xs...)[2] |> collect
     results = []
     for n in var_idxs
         n_grad = ngradient2(f, xs, n)
