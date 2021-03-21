@@ -1,4 +1,6 @@
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-PkgBenchmark = "32113eaa-f34f-5b0d-bd6c-c81e245fc73d"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+PkgBenchmark = "32113eaa-f34f-5b0d-bd6c-c81e245fc73d"
+Yota = "cd998857-8626-517d-b929-70ad188a48f0"
