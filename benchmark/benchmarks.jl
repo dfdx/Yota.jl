@@ -1,25 +1,43 @@
 using BenchmarkTools
-using Random
+using CUDA
+using Yota
 
 const SUITE = BenchmarkGroup()
 
-SUITE["utf8"] = BenchmarkGroup(["string", "unicode"])
-teststr = String(join(rand(MersenneTwister(1), 'a':'d', 10^4)))
-SUITE["utf8"]["replace"] = @benchmarkable replace($teststr, "a" => "b")
-SUITE["utf8"]["join"] = @benchmarkable join($teststr, $teststr)
-SUITE["utf8"]["plots"] = BenchmarkGroup()
+#################################### TRACE ####################################
 
-SUITE["trigonometry"] = BenchmarkGroup(["math", "triangles"])
-SUITE["trigonometry"]["circular"] = BenchmarkGroup()
-for f in (sin, cos, tan)
-    for x in (0.0, pi)
-        SUITE["trigonometry"]["circular"][string(f), x] = @benchmarkable ($f)($x)
-    end
+SUITE["trace"] = BenchmarkGroup()
+
+
+x = rand(8, 8)
+
+const TRACE_FUNCTIONS = [
+    "simple" => x -> sum(x),
+    "loop" => x -> (for _=1:100 x = x'x end; x),
+]
+
+
+for (name, f) in TRACE_FUNCTIONS
+    SUITE["trace"][name] = @benchmarkable Yota.trace($f, $x) samples=10 seconds=60
 end
 
-SUITE["trigonometry"]["hyperbolic"] = BenchmarkGroup()
-for f in (sin, cos, tan)
-    for x in (0.0, pi)
-        SUITE["trigonometry"]["hyperbolic"][string(f), x] = @benchmarkable ($f)($x)
-    end
+
+################################### HELPERS ###################################
+
+SUITE["helpers"] = BenchmarkGroup()
+
+x = rand(4, 5)
+dx = zero(x)
+dy = ones(4, 3)
+
+SUITE["helpers"]["ungetindex!"] = @benchmarkable Yota.ungetindex!($dx, $x, $dy, :, $[1, 3, 1])
+SUITE["helpers"]["ungetindex"] = @benchmarkable Yota.ungetindex($x, $dy, :, $[1, 3, 1])
+
+if CUDA.functional()
+    x = rand(4, 5) |> cu
+    dx = zero(x) |> cu
+    dy = ones(4, 3) |> cu
+
+    SUITE["helpers"]["cu:ungetindex!"] = @benchmarkable Yota.ungetindex!($dx, $x, $dy, :, $(cu([1, 3, 1])))
+    SUITE["helpers"]["cu:ungetindex"] = @benchmarkable Yota.ungetindex($x, $dy, :, $(cu([1, 3, 1])))
 end
