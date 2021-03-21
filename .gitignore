@@ -4,3 +4,4 @@
 .juliahistory
 _*
 Manifest.toml
+benchmark/*.json

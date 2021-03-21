@@ -1,0 +1,2 @@
+The CI for benchmarks is based on the following code:
+https://github.com/lostella/ProximalOperators.jl/tree/460f0c4e450c627f5698c0cf179222107e6de0b8/benchmark
