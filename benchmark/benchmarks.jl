@@ -13,7 +13,7 @@ x = rand(8, 8)
 
 const TRACE_FUNCTIONS = [
     "simple" => x -> sum(x),
-    "loop" => x -> (for _=1:100 x = x'x end; x),
+    "loop" => x -> (for _=1:10 x = x'x end; x),
 ]
 
 
