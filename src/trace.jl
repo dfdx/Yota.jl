@@ -1,15 +1,33 @@
-function __new__(T, args...)
-    # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
-    if T <: NamedTuple
-        return T(args)
-    else
-        return T(args...)
-    end
+# Some abbreviations used in this file
+# * sid : SSA ID, ID of a variable in SSA form of IR
+# * tid : Tape ID, ID of a variable on a Tape
+# * fn : function being called
+# * args : arguments to a function
+# * fargs : array of [fn, args...]
+# * farg_defs : SSA definitions of fargs, i.e. IRTools.Variable or objects
+# * res / ret - result or return value
+
+import IRTools
+import IRTools: IR, @dynamo, self, insertafter!
+
+
+@dynamo function __splatnew__(a...)
+    ir = IRTools.IR()
+    arg_tuple = IRTools.argument!(ir)
+    vT = push!(ir, Expr(:call, getfield, arg_tuple, 1))
+    vargs = push!(ir, Expr(:call, getfield, arg_tuple, 2))
+    vres = push!(ir, Expr(:splatnew, vT, vargs))
+    IRTools.return!(ir, vres)
+    return ir
 end
 
 
-__tuple__(args...) = tuple(args...)
-__getfield__(args...) = getfield(args...)
+__new__(T::Type{<:Val}) = T()
+__new__(T, args...) = __splatnew__(T, args)
+
+
+# __tuple__(args...) = tuple(args...)
+# __getfield__(args...) = getfield(args...)
 
 
 function module_functions(modl)
@@ -31,26 +49,7 @@ const PRIMITIVES = Set{Any}(vcat(
     [Broadcast.materialize, Broadcast.broadcasted, Colon(), (:),
      Base.not_int,
      # our own special functions
-     __new__, __tuple__, __getfield__, namedtuple, guess_device]));
-
-
-################################################################################
-################################################################################
-#                           IRTools-based Tracer                               #
-################################################################################
-################################################################################
-
-import IRTools
-import IRTools: IR, @dynamo, self, insertafter!
-
-# Some abbreviations used in this file
-# * sid : SSA ID, ID of a variable in SSA form of IR
-# * tid : Tape ID, ID of a variable on a Tape
-# * fn : function being called
-# * args : arguments to a function
-# * fargs : array of [fn, args...]
-# * farg_defs : SSA definitions of fargs, i.e. IRTools.Variable or objects
-# * res / ret - result or return value
+     __new__, namedtuple, guess_device]));
 
 
 ################################################################################
@@ -208,7 +207,7 @@ end
 
 @dynamo function (t::IRTracer)(fargs...)
     ir = IR(fargs...)
-    ir == nothing && return   # intrinsic functions
+    ir === nothing && return   # intrinsic functions
     rewrite_special_cases!(ir)
     for (v, st) in ir
         ex = st.expr
