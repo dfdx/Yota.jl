@@ -1,37 +1,37 @@
-import Statistics
-using LinearAlgebra
-using Espresso
-using Distributions
-using ChainRulesCore
-using CUDA
+using IRTools
+using ChainRules
 
 
-include("utils.jl")
-include("scatter/scatter.jl")
-include("helpers.jl")
-include("devices.jl")
-include("tape.jl")
-include("tapeutils.jl")
+include("trie.jl")
 include("trace.jl")
-include("diffrules/diffrules.jl")
-include("grad.jl")
-include("compile.jl")
-include("update.jl")
-include("transform.jl")
-include("cuda.jl")
-include("gradcheck.jl")
+include("chainrules.jl")
 
 
-const BEST_AVAILABLE_DEVICE = Ref{AbstractDevice}(CPU())
 
-if CUDA.functional()
-    try
-        BEST_AVAILABLE_DEVICE[] = GPU(1)
-    catch ex
-        # something is wrong with the user's set-up (or there's a bug in CuArrays)
-        @warn "CUDA is installed, but not working properly" exception=(ex,catch_backtrace())
+inc(x) = x + 1
+mul(x, y) = x * y
+double(x) = mul(x, 2)
 
-    end
+foo(x) = cos(exp(x))
+
+
+function grad(f, args...)
+
 end
 
-best_available_device() = BEST_AVAILABLE_DEVICE[]
+
+const PRIMITIVES = TypeTrie()
+
+
+function main()
+    # TODO: move to __init__()
+    for Ts in rrule_primitives()
+        push!(PRIMITIVES, Ts)
+    end
+
+
+
+
+    f = foo
+    args = (2.0, 3.0)
+end

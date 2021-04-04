@@ -1,4 +1,56 @@
-import IRTools: IR, @dynamo, self, insertafter!, var, xcall
+function __new__(T, args...)
+    # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
+    if T <: NamedTuple
+        return T(args)
+    else
+        return T(args...)
+    end
+end
+
+
+__tuple__(args...) = tuple(args...)
+__getfield__(args...) = getfield(args...)
+
+
+function module_functions(modl)
+    res = Vector{Function}()
+    for s in Base.names(modl; all=true)
+        isdefined(modl, s) || continue
+        fn = getfield(modl, s)
+        if fn isa Function # && match(r"^[a-z#]+$", string(s)) != nothing
+            push!(res, fn)
+        end
+    end
+    return res
+end
+
+const PRIMITIVES = Set{Any}(vcat(
+    module_functions(Base),
+    module_functions(Core),
+    module_functions(Core.Intrinsics),
+    [Broadcast.materialize, Broadcast.broadcasted, Colon(), (:),
+     Base.not_int,
+     # our own special functions
+     __new__, __tuple__, __getfield__, namedtuple, guess_device]));
+
+
+################################################################################
+################################################################################
+#                           IRTools-based Tracer                               #
+################################################################################
+################################################################################
+
+import IRTools
+import IRTools: IR, @dynamo, self, insertafter!
+
+# Some abbreviations used in this file
+# * sid : SSA ID, ID of a variable in SSA form of IR
+# * tid : Tape ID, ID of a variable on a Tape
+# * fn : function being called
+# * args : arguments to a function
+# * fargs : array of [fn, args...]
+# * farg_defs : SSA definitions of fargs, i.e. IRTools.Variable or objects
+# * res / ret - result or return value
 
 
 ################################################################################
@@ -7,15 +59,17 @@ import IRTools: IR, @dynamo, self, insertafter!, var, xcall
 
 """Frame of a call stack"""
 mutable struct Frame
-    # source IR ID to tape (target) IR ID
-    src2tape::Dict{Int, Int}
+    # SSA var ID to Tape var ID. Note that SSA ID refers to the _original_ IR,
+    # not the transformed one. In fact, any unique name of SSA instructions
+    # would fit, using SSA IDs is just convenient
+    ssa2tape::Dict{Int, Int}
     # result ID - tape ID corresponding to latest return value
     # from this call frame
     resultid::Int
 end
 
 function Base.show(io::IO, fr::Frame)
-    map_str = join(["$k=>$v" for (k, v) in fr.src2tape], ",")
+    map_str = join(["$k=>$v" for (k, v) in fr.ssa2tape], ",")
     print(io, "Frame($map_str, $(fr.resultid))")
 end
 
@@ -26,28 +80,28 @@ end
 
 mutable struct IRTracer
     primitives::Set{Any}
-    tape::IR
+    tape::Tape
     frames::Vector{Frame}
 end
 
 function IRTracer(;primitives=PRIMITIVES)
-    tape = IR()  # create from meta instead?
+    tape = Tape()
     return IRTracer(primitives, tape, [])
 end
 
 Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
 
 
-# promote_const_value(x::QuoteNode) = x.value
-# promote_const_value(x::GlobalRef) = getproperty(x.mod, x.name)
-# promote_const_value(x) = x
+promote_const_value(x::QuoteNode) = x.value
+promote_const_value(x::GlobalRef) = getproperty(x.mod, x.name)
+promote_const_value(x) = x
 
 
 function ssa_args_to_tape_vars!(t::IRTracer, arg_defs::Union{Vector, Tuple})
     result = Vector{Int}(undef, length(arg_defs))
     for (i, arg) in enumerate(arg_defs)
         if arg isa IRTools.Variable
-            result[i] = t.frames[end].src2tape[arg.id]
+            result[i] = t.frames[end].ssa2tape[arg.id]
         else
             val = promote_const_value(arg)
             arg_var = record!(t.tape, Constant, val)
@@ -70,7 +124,7 @@ end
 function pop_frame!(t::IRTracer, res_sid::Int)
     frame = pop!(t.frames)
     # create mapping from the current SSA ID to the last instruction on the tape
-    t.frames[end].src2tape[res_sid] =
+    t.frames[end].ssa2tape[res_sid] =
         (frame.resultid == -1 ? length(t.tape) : frame.resultid)
 end
 
@@ -78,9 +132,9 @@ end
 """Set target branch parameters to variables corresponding to SSA args"""
 function set_branch_params!(t::IRTracer, ssa_args, target_params)
     tape_vars = ssa_args_to_tape_vars!(t, ssa_args)
-    src2tape = t.frames[end].src2tape
+    ssa2tape = t.frames[end].ssa2tape
     for (v, p) in zip(tape_vars, target_params)
-        src2tape[p] = v
+        ssa2tape[p] = v
     end
 end
 
@@ -108,7 +162,6 @@ end
 
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    @show fargs
     # global STATE = (t, res_sid, farg_defs, fargs)
     if fn in t.primitives || (fn isa Type && fn <: NamedTuple)
         res = fn(args...)
@@ -117,7 +170,7 @@ function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
         res_tid = record!(t.tape, Call, res, fn, tape_ids)
         # update mapping from SSA var to tape var
         # note that in functions with loops this mapping may change over time
-        t.frames[end].src2tape[res_sid] = res_tid
+        t.frames[end].ssa2tape[res_sid] = res_tid
     else
         push_frame!(t, farg_defs...)
         res = t(fn, args...)
@@ -127,12 +180,12 @@ function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
 end
 
 
-# function record_const!(t::IRTracer, res_sid, val)
-#     val = val isa QuoteNode ? val.value : val
-#     res_tid = record!(t.tape, Constant, val)
-#     t.frames[end].src2tape[res_sid] = res_tid
-#     return val
-# end
+function record_const!(t::IRTracer, res_sid, val)
+    val = val isa QuoteNode ? val.value : val
+    res_tid = record!(t.tape, Constant, val)
+    t.frames[end].ssa2tape[res_sid] = res_tid
+    return val
+end
 
 
 function trace_branches!(ir::IR)
@@ -155,8 +208,8 @@ end
 
 @dynamo function (t::IRTracer)(fargs...)
     ir = IR(fargs...)
-    ir === nothing && return   # intrinsic functions
-    # rewrite_special_cases!(ir)
+    ir == nothing && return   # intrinsic functions
+    rewrite_special_cases!(ir)
     for (v, st) in ir
         ex = st.expr
         # note the difference:
@@ -179,7 +232,7 @@ end
 end
 
 
-function trace(f, args...; primitives=PRIMITIVES, optimize=true)
+function irtrace(f, args...; primitives=PRIMITIVES, optimize=true)
     t = IRTracer(; primitives=primitives)
     for arg in args
         record!(t.tape, Input, arg)
@@ -193,3 +246,6 @@ function trace(f, args...; primitives=PRIMITIVES, optimize=true)
     end
     return val, tape
 end
+
+
+trace = irtrace
