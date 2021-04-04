@@ -1,4 +1,4 @@
-import IRTools: IR, @dynamo, self, insertafter!, var, xcall
+import IRTools: IR, @dynamo, self, insertafter!, var, xcall, Variable
 
 
 ################################################################################
@@ -7,7 +7,7 @@ import IRTools: IR, @dynamo, self, insertafter!, var, xcall
 
 """Frame of a call stack"""
 mutable struct Frame
-    # source IR ID to tape (target) IR ID
+    # source var ID to tape (target) var
     src2tape::Dict{Int, Int}
     # result ID - tape ID corresponding to latest return value
     # from this call frame
@@ -25,17 +25,29 @@ end
 ################################################################################
 
 mutable struct IRTracer
-    primitives::Set{Any}
+    primitives::TypeTrie
     tape::IR
     frames::Vector{Frame}
 end
 
-function IRTracer(;primitives=PRIMITIVES)
-    tape = IR()  # create from meta instead?
-    return IRTracer(primitives, tape, [])
+
+function IRTracer(f, args::Tuple, primitives::TypeTrie)
+    tape = IR()
+    for _=1:length(args) + 1
+        IRTools.argument!(tape)
+    end
+    frame = Frame(Dict(i => i for i in 1:length(args) + 1), -1)
+    return IRTracer(primitives, tape, [frame])
 end
 
-Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
+
+
+# function IRTracer(;primitives=PRIMITIVES)
+#     tape = IR()  # create from meta instead?
+#     return IRTracer(primitives, tape, [])
+# end
+
+Base.show(io::IO, t::IRTracer) = print(io, "IRTracer()")
 
 
 # promote_const_value(x::QuoteNode) = x.value
@@ -43,25 +55,32 @@ Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
 # promote_const_value(x) = x
 
 
-function ssa_args_to_tape_vars!(t::IRTracer, arg_defs::Union{Vector, Tuple})
-    result = Vector{Int}(undef, length(arg_defs))
-    for (i, arg) in enumerate(arg_defs)
-        if arg isa IRTools.Variable
-            result[i] = t.frames[end].src2tape[arg.id]
-        else
-            val = promote_const_value(arg)
-            arg_var = record!(t.tape, Constant, val)
-            result[i] = arg_var
-        end
-    end
-    return result
+# function ssa_args_to_tape_vars!(t::IRTracer, arg_defs::Union{Vector, Tuple})
+#     result = Vector{Int}(undef, length(arg_defs))
+#     for (i, arg) in enumerate(arg_defs)
+#         if arg isa IRTools.Variable
+#             result[i] = t.frames[end].src2tape[arg.id]
+#         else
+#             val = promote_const_value(arg)
+#             arg_var = record!(t.tape, Constant, val)
+#             result[i] = arg_var
+#         end
+#     end
+#     return result
+# end
+
+function source2tape(t::IRTracer, src_vars)
+    return [v isa Variable ? Variable(t.frames[end].src2tape[v.id]) : v
+            for v in src_vars]
 end
 
 
 """Push a new call frame to tracer, setting function params accordingly"""
-function push_frame!(t::IRTracer, arg_defs...)
-    tape_ids = ssa_args_to_tape_vars!(t, arg_defs)
-    frame = Frame(Dict(i => tape_id for (i, tape_id) in enumerate(tape_ids)), -1)
+function push_frame!(t::IRTracer, farg_defs...)
+    tape_vars = source2tape(t, farg_defs)
+    frame = Frame(
+        Dict(i => v.id for (i, v) in enumerate(tape_vars) if v isa Variable),
+         -1)
     push!(t.frames, frame)
 end
 
@@ -97,31 +116,36 @@ end
 #                        IRTracer (body) + irtrace()                           #
 ################################################################################
 
-function rewrite_special_cases!(ir::IR)
-    for (v, st) in ir
-        if Meta.isexpr(st.expr, :new)
-            ir[v] = Expr(:call, __new__, st.expr.args...)
-        end
-    end
-end
+# function rewrite_special_cases!(ir::IR)
+#     for (v, st) in ir
+#         if Meta.isexpr(st.expr, :new)
+#             ir[v] = Expr(:call, __new__, st.expr.args...)
+#         end
+#     end
+# end
 
 
-function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
+function record_or_recurse!(t::IRTracer, src_id::Int, src_fargs, fargs...)
     fn, args = fargs[1], fargs[2:end]
     @show fargs
-    # global STATE = (t, res_sid, farg_defs, fargs)
-    if fn in t.primitives || (fn isa Type && fn <: NamedTuple)
+    global STATE = (t, src_id, src_fargs, fargs)
+    if map(typeof, fargs) in t.primitives
         res = fn(args...)
-        tape_ids = ssa_args_to_tape_vars!(t, farg_defs[2:end])
+        # tape_ids = ssa_args_to_tape_vars!(t, farg_defs[2:end])
+        # tape_ids = t.frames[end].src2tape[]
+
+        tape_fargs = source2tape(t, src_fargs)
         # record corresponding op to the tape
-        res_tid = record!(t.tape, Call, res, fn, tape_ids)
+        tape_var = push!(t.tape, xcall(tape_fargs...))
+        # res_tid = record!(t.tape, Call, res, fn, tape_ids)
+
         # update mapping from SSA var to tape var
         # note that in functions with loops this mapping may change over time
-        t.frames[end].src2tape[res_sid] = res_tid
+        t.frames[end].src2tape[src_id] = tape_var.id
     else
-        push_frame!(t, farg_defs...)
+        push_frame!(t, src_fargs...)
         res = t(fn, args...)
-        pop_frame!(t, res_sid)
+        pop_frame!(t, src_id)
     end
     return res
 end
@@ -170,26 +194,21 @@ end
             # e.g. GlobalRef
             # note: using insertafter!() due to
             # https://github.com/FluxML/IRTools.jl/issues/78
-            # ir[v] = Expr(:call, record_const!, self, v.id, v)
-            insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
+
+            # insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
         end
     end
-    trace_branches!(ir)
+    # trace_branches!(ir)
     return ir
 end
 
 
-function trace(f, args...; primitives=PRIMITIVES, optimize=true)
-    t = IRTracer(; primitives=primitives)
-    for arg in args
-        record!(t.tape, Input, arg)
-    end
-    push!(t.frames, Frame(Dict(i + 1 => i for i in 1:length(args)), -1))
+function trace(f, args...; primitives=PRIMITIVES)
+    # init tracer
+    t = IRTracer(f, args, primitives)
+    # recursively trace function call
     val = t(f, args...)
-    t.tape.resultid = t.frames[1].resultid
+    # t.tape.resultid = t.frames[1].resultid
     tape = t.tape
-    if optimize
-        tape = simplify(tape)
-    end
     return val, tape
 end
