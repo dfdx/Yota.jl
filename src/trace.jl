@@ -96,10 +96,12 @@ end
 
 """Set target branch parameters to variables corresponding to SSA args"""
 function set_branch_params!(t::IRTracer, ssa_args, target_params)
-    tape_vars = ssa_args_to_tape_vars!(t, ssa_args)
+    tape_vars = source2tape(t, ssa_args)
     src2tape = t.frames[end].src2tape
     for (v, p) in zip(tape_vars, target_params)
-        src2tape[p] = v
+        if v isa Variable
+            src2tape[p] = v.id
+        end
     end
 end
 
@@ -107,8 +109,8 @@ end
 """Set return variable for the current frame"""
 function set_return!(t::IRTracer, arg_sid_ref)
     # global STATE = (t, arg_sid_ref)
-    tape_var = ssa_args_to_tape_vars!(t, [arg_sid_ref[]])[1]
-    t.frames[end].resultid = tape_var
+    tape_var = source2tape(t, [arg_sid_ref[]])[1]
+    t.frames[end].resultid = tape_var.id
 end
 
 
@@ -127,8 +129,8 @@ end
 
 function record_or_recurse!(t::IRTracer, src_id::Int, src_fargs, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    @show fargs
     global STATE = (t, src_id, src_fargs, fargs)
+    #
     if map(typeof, fargs) in t.primitives
         res = fn(args...)
         # tape_ids = ssa_args_to_tape_vars!(t, farg_defs[2:end])

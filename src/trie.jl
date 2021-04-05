@@ -54,6 +54,9 @@ function Base.in(key, s::TypeTrie)
         # now head is either in s.chidlren or is non-matched Any
         if haskey(s.children, head)
             return tail in s.children[head]
+        elseif haskey(s.children, Vararg)  # didn't match concrete types
+            # TODO: find the most specific Vararg{T, N}
+            return s.children[Vararg].is_key
         else
             return false
         end

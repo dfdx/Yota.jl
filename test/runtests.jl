@@ -12,6 +12,9 @@ import ChainRulesCore: Composite, Zero
 CUDA.allowscalar(false)
 
 
+include("test_typetrie.jl")
+
+
 include("test_trace.jl")
 include("test_helpers.jl")
 include("test_simple.jl")
