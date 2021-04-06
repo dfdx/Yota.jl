@@ -7,6 +7,8 @@ import IRTools: IR, @dynamo, self, insertafter!, var, xcall, Variable
 
 """Frame of a call stack"""
 mutable struct Frame
+    # function + arguments (for introspection only)
+    fargs
     # source var ID to tape (target) var
     src2tape::Dict{Int, Int}
     # result ID - tape ID corresponding to latest return value
@@ -36,7 +38,7 @@ function IRTracer(f, args::Tuple, primitives::TypeTrie)
     for _=1:length(args) + 1
         IRTools.argument!(tape)
     end
-    frame = Frame(Dict(i => i for i in 1:length(args) + 1), -1)
+    frame = Frame((f, args...), Dict(i => i for i in 1:length(args) + 1), -1)
     return IRTracer(primitives, tape, [frame])
 end
 
@@ -76,9 +78,10 @@ end
 
 
 """Push a new call frame to tracer, setting function params accordingly"""
-function push_frame!(t::IRTracer, farg_defs...)
+function push_frame!(t::IRTracer, farg_defs, fargs)
     tape_vars = source2tape(t, farg_defs)
     frame = Frame(
+        fargs,
         Dict(i => v.id for (i, v) in enumerate(tape_vars) if v isa Variable),
          -1)
     push!(t.frames, frame)
@@ -127,10 +130,19 @@ end
 # end
 
 
+"""
+Record function call onto a tape or recurse into it.
+
+Params:
+-------
+* t::IRTracer - current tracer
+* src_id::Int - source ID of the operation
+* src_fargs - IR variables of the operation
+* fargs - values of the operation
+"""
 function record_or_recurse!(t::IRTracer, src_id::Int, src_fargs, fargs...)
     fn, args = fargs[1], fargs[2:end]
     global STATE = (t, src_id, src_fargs, fargs)
-    #
     if map(typeof, fargs) in t.primitives
         res = fn(args...)
         # tape_ids = ssa_args_to_tape_vars!(t, farg_defs[2:end])
@@ -145,7 +157,7 @@ function record_or_recurse!(t::IRTracer, src_id::Int, src_fargs, fargs...)
         # note that in functions with loops this mapping may change over time
         t.frames[end].src2tape[src_id] = tape_var.id
     else
-        push_frame!(t, src_fargs...)
+        push_frame!(t, src_fargs, fargs)
         res = t(fn, args...)
         pop_frame!(t, src_id)
     end
@@ -200,7 +212,7 @@ end
             # insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
         end
     end
-    # trace_branches!(ir)
+    trace_branches!(ir)
     return ir
 end
 
