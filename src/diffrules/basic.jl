@@ -54,17 +54,17 @@
 @diffrule tuple(u,v,w,t)  w     dy[3]
 @diffrule tuple(u,v,w,t)  t     dy[4]
 
-# __tuple__ (cassette tracer implemetation uses it instead of normal tuple)
-@diffrule __tuple__(u)        u     dy[1]
-@diffrule __tuple__(u,v)      u     dy[1]
-@diffrule __tuple__(u,v)      v     dy[2]
-@diffrule __tuple__(u,v,w)    u     dy[1]
-@diffrule __tuple__(u,v,w)    v     dy[2]
-@diffrule __tuple__(u,v,w)    w     dy[3]
-@diffrule __tuple__(u,v,w,t)  u     dy[1]
-@diffrule __tuple__(u,v,w,t)  v     dy[2]
-@diffrule __tuple__(u,v,w,t)  w     dy[3]
-@diffrule __tuple__(u,v,w,t)  t     dy[4]
+# # __tuple__ (cassette tracer implemetation uses it instead of normal tuple)
+# @diffrule __tuple__(u)        u     dy[1]
+# @diffrule __tuple__(u,v)      u     dy[1]
+# @diffrule __tuple__(u,v)      v     dy[2]
+# @diffrule __tuple__(u,v,w)    u     dy[1]
+# @diffrule __tuple__(u,v,w)    v     dy[2]
+# @diffrule __tuple__(u,v,w)    w     dy[3]
+# @diffrule __tuple__(u,v,w,t)  u     dy[1]
+# @diffrule __tuple__(u,v,w,t)  v     dy[2]
+# @diffrule __tuple__(u,v,w,t)  w     dy[3]
+# @diffrule __tuple__(u,v,w,t)  t     dy[4]
 
 # vcat
 @diffrule vcat(u,v)      u     unvcat(dy, 1, u, v)
@@ -128,8 +128,8 @@
 @diffrule getfield(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
 @nodiff getfield(_s, _f::Tuple) _f
 
-@diffrule __getfield__(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
-@nodiff __getfield__(_s, _f::Tuple) _f
+# @diffrule __getfield__(_s::Tuple, _f) _s ∇getfield(dy, _s, _f)
+# @nodiff __getfield__(_s, _f::Tuple) _f
 
 
 const LONG_VAR_NAME_LIST = (:x, :u, :v, :w, :_a, :_b, :_c, :_d, :_e, :_f, :_g)

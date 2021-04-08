@@ -1,5 +1,6 @@
 import Statistics
 using LinearAlgebra
+using Setfield
 using Espresso
 using Distributions
 using ChainRulesCore
@@ -25,13 +26,14 @@ include("gradcheck.jl")
 const BEST_AVAILABLE_DEVICE = Ref{AbstractDevice}(CPU())
 
 if CUDA.functional()
-    try
-        BEST_AVAILABLE_DEVICE[] = GPU(1)
-    catch ex
-        # something is wrong with the user's set-up (or there's a bug in CuArrays)
-        @warn "CUDA is installed, but not working properly" exception=(ex,catch_backtrace())
-
-    end
+    BEST_AVAILABLE_DEVICE[] = GPU(1)
 end
 
 best_available_device() = BEST_AVAILABLE_DEVICE[]
+
+
+# step 1: update tape to support Variable & constants in Calls, compilation, derivatives
+# step 1.1: update tape to support arguments instead of custom Input type
+# step 2: update primitives to support methods signatures, not just functions
+# step 3: update gradient calculation to resolve function signatures
+# step 4: add ChainRules support

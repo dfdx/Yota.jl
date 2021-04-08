@@ -96,6 +96,11 @@ end
 find_deps(tape::Tape, id::Int; result=Set{Int}()) = find_deps(tape, [id]; result=result)
 
 
+# TODO: probably we should not remove operations out of computation graph
+# to preserve things like intentional println(...)
+# I'm keeping these utils here for now, but they may be removed soon
+# note to myself: remove_unused is useful for better readability
+
 function remove_unused(tape::Tape; keep=[tape.resultid])
     deps = find_deps(tape, keep); push!(deps, keep...)
     st = Dict()
@@ -151,7 +156,7 @@ Apply a number of transformations to a tape after tracing and before calculating
 """
 function preprocess(tape::Tape)
     tape = binarize_ops(tape)
-    tape = remove_unused(tape)
+    # tape = remove_unused(tape)
     return tape
 end
 
@@ -160,7 +165,7 @@ end
 Apply a number of transformations after calculating derivatives
 """
 function postprocess(tape::Tape)
-    tape = eliminate_common(tape)
+    # tape = eliminate_common(tape)
     return tape
 end
 
