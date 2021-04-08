@@ -93,6 +93,7 @@ function main()
     iro = IRTools.@code_ir f(args...)
 
     _, tape = trace(fargs...)
+    # segfault! segfault!
 
 
     t = IRTracer(f, args, PRIMITIVES)
