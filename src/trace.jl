@@ -114,7 +114,7 @@ end
 function push_frame!(t::IRTracer, arg_defs...)
     tape_vars = get_tape_vars(t, arg_defs)
     frame = Frame(
-        Dict(i => v for (i, v) in enumerate(tape_vars) if v isa Variable),
+        Dict(i => v.id for (i, v) in enumerate(tape_vars) if v isa Variable),
         -1
     )
     push!(t.frames, frame)

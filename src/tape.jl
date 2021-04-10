@@ -1,3 +1,16 @@
+"""
+Variable on a tape. The primary goal of the Variable type is to distinguish it
+from constant values, e.g.:
+
+Call(
+    4,   # id
+    6,   # val
+    *,   # fn
+    [Variable(2), 2]  # args - one variable and one constant value
+)
+
+For convenience, Variables can often be used where operation ID is expected.
+"""
 struct Variable
     id::Int
 end
@@ -119,7 +132,8 @@ function Base.show(io::IO, tape::Tape)
     end
 end
 
-Base.getindex(tape::Tape, i...) = getindex(tape.ops, i...)
+Base.getindex(tape::Tape, i::Int...) = getindex(tape.ops, i...)
+Base.getindex(tape::Tape, v::Variable...) = getindex(tape.ops, [x.id for x in v]...)
 Base.setindex!(tape::Tape, op::AbstractOp, i::Integer) = (tape.ops[i] = op)
 Base.lastindex(tape::Tape) = lastindex(tape.ops)
 Base.length(tape::Tape) = length(tape.ops)

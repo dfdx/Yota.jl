@@ -49,50 +49,50 @@ setderiv!(tape::Tape, op_id::Int, grad_op_id::Int) = (tape.derivs[op_id] = grad_
 setderiv!(tape::Tape, op::AbstractOp, grad_op::AbstractOp) = (tape.derivs[op.id] = grad_op.id)
 
 
-# Espresso.to_expr(tape::Tape, op::Call) = begin
-#     Expr(:call, op.fn, [v isa Variable ? Symbol(v) : v for v in op.args]...)
-# end
+Espresso.to_expr(tape::Tape, op::Call) = begin
+    Expr(:call, op.fn, [v isa Variable ? Symbol(v) : v for v in op.args]...)
+end
 
-# to_unbroadcast_expr(tape::Tape, op::Call) =
-#     Expr(
-#         :call,
-#         tape[op.args[1]].val,
-#         [v isa Variable ? Symbol(v) : v for v in op.args[2:end]]...
-#     )
-
-
-# function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
-#     ex = to_expr(tape, op)
-#     dep_types = [tape[arg].typ for arg in op.args]
-#     dex_fldnames = deriv_exprs(ex, dep_types, i)
-#     st = Dict(v isa Variable ? Symbol(v) => i : v for v in op.args)  # symbol => op ID
-#     st[:dy] = dy.id
-#     st[:y] = op.id
-#     if dex_fldnames[1][2] === nothing
-#         # not a derivative of a field - take only the 1st match
-#         dex_fldnames = dex_fldnames[1:1]
-#     end
-#     op_deriv_attrs = Tuple[]
-#     for (dex, fldname) in dex_fldnames
-#         ret_id = record_expr!(tape, dex; st=st)
-#         derivative_of = (fldname === nothing ? tape[op.args[i]] :
-#                          field_var_from_ctor_op(tape, tape[op.args[i]], fldname))
-#         push!(op_deriv_attrs, (tape[ret_id], derivative_of))
-#     end
-#     return op_deriv_attrs
-# end
+to_unbroadcast_expr(tape::Tape, op::Call) =
+    Expr(
+        :call,
+        tape[op.args[1]].val,
+        [v isa Variable ? Symbol(v) : v for v in op.args[2:end]]...
+    )
 
 
-# function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
-#     ex = to_unbroadcast_expr(tape, op)
-#     dep_eltypes = [eltype(tape[arg].typ) for arg in op.args[2:end]]
-#     dex = deriv_exprs(ex, dep_eltypes, i-1)[1][1]
-#     st = Dict(Symbol("%$id") => id for id in op.args)
-#     st[:dy] = dy.id
-#     st[:y] = op.id
-#     ret_id = record_expr!(tape, dex; st=st, bcast=true)
-#     return tape[ret_id]
-# end
+function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
+    ex = to_expr(tape, op)
+    dep_types = [tape[arg].typ for arg in op.args]
+    dex_fldnames = deriv_exprs(ex, dep_types, i)
+    st = Dict(v isa Variable ? Symbol(v) => i : v for v in op.args)  # symbol => op ID
+    st[:dy] = dy.id
+    st[:y] = op.id
+    if dex_fldnames[1][2] === nothing
+        # not a derivative of a field - take only the 1st match
+        dex_fldnames = dex_fldnames[1:1]
+    end
+    op_deriv_attrs = Tuple[]
+    for (dex, fldname) in dex_fldnames
+        ret_id = record_expr!(tape, dex; st=st)
+        derivative_of = (fldname === nothing ? tape[op.args[i]] :
+                         field_var_from_ctor_op(tape, tape[op.args[i]], fldname))
+        push!(op_deriv_attrs, (tape[ret_id], derivative_of))
+    end
+    return op_deriv_attrs
+end
+
+
+function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
+    ex = to_unbroadcast_expr(tape, op)
+    dep_eltypes = [eltype(tape[arg].typ) for arg in op.args[2:end]]
+    dex = deriv_exprs(ex, dep_eltypes, i-1)[1][1]
+    st = Dict(Symbol("%$id") => id for id in op.args)
+    st[:dy] = dy.id
+    st[:y] = op.id
+    ret_id = record_expr!(tape, dex; st=st, bcast=true)
+    return tape[ret_id]
+end
 
 
 function set_or_add_deriv!(tape::Tape, x::AbstractOp, dx::AbstractOp)
@@ -116,16 +116,35 @@ end
 
 function step_back!(tape::Tape, op::Union{Call}, i::Int)
     y = op
+    x = tape[op.args[i]]
     dy = getderiv(tape, y)
-    dy !== nothing || return           # op is not part of computation graph
-    op.args[i] isa Variable || return  # constant arg
-    x = tape[op.args[i].id]
+    dy === nothing && return   # op is not part of computation graph, e.g. range in loop
     if dy.val isa Zero
         # propagate zero to dx (reuse dy node)
         set_or_add_deriv!(tape, x, dy)
         return
     end
-    # TODO
+    # we handle broadcasting for a few built-in functions like normal derivatives
+    # all other cases are handled by a generic bcast mechanism
+    use_bcast_rules = (op.fn == broadcast) && !in(tape[op.args[1]].val, Set([+, *]))
+    try
+        if use_bcast_rules
+            dx = deriv_broadcast!(tape, op, i, dy)
+            set_or_add_deriv!(tape, x, dx)
+        else
+            # in most cases derivative_of == x, however for diffrules over struct field
+            # it points to that field's source var; see @ctor macro for details
+            op_deriv_attrs = deriv!(tape, op, i, dy)
+            for (dx, derivative_of) in op_deriv_attrs
+                set_or_add_deriv!(tape, derivative_of, dx)
+            end
+        end
+    catch
+        @error("Failed to find a derivative for $op at position $i, " *
+               "current state of backpropagation saved to Yota.DEBUG_STATE[]")
+        DEBUG_STATE[] = (tape, op, i)
+        rethrow()
+    end
 end
 
 
@@ -183,19 +202,12 @@ function check_deriv_sizes(tape::Tape)
 end
 
 
-function chainrules_transform(tape::Tape)
-
-end
-
-
 """
 Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes
 """
 function _grad(tape::Tape)
     # apply preprocessing transformations
-    # tape = preprocess(tape)
-    # apply transformations needed for ChainRules
-    tape = chainrules_transform(tape)
+    tape = preprocess(tape)
     # backpropagate gradients
     back!(tape)
     # consistency check

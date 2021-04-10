@@ -9,8 +9,8 @@ non_primitive_caller(x) = sin(non_primitive(x))
 @testset "tracer: calls" begin
     val, tape = trace(inc_mul, 2.0, 3.0)
     @test val == inc_mul(2.0, 3.0)
-    @test length(tape) == 5
-    @test tape[3] isa Constant
+    @test length(tape) == 4
+    # @test tape[3] isa Constant
 end
 
 @testset "tracer: bcast" begin
@@ -34,5 +34,5 @@ end
     @test any(op isa Call && op.fn == (*) for op in tape1)
     @test tape2[2].fn == non_primitive
     @test tape2[3].fn == sin
-    
+
 end

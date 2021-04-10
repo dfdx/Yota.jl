@@ -332,7 +332,8 @@ function dont_diff(tape::Tape, op::AbstractOp, idx::Int)
         idx_ = idx - 1
     else
         ex = to_expr(tape, op)
-        dep_types = [tape[arg].typ for arg in op.args]
+        dep_types = [arg isa Variable ? tape[arg].typ : typeof(arg)
+                    for arg in op.args]
         idx_ = idx
     end
     for rule in NO_DIFF_RULES
