@@ -1,19 +1,37 @@
-"""
-Variable on a tape. The primary goal of the Variable type is to distinguish it
-from constant values, e.g.:
 
-Call(
-    4,   # id
-    6,   # val
-    *,   # fn
-    [Variable(2), 2]  # args - one variable and one constant value
-)
+abstract type AbstractOp end
 
-For convenience, Variables can often be used where operation ID is expected.
 """
-struct Variable
-    id::Int
+Variable represents a reference to an operation on a tape.
+Variables can be used to index tape or keep reference to
+a specific operation on the tape.
+
+Variables can be free (only var ID is known) or bound (holds
+reference to the operation on tape)
+"""
+mutable struct Variable
+    _id::Union{<:Integer, Nothing}
+    _op::Union{AbstractOp, Nothing}
 end
+
+Variable(id::Integer) = Variable(id, nothing)
+Variable(op::AbstractOp) = Variable(nothing, op)
+
+function Base.getproperty(v::Variable, p::Symbol)
+    if p == :id
+        if v._op !== nothing
+            # variable bound to a specific operation on a tapea
+            return v._op.id
+        else
+            # free variable with only ID
+            return v._id
+        end
+    else
+        return getfield(v, p)
+    end
+end
+
+const V = Variable
 
 Base.show(io::IO, v::Variable) = print(io, "%$(v.id)")
 
@@ -21,50 +39,50 @@ Base.show(io::IO, v::Variable) = print(io, "%$(v.id)")
 #                            OPERATIONS                                #
 ########################################################################
 
-abstract type AbstractOp end
-
 function Base.getproperty(op::AbstractOp, f::Symbol)
     if f == :typ
         return typeof(op.val)
     elseif f == :var
-        return Variable(op.id)
+        return Variable(nothing, op)
     else
         getfield(op, f)
     end
 end
 
-## Input
+# ## Input
 
 mutable struct Input <: AbstractOp
     id::Int
     val::Any
 end
 
+Input(val::Any) = Input(0, val)
+
 Base.show(io::IO, op::Input) = print(io, "inp %$(op.id)::$(op.typ)")
 
 
-## Constant
+# ## Constant
 
-mutable struct Constant <: AbstractOp
-    id::Int
-    typ::Type
-    val
-end
-
-
-Constant(id::Int, val) = Constant(id, typeof(val), val)
-Base.show(io::IO, op::Constant) = print(io, "const %$(op.id) = $(op.val)::$(op.typ)")
+# mutable struct Constant <: AbstractOp
+#     id::Int
+#     typ::Type
+#     val
+# end
 
 
-## Assign
+# Constant(id::Int, val) = Constant(id, typeof(val), val)
+# Base.show(io::IO, op::Constant) = print(io, "const %$(op.id) = $(op.val)::$(op.typ)")
 
-mutable struct Assign <: AbstractOp
-    id::Int
-    src_id::Int
-    val
-end
 
-Base.show(io::IO, op::Assign) = print(io, "%$(op.id) = %$(op.src_id)::$(op.typ)")
+# ## Assign
+
+# mutable struct Assign <: AbstractOp
+#     id::Int
+#     src_id::Int
+#     val
+# end
+
+# Base.show(io::IO, op::Assign) = print(io, "%$(op.id) = %$(op.src_id)::$(op.typ)")
 
 
 ## Call
@@ -73,7 +91,7 @@ mutable struct Call <: AbstractOp
     id::Int
     val::Any
     fn::Union{Function, Type, Variable}
-    args::Vector{Any}  # a vector of Variable's or const values
+    args::Vector{Any}   # vector of Variables or const values
 end
 
 function Base.show(io::IO, op::Call)
@@ -82,27 +100,48 @@ function Base.show(io::IO, op::Call)
 end
 
 
+# Call(fn::Union{Function, Type, Variable}, args...; val=nothing) =
+#     Call(0, val, fn, [args...])
+
 """
 Helper function to map a function only to Variable arguments of a Call
 leaving constant values as is
 """
-function map_vars(fn::Function, args::Vector)
+function map_vars(fn::Function, args::Union{Vector, Tuple})
     return map(v -> v isa Variable ? fn(v) : v, args)
 end
 
 
 """
-Copy struct `x` replacing specified fields with new values
+    mkcall(fn, args...; val=nothing)
+
+Convenient constructor for Call operation. If val is nothing (default)
+and call value can be calculated from (bound) variables and constants,
+they are calculated. To prevent this behavior, set val to some neutral value.
 """
-function copy_with(x; kvs...)
-    T = typeof(x)
-    d = Dict(kvs)
-    flds = fieldnames(T)
-    new_flds = [get(d, f, getfield(x, f)) for f in flds]
-    return T(new_flds...)
+function mkcall(fn::Union{Function, Type, Variable}, args...; val=nothing)
+    calculable = all(a -> !isa(a, Variable) || a._op !== nothing, args)
+    if val === nothing && calculable
+        args_ = map_vars(v -> v._op.val, args)
+        val_ = fn(args_...)
+    else
+        val_ = val
+    end
+    return Call(0, val_, fn, [args...])
 end
 
-@deprecate copy_with(x) (@set x.fld = y)
+
+
+# """
+# Copy struct `x` replacing specified fields with new values
+# """
+# function copy_with(x; kvs...)
+#     T = typeof(x)
+#     d = Dict(kvs)
+#     flds = fieldnames(T)
+#     new_flds = [get(d, f, getfield(x, f)) for f in flds]
+#     return T(new_flds...)
+# end
 
 
 ########################################################################
@@ -115,16 +154,16 @@ mutable struct Tape
     # linearized execution graph
     ops::Vector{<:AbstractOp}
     # id of result variable
-    resultid::Int
+    result::Variable
     # derivs[var_id] == grad_id
-    derivs::Dict{Int,Int}
+    derivs::Dict{Variable, Variable}
     # compiled tape or nothing
     compiled::MaybeFunction
     # device of the tape
     device::AbstractDevice
 end
 
-Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device)
+Tape(device::AbstractDevice) = Tape(AbstractOp[], Variable(0), Dict(), nothing, device)
 Tape() = Tape(CPU())
 Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
                                 tape.compiled, tape.device)
@@ -137,14 +176,120 @@ function Base.show(io::IO, tape::Tape)
     end
 end
 
-Base.getindex(tape::Tape, i::Int...) = getindex(tape.ops, i...)
-Base.getindex(tape::Tape, v::Variable...) = getindex(tape.ops, [x.id for x in v]...)
-Base.setindex!(tape::Tape, op::AbstractOp, i::Integer) = (tape.ops[i] = op)
+
+inputs(tape::Tape) = [V(op) for op in tape.ops if op isa Input]
+function inputs!(tape::Tape, vals...)
+    @assert length(tape) == 0 "Can only set inputs to an empty tape"
+    for val in vals
+        push!(tape, Input(val))
+    end
+    return [V(op) for op in tape.ops[1:length(vals)]]
+end
+
+# Base.getindex(tape::Tape, i::Integer) = tape.ops[i]
+Base.getindex(tape::Tape, v::Variable) = tape.ops[v.id]
+
+# Base.setindex!(tape::Tape, op::AbstractOp, i::Integer) = (tape.ops[i] = op)
+
+function Base.setindex!(tape::Tape, op::AbstractOp, v::Variable)
+    op.id = v.id
+    tape.ops[v.id] = op
+    v._op = op   # bind to op, overriding v.id
+end
+
 Base.lastindex(tape::Tape) = lastindex(tape.ops)
 Base.length(tape::Tape) = length(tape.ops)
-Base.iterate(tape::Tape) = iterate(tape.ops)
+Base.iterate(tape::Tape) = iterate(tape.ops)       # exclude inputs?
 Base.iterate(tape::Tape, s) = iterate(tape.ops, s)
-Base.push!(tape::Tape, op::AbstractOp) = push!(tape.ops, op)
+
+"""
+    push!(tape::Tape, op::AbstractOp)
+
+Push a new operation to the end of the tape.
+"""
+function Base.push!(tape::Tape, op::AbstractOp)
+    new_id = length(tape) + 1
+    op.id = new_id
+    push!(tape.ops, op)
+    return V(op)
+end
+
+"""
+    insert(tape::Tape, idx::Integer, ops::AbstractOp...)
+
+Insert new operations into tape starting from position idx.
+"""
+function Base.insert!(tape::Tape, idx::Integer, ops::AbstractOp...)
+    num_new_ops = length(ops)
+    old_ops = tape.ops
+    new_ops = Vector{AbstractOp}(undef, length(tape) + num_new_ops)
+    # copy old ops before insertion point
+    for i=1:idx - 1
+        new_ops[i] = old_ops[i]
+    end
+    # insert target ops, assign ids
+    for i=1:num_new_ops
+        id = idx + i - 1
+        new_ops[id] = ops[i]
+        new_ops[id].id = id
+    end
+    # insert the rest of old ops
+    for i=idx:length(old_ops)
+        id = i + num_new_ops
+        new_ops[id] = old_ops[i]
+        new_ops[id].id = id
+    end
+    tape.ops = new_ops
+    # # note: making sure to reindex only ops after idx + num_new_ops
+    # # otherwise we would affect newly inserted ops as well
+    # reindex!(tape, st; from=idx + num_new_ops)
+    return [V(op) for op in ops]
+end
+
+
+foo(x, y) = x * y
+
+function test_it()
+    tape = Tape()
+    a1, a2, a3 = inputs!(tape, foo, 2.0, 5.0)
+    r = push!(tape, mkcall(*, a2, a3))
+    ops = [mkcall(+, a2, 1), mkcall(+, a3, 1)]
+    v1, v2 = insert!(tape, 4, ops...)
+    tape[r] = mkcall(*, v1, v2)
+end
+
+
+
+###############################################################################
+#                                REINDEX                                      #
+###############################################################################
+
+# TODO: perhaps not needed with bound variables?
+
+reindex!(op::Input, st::Dict) = (op.id = get(st, op.id, op.id))
+
+function reindex!(op::Call, st::Dict)
+    op.args = map_vars(v -> Variable(get(st, v.id, v.id)), op.args)
+    op.id = get(st, op.id, op.id)
+    return op
+end
+
+function reindex_fields!(tape::Tape, st::Dict)
+    tape.resultid = get(st, tape.resultid, tape.resultid)
+    tape.derivs = Dict(get(st, k, k) => get(st, v, v) for (k, v) in tape.derivs)
+end
+
+function reindex!(tape::Tape, st::Dict; from=1, to=length(tape))
+    for id=from:to
+        reindex!(tape[id], st)
+    end
+    reindex_fields!(tape, st)
+    return tape
+end
+
+
+
+
 
 
 """
@@ -157,6 +302,7 @@ function record!(tape::Tape, optype::Type{<:AbstractOp}, args...)
     return ret_id
 end
 
+@deprecate record!(tape::Tape, optype::Type{<:AbstractOp}, args...) push!(tape, optype(args...))
 
 """
 Parse a complex call expression and record corresponding operations to a tape.
@@ -400,11 +546,12 @@ end
 
 
 exec!(::Tape, ::Input) = ()
-exec!(::Tape, ::Constant) = ()
-exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
+# exec!(::Tape, ::Constant) = ()
+# exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
 
 function exec!(tape::Tape, op::Call)
-    arg_vals = [v isa Variable ? tape[v.id].val : v for v in op.args]
+    # arg_vals = [v isa Variable ? tape[v.id].val : v for v in op.args]
+    arg_vals = map_vars(v -> tape[v].val, op.args)
     op.val = op.fn(arg_vals...)
 end
 

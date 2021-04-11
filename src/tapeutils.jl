@@ -2,32 +2,34 @@
 #                 REINDEXING & OP BINARIZATION                         #
 ########################################################################
 
-function reindex(op::Call, st::Dict)
-    # new_args = [v isa Variable ? Variable(get(st, v.id, v.id)) : v for v in op.args]
-    new_args = map_vars(v -> Variable(get(st, v.id, v.id)), op.args)
-    new_id = get(st, op.id, op.id)
-    return copy_with(op, args=new_args, id=new_id)
-end
+# function reindex(op::Call, st::Dict)
+#     # new_args = [v isa Variable ? Variable(get(st, v.id, v.id)) : v for v in op.args]
+#     new_args = map_vars(v -> Variable(get(st, v.id, v.id)), op.args)
+#     new_id = get(st, op.id, op.id)
+#     return copy_with(op, args=new_args, id=new_id)
+# end
 
-reindex(op::Assign, st::Dict) = copy_with(op, id=get(st, op.id, op.id),
-                                          src_id=get(st, op.src_id, op.src_id))
-reindex(op::AbstractOp, st::Dict) = copy_with(op, id=get(st, op.id, op.id))
-
-
-function reindex_fields!(tape::Tape, st::Dict)
-    tape.resultid = get(st, tape.resultid, tape.resultid)
-    tape.derivs = Dict(get(st, k, k) => get(st, v, v) for (k, v) in tape.derivs)
-    # possibly we also need to reindex .derivs
-end
+# reindex(op::Assign, st::Dict) = copy_with(op, id=get(st, op.id, op.id),
+#                                           src_id=get(st, op.src_id, op.src_id))
+# reindex(op::AbstractOp, st::Dict) = copy_with(op, id=get(st, op.id, op.id))
 
 
-function reindex(tape::Tape, st::Dict)
-    new_tape = copy_with(tape, ops=AbstractOp[])
-    for op in tape
-        push!(new_tape, reindex(op, st))
-    end
-    return new_tape
-end
+# function reindex_fields!(tape::Tape, st::Dict)
+#     tape.resultid = get(st, tape.resultid, tape.resultid)
+#     tape.derivs = Dict(get(st, k, k) => get(st, v, v) for (k, v) in tape.derivs)
+#     # possibly we also need to reindex .derivs
+# end
+
+
+# function reindex(tape::Tape, st::Dict)
+#     new_tape = @set tape.ops=AbstractOp[]
+#     for op in tape
+#         push!(new_tape, reindex(op, st))
+#     end
+#     reindex_fields!(tape, st)
+#     return new_tape
+# end
+
 
 
 """
@@ -178,8 +180,8 @@ end
 # so different runs of a tape doesn't affect its identity
 
 Base.hash(op::Input, h::UInt) = hash(op.id, h)
-Base.hash(op::Constant, h::UInt) = hash(op.id, hash(op.val, h))
-Base.hash(op::Assign, h::UInt) = hash(op.id, hash(op.src_id, h))
+# Base.hash(op::Constant, h::UInt) = hash(op.id, hash(op.val, h))
+# Base.hash(op::Assign, h::UInt) = hash(op.id, hash(op.src_id, h))
 Base.hash(op::Call, h::UInt) = hash(op.id, hash(op.fn, hash(op.args, h)))
 
 
@@ -196,8 +198,8 @@ end
 
 
 Base.:(==)(op1::Input, op2::Input) = (op1.id == op2.id)
-Base.:(==)(op1::Constant, op2::Constant) = (op1.id == op2.id && op1.val == op2.val)
-Base.:(==)(op1::Assign, op2::Assign) = (op1.id == op2.id && op1.src_id == op2.src_id)
+# Base.:(==)(op1::Constant, op2::Constant) = (op1.id == op2.id && op1.val == op2.val)
+# Base.:(==)(op1::Assign, op2::Assign) = (op1.id == op2.id && op1.src_id == op2.src_id)
 Base.:(==)(op1::Call, op2::Call) = (op1.id == op2.id && op1.fn == op2.fn && op1.args == op2.args)
 
 function Base.:(==)(tape1::Tape, tape2::Tape)
