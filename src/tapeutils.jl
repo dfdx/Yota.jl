@@ -2,9 +2,9 @@
 #                 REINDEXING & OP BINARIZATION                         #
 ########################################################################
 
-
 function reindex(op::Call, st::Dict)
-    new_args = [get(st, x, x) for x in op.args]
+    # new_args = [v isa Variable ? Variable(get(st, v.id, v.id)) : v for v in op.args]
+    new_args = map_vars(v -> Variable(get(st, v.id, v.id)), op.args)
     new_id = get(st, op.id, op.id)
     return copy_with(op, args=new_args, id=new_id)
 end

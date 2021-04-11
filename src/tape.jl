@@ -76,13 +76,18 @@ mutable struct Call <: AbstractOp
     args::Vector{Any}  # a vector of Variable's or const values
 end
 
-# already defined for AbstractOp?
-# Base.getproperty(op::Input, f::Call) = f == :typ ? typeof(op.val) : getfield(op, f)
-
-
 function Base.show(io::IO, op::Call)
     arg_str = join(["$v" for v in op.args], ", ")
     print(io, "%$(op.id) = $(op.fn)($arg_str)::$(op.typ)")
+end
+
+
+"""
+Helper function to map a function only to Variable arguments of a Call
+leaving constant values as is
+"""
+function map_vars(fn::Function, args::Vector)
+    return map(v -> v isa Variable ? fn(v) : v, args)
 end
 
 
