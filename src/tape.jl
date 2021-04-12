@@ -1,5 +1,8 @@
-
 abstract type AbstractOp end
+
+########################################################################
+#                             VARIABLE                                 #
+########################################################################
 
 """
 Variable represents a reference to an operation on a tape.
@@ -31,6 +34,21 @@ function Base.getproperty(v::Variable, p::Symbol)
     end
 end
 
+function Base.setproperty!(v::Variable, p::Symbol, x)
+    if p == :id
+        if v._op !== nothing
+            # variable bound to a specific operation on a tapea
+            v._op.id = x
+        else
+            # free variable with only ID
+            v.id = x
+        end
+    else
+        return setfield!(v, p, x)
+    end
+end
+
+
 const V = Variable
 
 Base.show(io::IO, v::Variable) = print(io, "%$(v.id)")
@@ -49,7 +67,7 @@ function Base.getproperty(op::AbstractOp, f::Symbol)
     end
 end
 
-# ## Input
+## Input
 
 mutable struct Input <: AbstractOp
     id::Int
@@ -59,30 +77,6 @@ end
 Input(val::Any) = Input(0, val)
 
 Base.show(io::IO, op::Input) = print(io, "inp %$(op.id)::$(op.typ)")
-
-
-# ## Constant
-
-# mutable struct Constant <: AbstractOp
-#     id::Int
-#     typ::Type
-#     val
-# end
-
-
-# Constant(id::Int, val) = Constant(id, typeof(val), val)
-# Base.show(io::IO, op::Constant) = print(io, "const %$(op.id) = $(op.val)::$(op.typ)")
-
-
-# ## Assign
-
-# mutable struct Assign <: AbstractOp
-#     id::Int
-#     src_id::Int
-#     val
-# end
-
-# Base.show(io::IO, op::Assign) = print(io, "%$(op.id) = %$(op.src_id)::$(op.typ)")
 
 
 ## Call
@@ -99,9 +93,6 @@ function Base.show(io::IO, op::Call)
     print(io, "%$(op.id) = $(op.fn)($arg_str)::$(op.typ)")
 end
 
-
-# Call(fn::Union{Function, Type, Variable}, args...; val=nothing) =
-#     Call(0, val, fn, [args...])
 
 """
 Helper function to map a function only to Variable arguments of a Call
@@ -120,7 +111,11 @@ and call value can be calculated from (bound) variables and constants,
 they are calculated. To prevent this behavior, set val to some neutral value.
 """
 function mkcall(fn::Union{Function, Type, Variable}, args...; val=nothing)
-    calculable = all(a -> !isa(a, Variable) || a._op !== nothing, args)
+    calculable = all(
+        a -> !isa(a, Variable) ||                      # not variable
+        (a._op !== nothing && a._op.val !== nothing),  # bound variable
+        args
+    )
     if val === nothing && calculable
         args_ = map_vars(v -> v._op.val, args)
         val_ = fn(args_...)
@@ -129,19 +124,6 @@ function mkcall(fn::Union{Function, Type, Variable}, args...; val=nothing)
     end
     return Call(0, val_, fn, [args...])
 end
-
-
-
-# """
-# Copy struct `x` replacing specified fields with new values
-# """
-# function copy_with(x; kvs...)
-#     T = typeof(x)
-#     d = Dict(kvs)
-#     flds = fieldnames(T)
-#     new_flds = [get(d, f, getfield(x, f)) for f in flds]
-#     return T(new_flds...)
-# end
 
 
 ########################################################################
@@ -186,10 +168,7 @@ function inputs!(tape::Tape, vals...)
     return [V(op) for op in tape.ops[1:length(vals)]]
 end
 
-# Base.getindex(tape::Tape, i::Integer) = tape.ops[i]
 Base.getindex(tape::Tape, v::Variable) = tape.ops[v.id]
-
-# Base.setindex!(tape::Tape, op::AbstractOp, i::Integer) = (tape.ops[i] = op)
 
 function Base.setindex!(tape::Tape, op::AbstractOp, v::Variable)
     op.id = v.id
@@ -201,6 +180,7 @@ Base.lastindex(tape::Tape) = lastindex(tape.ops)
 Base.length(tape::Tape) = length(tape.ops)
 Base.iterate(tape::Tape) = iterate(tape.ops)       # exclude inputs?
 Base.iterate(tape::Tape, s) = iterate(tape.ops, s)
+
 
 """
     push!(tape::Tape, op::AbstractOp)
@@ -214,8 +194,9 @@ function Base.push!(tape::Tape, op::AbstractOp)
     return V(op)
 end
 
+
 """
-    insert(tape::Tape, idx::Integer, ops::AbstractOp...)
+    insert!(tape::Tape, idx::Integer, ops::AbstractOp...)
 
 Insert new operations into tape starting from position idx.
 """
@@ -240,317 +221,91 @@ function Base.insert!(tape::Tape, idx::Integer, ops::AbstractOp...)
         new_ops[id].id = id
     end
     tape.ops = new_ops
-    # # note: making sure to reindex only ops after idx + num_new_ops
-    # # otherwise we would affect newly inserted ops as well
-    # reindex!(tape, st; from=idx + num_new_ops)
     return [V(op) for op in ops]
 end
 
 
-foo(x, y) = x * y
+"""
+    replace!(tape, idx => [ops...]; rebind_to)
 
-function test_it()
-    tape = Tape()
-    a1, a2, a3 = inputs!(tape, foo, 2.0, 5.0)
-    r = push!(tape, mkcall(*, a2, a3))
-    ops = [mkcall(+, a2, 1), mkcall(+, a3, 1)]
-    v1, v2 = insert!(tape, 4, ops...)
-    tape[r] = mkcall(*, v1, v2)
+Replace operation at specified index with 1 or more other operations,
+rebind variables in the reminder of the tape to ops[rebind_to].
+"""
+function Base.replace!(tape::Tape, idx_ops::Pair{<:Integer, <:Union{Tuple, Vector}};
+                       rebind_to=length(idx_ops[2]))
+    idx, ops = idx_ops
+    tape[V(idx)] = ops[1]
+    if idx < length(tape)
+        insert!(tape, idx + 1, ops[2:end]...)
+    else
+        push!(ops[2:end]...)
+    end
+    st = Dict(idx => ops[rebind_to].id)
+    rebind!(tape, st; from=idx + length(ops))
+    return ops[rebind_to]
 end
 
 
-
 ###############################################################################
-#                                REINDEX                                      #
+#                                 REBIND                                      #
 ###############################################################################
 
-# TODO: perhaps not needed with bound variables?
+"""
+    rebind!(tape::Tape, op, st::Dict)
+    rebind!(tape::Tape, st::Dict; from, to)
 
-reindex!(op::Input, st::Dict) = (op.id = get(st, op.id, op.id))
+Rebind all variables according to substitution table. Example:
 
-function reindex!(op::Call, st::Dict)
-    op.args = map_vars(v -> Variable(get(st, v.id, v.id)), op.args)
-    op.id = get(st, op.id, op.id)
+    tape = Tape()
+    v1, v2 = inputs!(tape, nothing, 3.0, 5.0)
+    v3 = push!(tape, mkcall(*, v1, 2))
+    st = Dict(v1.id => v2.id)
+    rebind!(tape, st)
+    @assert tape[v3].args[1].id == v2.id
+
+"""
+function rebind!(tape::Tape, v::Variable, st::Dict)
+    if haskey(st, v.id)
+        # rebind to a new op
+        v._op = tape[V(st[v.id])]
+    end
+end
+
+rebind!(::Tape, ::Input, ::Dict) = ()
+
+function rebind!(tape::Tape, op::Call, st::Dict)
+    for v in op.args
+        if v isa Variable
+            rebind!(tape, v, st)
+        end
+    end
     return op
 end
 
-function reindex_fields!(tape::Tape, st::Dict)
-    tape.resultid = get(st, tape.resultid, tape.resultid)
-    tape.derivs = Dict(get(st, k, k) => get(st, v, v) for (k, v) in tape.derivs)
+function rebind_fields!(tape::Tape, st::Dict)
+    rebind!(tape, tape.result, st)
+    for (v, dv) in tape.derivs
+        rebind!(tape, v, st)
+        rebind!(tape, dv, st)
+    end
 end
 
-function reindex!(tape::Tape, st::Dict; from=1, to=length(tape))
+function rebind!(tape::Tape, st::Dict; from=1, to=length(tape))
     for id=from:to
-        reindex!(tape[id], st)
+        rebind!(tape, tape[V(id)], st)
     end
-    reindex_fields!(tape, st)
+    rebind_fields!(tape, st)
     return tape
 end
-
-
-
-
-
-
-"""
-Record a new operation (defined by its type and arguments for constructor)
-to a tape and return ID of this new op.
-"""
-function record!(tape::Tape, optype::Type{<:AbstractOp}, args...)
-    ret_id = length(tape) + 1
-    push!(tape, optype(ret_id, args...))
-    return ret_id
-end
-
-@deprecate record!(tape::Tape, optype::Type{<:AbstractOp}, args...) push!(tape, optype(args...))
-
-"""
-Parse a complex call expression and record corresponding operations to a tape.
-
-Optionally takes substitution table (st parameter) to replace known symbols with
-provided values.
-
-Keyword params:
-
- * st::Dict - substitution table, used to replace symbols in ex with tape op ids
- * bcast::Bool - replace all function calls with corresponding broadcasting
-"""
-function record_expr!(tape::Tape, ex::Expr; st=Dict(), bcast=false)
-    # special case: x => identity(x)
-    if ex isa Symbol
-        ex = :($identity($ex))
-    end
-    # special case: x[i] => getindex(x, i)
-    if Meta.isexpr(ex, :ref)
-        ex = rewrite(ex, :(_x[_i]), :($getindex(_x, _i)))
-    end
-    @assert Meta.isexpr(ex, :call) "Expression isn't a call"
-    new_op_args = Vector{Int}(undef, length(ex.args) - 1)
-    for (i, x) in enumerate(ex.args[2:end])
-        if haskey(st, x)
-            # op ID comes from substitution table
-            new_op_args[i] = st[x]
-        elseif Meta.isexpr(x, :call)
-            # recursively record arg expression
-            arg_id = record_expr!(tape, x; st=st, bcast=bcast)
-            new_op_args[i] = arg_id
-        else
-            # treat as constant
-            arg_id = record!(tape, Constant, x)
-            new_op_args[i] = arg_id
-        end
-    end
-    fn = ex.args[1]
-    fn = device_function(tape.device, fn)
-    if bcast
-        retval = broadcast(fn, [tape[id].val for id in new_op_args]...)
-        fn_id = record!(tape, Constant, fn)
-        return record!(tape, Call, retval, broadcast, [fn_id; new_op_args])
-    elseif fn isa Symbol && fn in Set([:.+, :.*, :.-, :./, :.^])
-        _fn = eval(Symbol(string(fn)[2:end]))
-        retval = broadcast(_fn, [tape[id].val for id in new_op_args]...)
-        fn_id = record!(tape, Constant, _fn)
-        return record!(tape, Call, retval, broadcast, [fn_id; new_op_args])
-    else
-        retval = fn([tape[id].val for id in new_op_args]...)
-        return record!(tape, Call, retval, fn, new_op_args)
-    end
-end
-
-
-function record_expr!(tape::Tape, x::Symbol; st=Dict(), bcast=false)
-    id = st[x]
-    return record!(tape, Assign, id, tape[id].val)
-end
-
-
-function record_expr!(tape::Tape, x; st, bcast=false)
-    return record!(tape, Constant, x)
-end
-
-
-########################################################################
-#                           TRANSFORMATIONS                            #
-########################################################################
-
-
-"""
-Replace all call arguments according to the provided dict
-"""
-function replace_in_args!(tape::Tape, st::Dict)
-    for (i, op) in enumerate(tape)
-        if op isa Call
-            new_args = [get(st, x, x) for x in op.args]
-            tape[i] = copy_with(op, args=new_args)
-        end
-    end
-end
-
-
-# """
-# Recover broadcast operation from Broadcast.broadcasted and Broadcast.materialize
-# """
-# function recover_broadcast(tape::Tape)
-#     new_tape = copy_with(tape; ops=AbstractOp[])
-#     # TODO: seems like we don't need subs table any more
-#     # remove after squash_assigned is implemented
-#     st = Dict()
-#     for (id, op) in enumerate(tape)
-#         if op isa Call && op.fn === Broadcast.broadcasted
-#             # replace Broadcast.broadcasted with just broadcast & materialize value
-#             val = Broadcast.materialize(op.val)
-#             new_id = length(new_tape) + 1
-#             push!(new_tape.ops, copy_with(op; fn=broadcast, val=val))
-#             st[id] = length(new_tape)
-#         elseif op isa Call && op.fn === Broadcast.materialize
-#             # materialize becomes just assignment
-#             new_id = record!(new_tape, Assign, op.args[1], op.val)
-#             st[id] = new_id
-#         else
-#             # record any other operations as is
-#             new_id = length(new_tape) + 1
-#             push!(new_tape.ops, copy_with(op; id=new_id))
-#             st[id] = length(new_tape)
-#         end
-#     end
-#     replace_in_args!(new_tape, st)
-#     new_tape.resultid = get(st, tape.resultid, tape.resultid)
-#     return new_tape
-# end
-
-
-# # function squash_assigned(tape::Tape)
-# #     # note: after update to CuArrays v1.5.0 deepcopy(tape.ops) fails for Lilith.GRU if there's Assign op
-# #     # I don't know the reason, but [deepcopy(op) for op in tape.ops] fixes it
-# #     tape = copy_with(tape; ops=[deepcopy(op) for op in tape.ops])
-# #     # 1. compute subs table for chains of assignment operations
-# #     # and replace equivalent op ids
-# #     assign_st = Dict()
-# #     for (id, op) in enumerate(tape)
-# #         if op isa Assign
-# #             # propagate replacement through known st
-# #             src_id = op.src_id
-# #             while haskey(assign_st, src_id)
-# #                 src_id = assign_st[src_id]
-# #             end
-# #             assign_st[id] = src_id
-# #         end
-# #     end
-# #     replace_in_args!(tape, assign_st)
-# #     tape.resultid = get(assign_st, tape.resultid, tape.resultid)
-# #     # 2. create new ops w/o assignments
-# #     new_tape = copy_with(tape; ops=AbstractOp[])
-# #     reindex_st = Dict()
-# #     for (id, op) in enumerate(tape)
-# #         if !isa(op, Assign)
-# #             # record any other operations as is
-# #             new_id = length(new_tape) + 1
-# #             push!(new_tape.ops, copy_with(op; id=new_id))
-# #             if id != new_id
-# #                 reindex_st[id] = new_id
-# #             end
-# #         end
-# #     end
-# #     replace_in_args!(new_tape, reindex_st)
-# #     reindex_fields!(new_tape, reindex_st)
-# #     return new_tape
-# # end
-
-
-# function squash_assigned(tape::Tape)
-#     new_tape = copy_with(tape, ops=AbstractOp[])
-#     st = Dict{Int, Int}()  # substitution table for op indices
-#     for id=1:length(tape)
-#         # id == 228 && break
-#         op = reindex(tape[id], st)
-#         if op isa Assign
-#             # dig until not-assign argument is found
-#             root = op
-#             while root isa Assign
-#                 root = new_tape[root.src_id]
-#             end
-#             st[op.id] = root.id   # replace this op id on _old_ tape with root id on the _new_ tape
-#             # note: not pushing this op into new tape
-#             # println("assign: $op; replacing $(op.id) => $(root.id)")
-#         else
-#             new_id = length(new_tape) + 1
-#             new_op = copy_with(op, id=new_id)
-#             push!(new_tape, new_op)
-#             if new_id != id
-#                 st[id] = new_id
-#                 # println("subs $id => $new_id")
-#             end
-#         end
-#     end
-#     reindex_fields!(new_tape, st)
-#     return new_tape
-# end
-
-
-# # function test_fuse_assigned()
-# #     tape = Tape()
-# #     record!(tape, Input, 3.0)
-# #     record!(tape, Input, 2.0)
-# #     record!(tape, Assign, 1, tape[1].val)
-# #     record!(tape, Assign, 3, tape[3].val)
-# #     record!(tape, Call, 5.0, +, [2, 4])
-# #     record!(tape, Assign, 5, tape[5].val)
-# #     tape.resultid = length(tape)
-# # end
-
-
-
-# # """
-# # Unwind iterate() sequences into plain __getfield__ expressions.
-# # unwind_iterate() doesn't remove unused elements for performance reasons,
-# # so remove_unused() should be called after it.
-# # """
-# # function unwind_iterate(tape::Tape)
-# #     tape = copy_with(tape)
-# #     for op in tape
-# #         if (op isa Call && op.fn in (getfield, __getfield__)
-# #             && tape[op.args[1]] isa Call && tape[op.args[1]].fn == Base.iterate
-# #             && tape[op.args[2]] isa Constant && tape[op.args[2]].val == 1)
-# #             iterate_op = tape[op.args[1]]
-# #             iterable_op = tape[iterate_op.args[1]]
-# #             idx = length(iterate_op.args) > 1 ? tape[iterate_op.args[2]].val : 1
-# #             if iterable_op.val isa Tuple || iterable_op.val isa Vector || iterable_op.val isa UnitRange
-# #                 # 1. Replace iterable op with index in the original iterable
-# #                 tape[iterate_op.id] = Constant(iterate_op.id, idx)
-# #                 # 2. Replace __getfield__ on iterator with __getfield__ or getindex on original iterable
-# #                 idx_id = iterate_op.id
-# #                 obj_id = iterable_op.id
-# #                 # TODO: in which other cases getindex is better than __getfield__?
-# #                 get_op = iterable_op.val isa UnitRange ? getindex : __getfield__
-# #                 tape[op.id] = Call(op.id, op.val, get_op, [obj_id, idx_id])
-# #             end
-# #         end
-# #     end
-# #     return tape
-# # end
-
-
-# function simplify(tape::Tape)
-#     tape = recover_broadcast(tape)
-#     tape = squash_assigned(tape)
-#     # tape = unwind_iterate(tape)
-#     tape = eliminate_common(tape)
-#     tape = remove_unused(tape)
-#     return tape
-# end
 
 
 ########################################################################
 #                              EXECUTION                               #
 ########################################################################
 
-
 exec!(::Tape, ::Input) = ()
-# exec!(::Tape, ::Constant) = ()
-# exec!(tape::Tape, op::Assign) = (op.val = tape[op.src_id].val)
 
 function exec!(tape::Tape, op::Call)
-    # arg_vals = [v isa Variable ? tape[v.id].val : v for v in op.args]
     arg_vals = map_vars(v -> tape[v].val, op.args)
     op.val = op.fn(arg_vals...)
 end
@@ -571,5 +326,5 @@ function play!(tape::Tape, args...; use_compiled=true, debug=false)
             exec!(tape, op)
         end
     end
-    return tape[tape.resultid].val
+    return tape[tape.result].val
 end

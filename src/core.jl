@@ -7,6 +7,7 @@ using ChainRules
 using CUDA
 
 
+include("funres.jl")
 include("utils.jl")
 include("scatter/scatter.jl")
 include("helpers.jl")
@@ -16,7 +17,7 @@ include("tape.jl")
 # include("trace.jl")
 # # include("diffrules/diffrules.jl")
 # include("funres.jl")
-# include("chainrules.jl")
+include("chainrules.jl")
 # include("grad.jl")
 # include("compile.jl")
 # include("update.jl")
