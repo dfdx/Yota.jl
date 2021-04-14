@@ -9,8 +9,11 @@ Variable represents a reference to an operation on a tape.
 Variables can be used to index tape or keep reference to
 a specific operation on the tape.
 
-Variables can be free (only var ID is known) or bound (holds
-reference to the operation on tape)
+Variables can be:
+
+* free, created as V(id) - used for indexing into tape
+* bound, created as V(op) - used to keep a robust reference
+  to an operation on the tape
 """
 mutable struct Variable
     _id::Union{<:Integer, Nothing}

@@ -17,7 +17,7 @@ struct FunctionResolver{T}
     FunctionResolver{T}() where T = new{T}(Dict())
 end
 
-function FunctionResolver{T}(pairs::Vector{Pair{S, T} where S}) where T
+function FunctionResolver{T}(pairs::Vector{<:Pair{S, T} where S}) where T
     rsv = FunctionResolver{T}()
     for (sig, val) in pairs
         rsv[sig] = val

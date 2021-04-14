@@ -1,28 +1,15 @@
 import IRTools
 import IRTools: IR, @dynamo, self, insertafter!
 
-# Some abbreviations used in this file
-# * sid : SSA ID, ID of a variable in SSA form of IR
-# * tid : Tape ID, ID of a variable on a Tape
-# * fn : function being called
-# * args : arguments to a function
-# * fargs : array of [fn, args...]
-# * farg_defs : SSA definitions of fargs, i.e. IRTools.Variable or objects
-# * res / ret - result or return value
 
-
-function __new__(T, args...)
-    # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
-    if T <: NamedTuple
-        return T(args)
-    else
-        return T(args...)
-    end
-end
-
-
-# __tuple__(args...) = tuple(args...)
-# __getfield__(args...) = getfield(args...)
+# function __new__(T, args...)
+#     # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
+#     if T <: NamedTuple
+#         return T(args)
+#     else
+#         return T(args...)
+#     end
+# end
 
 
 function module_functions(modl)
@@ -30,7 +17,8 @@ function module_functions(modl)
     for s in Base.names(modl; all=true)
         isdefined(modl, s) || continue
         fn = getfield(modl, s)
-        if fn isa Function # && match(r"^[a-z#]+$", string(s)) != nothing
+        # && match(r"^[a-z#]+$", string(s)) != nothing
+        if fn isa Function && !in(string(fn)[1], "#_@")
             push!(res, fn)
         end
     end
@@ -47,7 +35,14 @@ const BASE_PRIMITIVE_FUNCTIONS = Set{Any}(vcat(
      __new__, namedtuple, guess_device]));
 
 
-const PRIMITIVES = BASE_PRIMITIVE_FUNCTIONS
+const PRIMITIVES = FunctionResolver{Bool}(
+    collect((typeof(f), Vararg) => true for f in BASE_PRIMITIVE_FUNCTIONS)
+)
+
+
+function is_primitive(sig)
+    return sig in PRIMITIVES || is_chainrules_primitive(sig)
+end
 
 
 ################################################################################
@@ -56,18 +51,18 @@ const PRIMITIVES = BASE_PRIMITIVE_FUNCTIONS
 
 """Frame of a call stack"""
 mutable struct Frame
-    # IR var ID to Tape var ID. Note that IR ID refers to the _original_ IR,
+    # IR var ID to Tape var. Note that IR ID refers to the _original_ IR,
     # not the transformed one. In fact, any unique name of SSA instructions
     # would fit, using IR IDs is just convenient
-    ir2tape::Dict{Int, Int}
+    ir2tape::Dict{Int, V}
     # result ID - tape ID corresponding to latest return value
     # from this call frame
-    resultid::Int
+    result::V
 end
 
 function Base.show(io::IO, fr::Frame)
     map_str = join(["$k=>$v" for (k, v) in fr.ir2tape], ",")
-    print(io, "Frame($map_str, $(fr.resultid))")
+    print(io, "Frame($map_str, $(fr.result))")
 end
 
 
@@ -76,14 +71,14 @@ end
 ################################################################################
 
 mutable struct IRTracer
-    primitives::Set{Any}
+    is_primitive::Function
     tape::Tape
     frames::Vector{Frame}
 end
 
-function IRTracer(;primitives=PRIMITIVES)
+function IRTracer(;is_primitive=is_chainrules_primitive)
     tape = Tape()
-    return IRTracer(primitives, tape, [])
+    return IRTracer(is_primitive, tape, [])
 end
 
 Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
@@ -99,7 +94,7 @@ function get_tape_vars(t::IRTracer, arg_defs::Union{Vector, Tuple})
     for (i, arg) in enumerate(arg_defs)
         if arg isa IRTools.Variable
             tape_id = t.frames[end].ir2tape[arg.id]
-            result[i] = Variable(tape_id)   # Yota.Variable
+            result[i] = Variable(t.tape[tape_id])   # Yota.Variable
         else
             val = promote_const_value(arg)
             # arg_var = record!(t.tape, Constant, val)
@@ -111,11 +106,11 @@ end
 
 
 """Push a new call frame to tracer, setting function params accordingly"""
-function push_frame!(t::IRTracer, arg_defs...)
-    tape_vars = get_tape_vars(t, arg_defs)
+function push_frame!(t::IRTracer, farg_irvars...)
+    tape_vars = get_tape_vars(t, farg_irvars)
     frame = Frame(
-        Dict(i => v.id for (i, v) in enumerate(tape_vars) if v isa Variable),
-        -1
+        Dict(i => v for (i, v) in enumerate(tape_vars) if v isa V),
+        V(0)
     )
     push!(t.frames, frame)
 end
@@ -126,7 +121,7 @@ function pop_frame!(t::IRTracer, res_sid::Int)
     frame = pop!(t.frames)
     # create mapping from the current SSA ID to the last instruction on the tape
     t.frames[end].ir2tape[res_sid] =
-        (frame.resultid == -1 ? length(t.tape) : frame.resultid)
+        (frame.result.id == 0 ? V(tape[length(t.tape)]) : frame.result)
 end
 
 
@@ -135,7 +130,7 @@ function set_branch_params!(t::IRTracer, ssa_args, target_params)
     tape_vars = get_tape_vars(t, ssa_args)
     ir2tape = t.frames[end].ir2tape
     for (v, p) in zip(tape_vars, target_params)
-        ir2tape[p] = v.id
+        ir2tape[p] = v
     end
 end
 
@@ -144,7 +139,7 @@ end
 function set_return!(t::IRTracer, arg_sid_ref)
     # global STATE = (t, arg_sid_ref)
     tape_var = get_tape_vars(t, [arg_sid_ref[]])[1]
-    t.frames[end].resultid = tape_var.id
+    t.frames[end].result = tape_var
 end
 
 
@@ -168,22 +163,22 @@ Params:
 -------
 * t::IRTracer - current tracer
 * res_id::Int - IR ID of the operation
-* farg_defs - IR variables of the operation
+* farg_irvars - IR variables of the operation
 * fargs - values of the operation
 """
-function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
+function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    # global STATE = (t, res_sid, farg_defs, fargs)
-    if fn in t.primitives || (fn isa Type && fn <: NamedTuple)
-        res = fn(args...)
-        tape_vars = get_tape_vars(t, farg_defs[2:end])
+    global STATE = (t, res_sid, farg_irvars, fargs)
+    @show STATE
+    if t.is_primitive(map(typeof, fargs)) # || (fn isa Type && fn <: NamedTuple)
+        tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape
-        res_tid = record!(t.tape, Call, res, fn, tape_vars)
+        res = push!(t.tape, mkcall(tape_vars...))
         # update mapping from SSA var to tape var
         # note that in functions with loops this mapping may change over time
-        t.frames[end].ir2tape[res_sid] = res_tid
+        t.frames[end].ir2tape[res_sid] = res
     else
-        push_frame!(t, farg_defs...)
+        push_frame!(t, farg_irvars...)
         res = t(fn, args...)
         pop_frame!(t, res_sid)
     end
@@ -191,12 +186,12 @@ function record_or_recurse!(t::IRTracer, res_sid::Int, farg_defs, fargs...)
 end
 
 
-function record_const!(t::IRTracer, res_sid, val)
-    val = val isa QuoteNode ? val.value : val
-    res_tid = record!(t.tape, Constant, val)
-    t.frames[end].ir2tape[res_sid] = res_tid
-    return val
-end
+# function record_const!(t::IRTracer, res_sid, val)
+#     val = val isa QuoteNode ? val.value : val
+#     res_tid = record!(t.tape, Constant, val)
+#     t.frames[end].ir2tape[res_sid] = res_tid
+#     return val
+# end
 
 
 function trace_branches!(ir::IR)
@@ -236,7 +231,8 @@ end
             # note: using insertafter!() due to
             # https://github.com/FluxML/IRTools.jl/issues/78
             # ir[v] = Expr(:call, record_const!, self, v.id, v)
-            insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
+
+            # insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
         end
     end
     trace_branches!(ir)
@@ -247,14 +243,12 @@ end
 """
 Trace function call, produce call value and a Tape
 """
-function trace(f, args...; primitives=PRIMITIVES)
-    t = IRTracer(; primitives=primitives)
-    for arg in args
-        record!(t.tape, Input, arg)
-    end
-    push!(t.frames, Frame(Dict(i + 1 => i for i in 1:length(args)), -1))
+function trace(f, args...; is_primitive=is_primitive)
+    t = IRTracer(; is_primitive=is_primitive)
+    arg_vars = inputs!(t.tape, f, args...)
+    push!(t.frames, Frame(Dict(i => a for (i, a) in enumerate(arg_vars)), V(0)))
     val = t(f, args...)
-    t.tape.resultid = t.frames[1].resultid
+    t.tape.result = t.frames[1].result
     tape = t.tape
     # if optimize
     #     tape = simplify(tape)

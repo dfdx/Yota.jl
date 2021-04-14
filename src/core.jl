@@ -1,8 +1,9 @@
 import Statistics
 using LinearAlgebra
 using Setfield
-using Espresso
-using Distributions
+# using Espresso
+using IRTools
+# using Distributions
 using ChainRules
 using CUDA
 
@@ -11,13 +12,14 @@ include("funres.jl")
 include("utils.jl")
 include("scatter/scatter.jl")
 include("helpers.jl")
+include("chainrules.jl")
 include("devices.jl")
 include("tape.jl")
 # include("tapeutils.jl")
-# include("trace.jl")
+include("trace.jl")
 # # include("diffrules/diffrules.jl")
 # include("funres.jl")
-include("chainrules.jl")
+
 # include("grad.jl")
 # include("compile.jl")
 # include("update.jl")
