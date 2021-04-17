@@ -23,6 +23,9 @@ end
 Variable(id::Integer) = Variable(id, nothing)
 Variable(op::AbstractOp) = Variable(nothing, op)
 
+Base.show(io::IO, v::Variable) = print(io, "%$(v.id)")
+
+
 function Base.getproperty(v::Variable, p::Symbol)
     if p == :id
         if v._op !== nothing
@@ -52,9 +55,17 @@ function Base.setproperty!(v::Variable, p::Symbol, x)
 end
 
 
+function Base.:(==)(v1::Variable, v2::Variable)
+    # variables are equal if:
+    # * both are bound to the same operation, or
+    # * both are unbound and their IDs are equal
+    return v1._op === v2._op && v1.id == v2.id
+end
+
+
 const V = Variable
 
-Base.show(io::IO, v::Variable) = print(io, "%$(v.id)")
+
 
 ########################################################################
 #                            OPERATIONS                                #

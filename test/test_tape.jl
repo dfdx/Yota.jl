@@ -8,8 +8,10 @@ import Yota: Tape, V, inputs!, rebind!, mkcall
     v3 = push!(tape, mkcall(*, v1, 2))
     st = Dict(v1.id => v2.id)
     rebind!(tape, st)
-    @assert tape[v3].args[1].id == v2.id
-
+    @test tape[v3].args[1].id == v2.id
+    # Variable equality
+    @test tape[v3].args[1] == v2         # bound var
+    @test tape[v3].args[1] != V(v2.id)   # unbound var
 
     # push!, insert!, replace!
     tape = Tape()

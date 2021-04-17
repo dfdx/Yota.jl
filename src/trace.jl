@@ -2,16 +2,6 @@ import IRTools
 import IRTools: IR, @dynamo, self, insertafter!
 
 
-# function __new__(T, args...)
-#     # note: we also add __new__() to the list of primitives so it's not overdubbed recursively
-#     if T <: NamedTuple
-#         return T(args)
-#     else
-#         return T(args...)
-#     end
-# end
-
-
 function module_functions(modl)
     res = Vector{Function}()
     for s in Base.names(modl; all=true)
@@ -25,14 +15,16 @@ function module_functions(modl)
     return res
 end
 
-const BASE_PRIMITIVE_FUNCTIONS = Set{Any}(vcat(
+# include("primitives.jl")
+
+const BASE_PRIMITIVE_FUNCTIONS = vcat(
     module_functions(Base),
     module_functions(Core),
     module_functions(Core.Intrinsics),
     [Broadcast.materialize, Broadcast.broadcasted, Colon(), (:),
      Base.not_int,
      # our own special functions
-     __new__, namedtuple, guess_device]));
+     __new__, namedtuple, guess_device]);
 
 
 const PRIMITIVES = FunctionResolver{Bool}(
@@ -41,6 +33,7 @@ const PRIMITIVES = FunctionResolver{Bool}(
 
 
 function is_primitive(sig)
+#     PRIMITIVES =
     return sig in PRIMITIVES || is_chainrules_primitive(sig)
 end
 
@@ -168,8 +161,8 @@ Params:
 """
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    global STATE = (t, res_sid, farg_irvars, fargs)
-    @show STATE
+    # global STATE = (t, res_sid, farg_irvars, fargs)
+    # @show STATE
     if t.is_primitive(map(typeof, fargs)) # || (fn isa Type && fn <: NamedTuple)
         tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape
@@ -241,17 +234,32 @@ end
 
 
 """
-Trace function call, produce call value and a Tape
+    trace(f, args...; is_primitive, primitives)
+
+Trace function call, produce call value and a Tape.
+
+`trace` records to the tape primitive methods and recursively dives into
+non-primitives. There are 2 ways to tell `trace` that a particular method
+is a primitive:
+
+* provide `is_primitive(sig) -> Bool` function, where `sig` is
+    is a method signature, e.g. `map(typeof, (f, args...))`
+* provide an iterable `primitives`; in this case `trace` matches
+    all methods of this function
 """
-function trace(f, args...; is_primitive=is_primitive)
+function trace(f, args...; is_primitive=is_primitive, primitives=nothing)
+    if primitives !== nothing
+        sigs = FunctionResolver{Bool}([(typeof(f), Vararg) => true for f in primitives])
+        is_primitive = sig -> sig in sigs
+    end
     t = IRTracer(; is_primitive=is_primitive)
     arg_vars = inputs!(t.tape, f, args...)
     push!(t.frames, Frame(Dict(i => a for (i, a) in enumerate(arg_vars)), V(0)))
-    val = t(f, args...)
+    t(f, args...)
     t.tape.result = t.frames[1].result
     tape = t.tape
     # if optimize
     #     tape = simplify(tape)
     # end
-    return val, tape
+    return tape[tape.result].val, tape
 end

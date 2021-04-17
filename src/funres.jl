@@ -13,11 +13,13 @@ closest matching function signature. Example:
     rsv[(typeof(sin), Float32)]   # ==> :Real
 """
 struct FunctionResolver{T}
-    signatures::Dict{Any, Vector{Pair{DataType, T}}}
+    signatures::Dict{Symbol, Vector{Pair{DataType, T}}}
     FunctionResolver{T}() where T = new{T}(Dict())
 end
 
-function FunctionResolver{T}(pairs::Vector{<:Pair{S, T} where S}) where T
+# function FunctionResolver{T}(pairs::Vector{Pair{S, T}}) where {S, T}
+# function FunctionResolver{T}(pairs::Vector{Pair{S, T} where S}) where T
+function FunctionResolver{T}(pairs::Vector) where T
     rsv = FunctionResolver{T}()
     for (sig, val) in pairs
         rsv[sig] = val
@@ -30,17 +32,17 @@ Base.show(io::IO, rsv::FunctionResolver) = print(io, "FunctionResolver($(length(
 
 
 function Base.setindex!(rsv::FunctionResolver{T}, val::T, sig::Tuple) where T
-    fn_typ = sig[1]
+    fn_typ = Symbol(sig[1])
     tuple_sig = Tuple{sig...}
     if !haskey(rsv.signatures, fn_typ)
-        rsv.signatures[fn_typ] = Pair[]
+        rsv.signatures[fn_typ] = Pair{Type, T}[]
     end
     push!(rsv.signatures[fn_typ], tuple_sig => val)
     return val
 end
 
 function Base.getindex(rsv::FunctionResolver{T}, sig::Tuple) where T
-    fn_typ = sig[1]
+    fn_typ = Symbol(sig[1])
     if haskey(rsv.signatures, fn_typ)
         tuple_sig = Tuple{sig...}
         for (TT, val) in rsv.signatures[fn_typ]
