@@ -33,7 +33,6 @@ const PRIMITIVES = FunctionResolver{Bool}(
 
 
 function is_primitive(sig)
-#     PRIMITIVES =
     return sig in PRIMITIVES || is_chainrules_primitive(sig)
 end
 
@@ -87,7 +86,7 @@ function get_tape_vars(t::IRTracer, arg_defs::Union{Vector, Tuple})
     for (i, arg) in enumerate(arg_defs)
         if arg isa IRTools.Variable
             tape_id = t.frames[end].ir2tape[arg.id]
-            result[i] = Variable(t.tape[tape_id])   # Yota.Variable
+            result[i] = V(t.tape[tape_id])   # Yota.Variable
         else
             val = promote_const_value(arg)
             # arg_var = record!(t.tape, Constant, val)
@@ -162,20 +161,21 @@ Params:
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
     # global STATE = (t, res_sid, farg_irvars, fargs)
-    # @show STATE
-    if t.is_primitive(map(typeof, fargs)) # || (fn isa Type && fn <: NamedTuple)
+    # length(t.tape) == 27 && error()
+    if t.is_primitive(map(typeof, fargs))
         tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape
         res = push!(t.tape, mkcall(tape_vars...))
         # update mapping from SSA var to tape var
         # note that in functions with loops this mapping may change over time
         t.frames[end].ir2tape[res_sid] = res
+        val = t.tape[res].val
     else
         push_frame!(t, farg_irvars...)
-        res = t(fn, args...)
+        val = t(fn, args...)
         pop_frame!(t, res_sid)
     end
-    return res
+    return val
 end
 
 
@@ -255,11 +255,12 @@ function trace(f, args...; is_primitive=is_primitive, primitives=nothing)
     t = IRTracer(; is_primitive=is_primitive)
     arg_vars = inputs!(t.tape, f, args...)
     push!(t.frames, Frame(Dict(i => a for (i, a) in enumerate(arg_vars)), V(0)))
-    t(f, args...)
+    val = t(f, args...)
     t.tape.result = t.frames[1].result
     tape = t.tape
     # if optimize
     #     tape = simplify(tape)
     # end
-    return tape[tape.result].val, tape
+    # -- tape[tape.result].val
+    return val, tape
 end

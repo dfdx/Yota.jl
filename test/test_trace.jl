@@ -37,3 +37,55 @@ non_primitive_caller(x) = sin(non_primitive(x))
     @test tape2[V(4)].fn == sin
 end
 
+
+function loop1(a, n)
+    a = 2a
+    for i in 1:n
+        a = a * n
+        n = n + 1
+    end
+    a = a + n
+    return a
+end
+
+function loop2(a, b)
+    while b > 0
+        a = a * b
+        b = b - 1
+    end
+    return a
+end
+
+
+function loop3(a, b)
+    while b > 1
+        b = b - 1
+        a = b
+        while a < 100
+            a = a * b + 1
+        end
+    end
+    return a
+end
+
+
+function cond1(a, b)
+    if b > 0
+        a = 2a
+    end
+    return a
+end
+
+
+@testset "trace: loops" begin
+    # smoke tests, will be replaced with loop testing when it's ready
+    val, tape = trace(loop1, 8.0, 2)
+    @test val == loop1(8.0, 2)
+
+    val, tape = trace(loop2, 5, 10)
+    @test val == loop2(5, 10)
+
+    val, tape = trace(loop3, 1, 3)
+    @test val == loop3(1, 3)
+
+end

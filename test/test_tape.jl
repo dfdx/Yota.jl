@@ -4,14 +4,23 @@ import Yota: Tape, V, inputs!, rebind!, mkcall
 @testset "tape" begin
     # rebind!
     tape = Tape()
-    v1, v2 = inputs!(tape, nothing, 3.0, 5.0)
+    _, v1, v2 = inputs!(tape, nothing, 3.0, 5.0)
     v3 = push!(tape, mkcall(*, v1, 2))
     st = Dict(v1.id => v2.id)
     rebind!(tape, st)
     @test tape[v3].args[1].id == v2.id
-    # Variable equality
+
+    # variable equality
     @test tape[v3].args[1] == v2         # bound var
     @test tape[v3].args[1] != V(v2.id)   # unbound var
+
+    # mkcall value calculation
+    c = mkcall(*, 2.0, v1)                # bound var
+    @test c.val == 2.0 * tape[v1].val
+    c = mkcall(*, 2.0, V(100))            # unbound var
+    @test c.val === missing
+    c = mkcall(*, 2.0, V(100); val=10.0)  # manual value
+    @test c.val == 10.0
 
     # push!, insert!, replace!
     tape = Tape()

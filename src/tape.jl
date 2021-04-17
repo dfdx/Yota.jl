@@ -118,19 +118,19 @@ end
 
 
 """
-    mkcall(fn, args...; val=nothing)
+    mkcall(fn, args...; val=missing)
 
-Convenient constructor for Call operation. If val is nothing (default)
+Convenient constructor for Call operation. If val is `missing` (default)
 and call value can be calculated from (bound) variables and constants,
 they are calculated. To prevent this behavior, set val to some neutral value.
 """
-function mkcall(fn::Union{Function, Type, Variable}, args...; val=nothing)
+function mkcall(fn::Union{Function, Type, Variable}, args...; val=missing)
     calculable = all(
         a -> !isa(a, Variable) ||                      # not variable
-        (a._op !== nothing && a._op.val !== nothing),  # bound variable
+        (a._op !== nothing && a._op.val !== missing),  # bound variable
         args
     )
-    if val === nothing && calculable
+    if val === missing && calculable
         args_ = map_vars(v -> v._op.val, args)
         val_ = fn(args_...)
     else

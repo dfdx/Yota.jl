@@ -16,18 +16,15 @@ include("chainrules.jl")
 include("devices.jl")
 include("tape.jl")
 # include("tapeutils.jl")
-
 include("trace.jl")
+# include("diffrules/diffrules.jl")
+include("grad.jl")
 
-# # include("diffrules/diffrules.jl")
-# include("funres.jl")
-
-# include("grad.jl")
 # include("compile.jl")
 # include("update.jl")
 # include("transform.jl")
-# # include("cuda.jl")
-# include("gradcheck.jl")
+# include("cuda.jl")
+include("gradcheck.jl")
 
 
 const BEST_AVAILABLE_DEVICE = Ref{AbstractDevice}(CPU())
@@ -41,10 +38,6 @@ function __init__()
 end
 
 
-
-# step 1: update tape to support Variable & constants in Calls, compilation, derivatives
-# step 1.1: update tape to support arguments instead of custom Input type
-# step 2: update primitives to support methods signatures, not just functions
 # step 3: update gradient calculation to resolve function signatures
 # step 3.1: make it work with broadcast
 # step 4: add ChainRules support
