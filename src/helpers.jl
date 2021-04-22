@@ -1,16 +1,6 @@
-IRTools.@dynamo function __splatnew__(a...)
-    ir = IRTools.IR()
-    arg_tuple = IRTools.argument!(ir)
-    vT = push!(ir, Expr(:call, getfield, arg_tuple, 1))
-    vargs = push!(ir, Expr(:call, getfield, arg_tuple, 2))
-    vres = push!(ir, Expr(:splatnew, vT, vargs))
-    IRTools.return!(ir, vres)
-    return ir
+@generated function __new__(T, args...)
+    return Expr(:splatnew, :T, :args)
 end
-
-
-__new__(T::Type{<:Val}) = T()
-__new__(T, args...) = __splatnew__(T, args)
 
 
 function ∇getproperty(dy, s, f::Symbol)

@@ -45,11 +45,14 @@ end
 mutable struct Frame
     # IR var ID to Tape var. Note that IR ID refers to the _original_ IR,
     # not the transformed one. In fact, any unique name of SSA instructions
-    # would fit, using IR IDs is just convenient
-    ir2tape::Dict{Int, V}
+    # would fit, using IR IDs is just convenient.
+    # Note that a constant value can be passed instead of a Tape var
+    ir2tape::Dict{Int, Any}
     # result ID - tape ID corresponding to latest return value
     # from this call frame
     result::V
+    # function and arguments - used purely for debugging
+    fargs::Tuple
 end
 
 function Base.show(io::IO, fr::Frame)
@@ -81,16 +84,17 @@ promote_const_value(x::GlobalRef) = getproperty(x.mod, x.name)
 promote_const_value(x) = x
 
 
-function get_tape_vars(t::IRTracer, arg_defs::Union{Vector, Tuple})
-    result = Vector{Any}(undef, length(arg_defs))
-    for (i, arg) in enumerate(arg_defs)
+function get_tape_vars(t::IRTracer, farg_irvars::Union{Vector, Tuple})
+    result = Vector{Any}(undef, length(farg_irvars))
+    for (i, arg) in enumerate(farg_irvars)
         if arg isa IRTools.Variable
-            tape_id = t.frames[end].ir2tape[arg.id]
-            result[i] = V(t.tape[tape_id])   # Yota.Variable
+            # cat be either tape var or constant value if a function
+            # wall called with a constant
+            x = t.frames[end].ir2tape[arg.id]
+            result[i] = x isa V ? x : promote_const_value(x)
+            # result[i] = V(t.tape[x])   # Yota.Variable
         else
-            val = promote_const_value(arg)
-            # arg_var = record!(t.tape, Constant, val)
-            result[i] = val
+            result[i] = promote_const_value(arg)
         end
     end
     return result
@@ -98,11 +102,18 @@ end
 
 
 """Push a new call frame to tracer, setting function params accordingly"""
-function push_frame!(t::IRTracer, farg_irvars...)
+function push_frame!(t::IRTracer, fargs, farg_irvars...)
     tape_vars = get_tape_vars(t, farg_irvars)
     frame = Frame(
-        Dict(i => v for (i, v) in enumerate(tape_vars) if v isa V),
-        V(0)
+        # TODO: if a constant is passed to the function,
+        # tape doesn't contain a corresponding variable
+        # (in previous versions there was a Constant node for this)
+        # possible solution:
+        Dict(i => v for (i, v) in enumerate(tape_vars)),
+        # also make ir2tape accept values
+        # Dict(i => v for (i, v) in enumerate(tape_vars) if v isa V),
+        V(0),
+        fargs,
     )
     push!(t.frames, frame)
 end
@@ -129,7 +140,6 @@ end
 
 """Set return variable for the current frame"""
 function set_return!(t::IRTracer, arg_sid_ref)
-    # global STATE = (t, arg_sid_ref)
     tape_var = get_tape_vars(t, [arg_sid_ref[]])[1]
     t.frames[end].result = tape_var
 end
@@ -160,8 +170,9 @@ Params:
 """
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    # global STATE = (t, res_sid, farg_irvars, fargs)
-    # length(t.tape) == 27 && error()
+    global STATE = (t, res_sid, farg_irvars, fargs)
+    # fn == __new__ && error()
+    # TODO: this fails on __new__(var"...", 2.0)
     if t.is_primitive(map(typeof, fargs))
         tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape
@@ -171,7 +182,7 @@ function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
         t.frames[end].ir2tape[res_sid] = res
         val = t.tape[res].val
     else
-        push_frame!(t, farg_irvars...)
+        push_frame!(t, fargs, farg_irvars...)
         val = t(fn, args...)
         pop_frame!(t, res_sid)
     end
@@ -179,12 +190,12 @@ function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
 end
 
 
-# function record_const!(t::IRTracer, res_sid, val)
-#     val = val isa QuoteNode ? val.value : val
-#     res_tid = record!(t.tape, Constant, val)
-#     t.frames[end].ir2tape[res_sid] = res_tid
-#     return val
-# end
+function record_const!(t::IRTracer, res_sid, val)
+    val = val isa QuoteNode ? val.value : val
+    res = push!(t.tape, Constant(val))
+    t.frames[end].ir2tape[res_sid] = res
+    return val
+end
 
 
 function trace_branches!(ir::IR)
@@ -224,8 +235,7 @@ end
             # note: using insertafter!() due to
             # https://github.com/FluxML/IRTools.jl/issues/78
             # ir[v] = Expr(:call, record_const!, self, v.id, v)
-
-            # insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
+            insertafter!(ir, v, IRTools.xcall(record_const!, self, v.id, v))
         end
     end
     trace_branches!(ir)
@@ -254,13 +264,13 @@ function trace(f, args...; is_primitive=is_primitive, primitives=nothing)
     end
     t = IRTracer(; is_primitive=is_primitive)
     arg_vars = inputs!(t.tape, f, args...)
-    push!(t.frames, Frame(Dict(i => a for (i, a) in enumerate(arg_vars)), V(0)))
+    frame = Frame(Dict(i => a for (i, a) in enumerate(arg_vars)), V(0), (f, args...))
+    push!(t.frames, frame)
     val = t(f, args...)
     t.tape.result = t.frames[1].result
     tape = t.tape
     # if optimize
     #     tape = simplify(tape)
     # end
-    # -- tape[tape.result].val
     return val, tape
 end

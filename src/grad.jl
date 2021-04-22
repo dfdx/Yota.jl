@@ -137,13 +137,13 @@ function back!(tape::Tape)
     # y - resulting variable of current op
     # x - dependencies of y
     # dy - derivative of z w.r.t. y
-    z = tape[tape.resultid]
+    z = tape[tape.result]
     # using one() of type of the result for seed to keep type stability
-    @assert ndims(tape[tape.resultid].val) == 0 "Function must return scalar!"
-    dy_id = record!(tape, Constant, one(tape[tape.resultid].val))
+    @assert ndims(tape[tape.result].val) == 0 "Function must return scalar!"
+    dy_id = record!(tape, Constant, one(tape[tape.result].val))
     dy = tape[dy_id]
     # set initial derivative value
-    tape.derivs[z.id] = dy.id
+    tape.derivs[V(z.id)] = V(dy)
     for op in reverse(tape.ops[1:end-1])
         if op isa Call
             # ordinary function call
@@ -168,7 +168,7 @@ For each input that has a derivative on this tape check if the derivative
 has the same size as the input.
 """
 function check_deriv_sizes(tape::Tape)
-    for (var_id, grad_var_id) in tape.derivs
+    for (var_id, grad_var_id) in tape.derivs   # TODO: apply to pb_derivs as well
         # type of var and grad var may differ e.g. when grad_var is Zero()
         # if !isstruct(tape[var_id].val) && !isstruct(tape[grad_var_id].val)
         if tape[var_id].val isa AbstractArray && tape[grad_var_id].val isa AbstractArray
@@ -183,8 +183,22 @@ function check_deriv_sizes(tape::Tape)
 end
 
 
-function chainrules_transform(tape::Tape)
-
+function chainrules_transform!(tape::Tape)
+    i = 1
+    while i <= length(tape)
+        op = tape[V(i)]
+        if op isa Call && is_chainrules_primitive(call_signature(tape, op))  # TODO: and not normal deriv
+            rr_op = mkcall(rrule, op.fn, op.args...)
+            val_op = mkcall(getindex, V(rr_op), 1)
+            pb_op = mkcall(getindex, V(rr_op), 2)
+            tape.pb_derivs[V(val_op)] = V(pb_op)
+            replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
+            i += 3
+        else
+            i += 1
+        end
+    end
+    return tape
 end
 
 
@@ -195,7 +209,7 @@ function _grad(tape::Tape)
     # apply preprocessing transformations
     # tape = preprocess(tape)
     # apply transformations needed for ChainRules
-    tape = chainrules_transform(tape)
+    chainrules_transform!(tape)
     # backpropagate gradients
     back!(tape)
     # consistency check

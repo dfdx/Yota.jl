@@ -29,25 +29,25 @@ function resolve_old_broadcast(ex)
 end
 
 
-function resolve_functions_and_types!(mod::Module, ex)
+function resolve_functions_and_types!(modl::Module, ex)
     if Meta.isexpr(ex, :call)
         # replace function symbol with actual function reference and
         # recursively call on function args
         if string(ex.args[1])[1] != '.'  # .*, .+, etc.
-            ex.args[1] = Core.eval(mod, ex.args[1])
+            ex.args[1] = Core.eval(modl, ex.args[1])
         end
-        resolve_functions_and_types!(mod, @view ex.args[2:end])
+        resolve_functions_and_types!(modl, @view ex.args[2:end])
         # for x in ex.args[2:end]
         #     resolve_functions_and_types!(mod, x)
         # end
     elseif Meta.isexpr(ex, :(::))
-        ex.args[2] = Core.eval(mod, ex.args[2])
+        ex.args[2] = Core.eval(modl, ex.args[2])
     elseif ex isa Vector || ex isa SubArray
         for (i, x) in enumerate(ex)
             if Meta.isexpr(x, :$)
-                ex[i] = Core.eval(mod, x.args[1])
+                ex[i] = Core.eval(modl, x.args[1])
             else
-                resolve_functions_and_types!(mod, x)
+                resolve_functions_and_types!(modl, x)
             end
         end
     end
@@ -97,11 +97,11 @@ See also: @diffrule_kw, @nodiff, @ctor
 """
 macro diffrule(pat, var, rpat)
     esc(quote
-        mod = @__MODULE__
+        modl = @__MODULE__
         local pat, rpat = map($Espresso.sanitize, ($(QuoteNode(pat)), $(QuoteNode(rpat))))
         pat, rpat = map($resolve_old_broadcast, (pat, rpat))
-        $resolve_functions_and_types!(mod, pat)
-        $resolve_functions_and_types!(mod, rpat)
+        $resolve_functions_and_types!(modl, pat)
+        $resolve_functions_and_types!(modl, rpat)
         $add_diff_rule((pat, $(QuoteNode(var)), rpat))
         $add_primitive(pat.args[1])
         nothing
@@ -163,10 +163,10 @@ you can rely on Yota handling it automatically.
 """
 macro ctor(ex)
     esc(quote
-        mod = @__MODULE__
+        modl = @__MODULE__
         local ex = $Espresso.sanitize($(QuoteNode(ex)))
         ex = $resolve_old_broadcast(ex)
-        $resolve_functions_and_types!(mod, ex)
+        $resolve_functions_and_types!(modl, ex)
         $add_constructor((ex.args[1], ex.args[2:end]...))
         $add_primitive(ex.args[1])
         nothing
@@ -297,10 +297,10 @@ Don't propagate derivative of the given function w.r.t. specified variable
 """
 macro nodiff(pat, var)
     esc(quote
-        mod = @__MODULE__
+        modl = @__MODULE__
         local pat = $Espresso.sanitize($(QuoteNode(pat)))
         pat = $resolve_old_broadcast(pat)
-        $resolve_functions_and_types!(mod, pat)
+        $resolve_functions_and_types!(modl, pat)
         $add_no_diff_rule((pat, $(QuoteNode(var))))
         $add_primitive(pat.args[1])
         nothing
@@ -345,5 +345,5 @@ function dont_diff(tape::Tape, op::AbstractOp, idx::Int)
 end
 
 
-include("basic.jl")
-include("distributions.jl")
+# include("basic.jl")
+# include("distributions.jl")

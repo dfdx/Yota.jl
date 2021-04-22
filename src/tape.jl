@@ -93,6 +93,20 @@ Input(val::Any) = Input(0, val)
 Base.show(io::IO, op::Input) = print(io, "inp %$(op.id)::$(op.typ)")
 
 
+## Constant
+
+mutable struct Constant <: AbstractOp
+    id::Int
+    typ::Type
+    val
+end
+
+
+Constant(id::Int, val) = Constant(id, typeof(val), val)
+Constant(val) = Constant(0, typeof(val), val)
+Base.show(io::IO, op::Constant) = print(io, "const %$(op.id) = $(op.val)::$(op.typ)")
+
+
 ## Call
 
 mutable struct Call <: AbstractOp
@@ -151,18 +165,20 @@ mutable struct Tape
     ops::Vector{<:AbstractOp}
     # id of result variable
     result::Variable
-    # derivs[var_id] == grad_id
+    # derivs[var] == grad_var
     derivs::Dict{Variable, Variable}
+    # pb_derivs[var] == pullback_var
+    pb_derivs::Dict{Variable, Variable}
     # compiled tape or nothing
     compiled::MaybeFunction
     # device of the tape
     device::AbstractDevice
 end
 
-Tape(device::AbstractDevice) = Tape(AbstractOp[], Variable(0), Dict(), nothing, device)
+Tape(device::AbstractDevice) = Tape(AbstractOp[], Variable(0), Dict(), Dict(), nothing, device)
 Tape() = Tape(CPU())
-Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
-                                tape.compiled, tape.device)
+# Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
+#                                 tape.compiled, tape.device)
 
 
 function Base.show(io::IO, tape::Tape)
@@ -252,7 +268,9 @@ function Base.replace!(tape::Tape, idx_ops::Pair{<:Integer, <:Union{Tuple, Vecto
     if idx < length(tape)
         insert!(tape, idx + 1, ops[2:end]...)
     else
-        push!(ops[2:end]...)
+        for op in ops[2:end]
+            push!(tape, op)
+        end
     end
     st = Dict(idx => ops[rebind_to].id)
     rebind!(tape, st; from=idx + length(ops))
@@ -302,6 +320,10 @@ function rebind_fields!(tape::Tape, st::Dict)
         rebind!(tape, v, st)
         rebind!(tape, dv, st)
     end
+    for (v, dv) in tape.pb_derivs
+        rebind!(tape, v, st)
+        rebind!(tape, dv, st)
+    end
 end
 
 function rebind!(tape::Tape, st::Dict; from=1, to=length(tape))
@@ -318,6 +340,7 @@ end
 ########################################################################
 
 exec!(::Tape, ::Input) = ()
+exec!(::Tape, ::Constant) = ()
 
 function exec!(tape::Tape, op::Call)
     arg_vals = map_vars(v -> tape[v].val, op.args)
@@ -327,8 +350,8 @@ end
 
 function play!(tape::Tape, args...; use_compiled=true, debug=false)
     for (i, val) in enumerate(args)
-        @assert(tape[i] isa Input, "More arguments than the original function had")
-        tape[i].val = val
+        @assert(tape[V(i)] isa Input, "More arguments than the original function had")
+        tape[V(i)].val = val
     end
     if use_compiled && tape.compiled !== nothing
         Base.invokelatest(tape.compiled)
@@ -341,4 +364,13 @@ function play!(tape::Tape, args...; use_compiled=true, debug=false)
         end
     end
     return tape[tape.result].val
+end
+
+
+########################################################################
+#                                 UTILS                                #
+########################################################################
+
+function call_signature(tape::Tape, op::Call)
+    return map(typeof, (op.fn, map_vars(v -> tape[v].val, op.args)...))
 end

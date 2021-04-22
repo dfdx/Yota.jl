@@ -1,7 +1,7 @@
 import Statistics
 using LinearAlgebra
 using Setfield
-# using Espresso
+using Espresso
 using IRTools
 # using Distributions
 using ChainRules
@@ -17,7 +17,7 @@ include("devices.jl")
 include("tape.jl")
 # include("tapeutils.jl")
 include("trace.jl")
-# include("diffrules/diffrules.jl")
+include("diffrules/diffrules.jl")
 include("grad.jl")
 
 # include("compile.jl")
