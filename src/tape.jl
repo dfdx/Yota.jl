@@ -62,6 +62,8 @@ function Base.:(==)(v1::Variable, v2::Variable)
     return v1._op === v2._op && v1.id == v2.id
 end
 
+Base.hash(v::Variable, h::UInt) = hash(v.id, hash(v._op, h))
+
 
 const V = Variable
 
@@ -139,14 +141,16 @@ and call value can be calculated from (bound) variables and constants,
 they are calculated. To prevent this behavior, set val to some neutral value.
 """
 function mkcall(fn::Union{Function, Type, Variable}, args...; val=missing)
+    fargs = (fn, args...)
     calculable = all(
         a -> !isa(a, Variable) ||                      # not variable
         (a._op !== nothing && a._op.val !== missing),  # bound variable
-        args
+        fargs
     )
     if val === missing && calculable
-        args_ = map_vars(v -> v._op.val, args)
-        val_ = fn(args_...)
+        fargs_ = map_vars(v -> v._op.val, fargs)
+        fn_, args_ = fargs_[1], fargs_[2:end]
+        val_ = fn_(args_...)
     else
         val_ = val
     end
@@ -166,9 +170,9 @@ mutable struct Tape
     # id of result variable
     result::Variable
     # derivs[var] == grad_var
-    derivs::Dict{Variable, Variable}
+    derivs::LittleDict{Variable, Variable}
     # pb_derivs[var] == pullback_var
-    pb_derivs::Dict{Variable, Variable}
+    pullbacks::LittleDict{Variable, Variable}
     # compiled tape or nothing
     compiled::MaybeFunction
     # device of the tape
@@ -320,7 +324,7 @@ function rebind_fields!(tape::Tape, st::Dict)
         rebind!(tape, v, st)
         rebind!(tape, dv, st)
     end
-    for (v, dv) in tape.pb_derivs
+    for (v, dv) in tape.pullbacks
         rebind!(tape, v, st)
         rebind!(tape, dv, st)
     end

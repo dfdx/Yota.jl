@@ -1,39 +1,17 @@
 ########################################################################
-#                            GRAD RESULT                               #
+#                            GRAD CONTEXT                              #
 ########################################################################
 
-struct GradResult
-    tape::Tape
-    gvars::Vector{Any}  # gradient vars
+# TODO: use it in tape instead of hardcoded fields
+# the issue is with rebind_fields!() which must know context details
+# perhaps introduce rebind_context!() wich is no-op by default?
+struct GradContext
+    # map from primal var to its pullback var
+    # note: LittleDict is required because vars are mutable
+    pullbacks::LittleDict{Variable, Variable}
+    # map from primal var to its derivative var
+    derivs::LittleDict{Variable, Variable}
 end
-
-
-function GradResult(tape::Tape)
-    gvars = Vector{Any}()
-    for op in tape
-        if op isa Input
-            if haskey(tape.derivs, op.id)
-                push!(gvars, tape.derivs[op.id])
-            else
-                push!(gvars, undef)
-            end
-        end
-    end
-    return GradResult(tape, gvars)
-end
-
-
-Base.show(io::IO, g::GradResult) = print(io, "GradResult($(length(g.gvars)))")
-
-function Base.getindex(g::GradResult, argid::Int)
-    tape = g.tape
-    gvar = g.gvars[argid]
-    return tape[gvar].val
-end
-
-Base.length(g::GradResult) = length(g.gvars)
-Base.iterate(g::GradResult) = length(g) > 0 ? (g[1], 2) : nothing
-Base.iterate(g::GradResult, state) = length(g) >= state ? (g[state], state + 1) : nothing
 
 
 ########################################################################
@@ -47,52 +25,6 @@ getderiv(tape::Tape, id::Int) = haskey(tape.derivs, id) ? tape[tape.derivs[id]] 
 getderiv(tape::Tape, op::AbstractOp) = getderiv(tape, op.id)
 setderiv!(tape::Tape, op_id::Int, grad_op_id::Int) = (tape.derivs[op_id] = grad_op_id)
 setderiv!(tape::Tape, op::AbstractOp, grad_op::AbstractOp) = (tape.derivs[op.id] = grad_op.id)
-
-
-# Espresso.to_expr(tape::Tape, op::Call) = begin
-#     Expr(:call, op.fn, [v isa Variable ? Symbol(v) : v for v in op.args]...)
-# end
-
-# to_unbroadcast_expr(tape::Tape, op::Call) =
-#     Expr(
-#         :call,
-#         tape[op.args[1]].val,
-#         [v isa Variable ? Symbol(v) : v for v in op.args[2:end]]...
-#     )
-
-
-# function deriv!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
-#     ex = to_expr(tape, op)
-#     dep_types = [tape[arg].typ for arg in op.args]
-#     dex_fldnames = deriv_exprs(ex, dep_types, i)
-#     st = Dict(v isa Variable ? Symbol(v) => i : v for v in op.args)  # symbol => op ID
-#     st[:dy] = dy.id
-#     st[:y] = op.id
-#     if dex_fldnames[1][2] === nothing
-#         # not a derivative of a field - take only the 1st match
-#         dex_fldnames = dex_fldnames[1:1]
-#     end
-#     op_deriv_attrs = Tuple[]
-#     for (dex, fldname) in dex_fldnames
-#         ret_id = record_expr!(tape, dex; st=st)
-#         derivative_of = (fldname === nothing ? tape[op.args[i]] :
-#                          field_var_from_ctor_op(tape, tape[op.args[i]], fldname))
-#         push!(op_deriv_attrs, (tape[ret_id], derivative_of))
-#     end
-#     return op_deriv_attrs
-# end
-
-
-# function deriv_broadcast!(tape::Tape, op::AbstractOp, i::Int, dy::AbstractOp)
-#     ex = to_unbroadcast_expr(tape, op)
-#     dep_eltypes = [eltype(tape[arg].typ) for arg in op.args[2:end]]
-#     dex = deriv_exprs(ex, dep_eltypes, i-1)[1][1]
-#     st = Dict(Symbol("%$id") => id for id in op.args)
-#     st[:dy] = dy.id
-#     st[:y] = op.id
-#     ret_id = record_expr!(tape, dex; st=st, bcast=true)
-#     return tape[ret_id]
-# end
 
 
 function set_or_add_deriv!(tape::Tape, x::AbstractOp, dx::AbstractOp)
@@ -114,18 +46,32 @@ function set_or_add_deriv!(tape::Tape, x::AbstractOp, dx::AbstractOp)
 end
 
 
-function step_back!(tape::Tape, op::Union{Call}, i::Int)
-    y = op
-    dy = getderiv(tape, y)
-    dy !== nothing || return           # op is not part of computation graph
-    op.args[i] isa Variable || return  # constant arg
-    x = tape[op.args[i].id]
-    if dy.val isa Zero
-        # propagate zero to dx (reuse dy node)
-        set_or_add_deriv!(tape, x, dy)
-        return
+# function step_back!(tape::Tape, op::Union{Call}, i::Int)
+#     y = op
+#     dy = getderiv(tape, y)
+#     dy !== nothing || return           # op is not part of computation graph
+#     op.args[i] isa Variable || return  # constant arg
+#     x = tape[op.args[i].id]
+#     if dy.val isa Zero
+#         # propagate zero to dx (reuse dy node)
+#         set_or_add_deriv!(tape, x, dy)
+#         return
+#     end
+#     # TODO: finish
+# end
+
+function step_back!(tape::Tape, y::Variable)
+    # 1. [step_back] get pullback (or fail) for y, push! to tape, destruct the tuple, set_or_add_deriv
+    @assert haskey(tape.pullbacks, y) "No pullback for op $(tape[y])"
+    pb = tape.pullbacks[y]
+    dxs = push!(tape, mkcall(pb, y))
+    y_fargs = (tape[y].fn, tape[y].args...)
+    for (i, x) in enumerate(y_fargs)
+        if x isa V
+            dx = push!(tape, mkcall(getfield, dxs, i))
+            # TODO: set_or_add_deriv!
+        end
     end
-    # TODO
 end
 
 
@@ -137,29 +83,40 @@ function back!(tape::Tape)
     # y - resulting variable of current op
     # x - dependencies of y
     # dy - derivative of z w.r.t. y
-    z = tape[tape.result]
+    z = tape.result
     # using one() of type of the result for seed to keep type stability
-    @assert ndims(tape[tape.result].val) == 0 "Function must return scalar!"
-    dy_id = record!(tape, Constant, one(tape[tape.result].val))
-    dy = tape[dy_id]
+    @assert ndims(tape[z].val) == 0 "Function must return scalar!"
+    dy = push!(tape, Constant(one(tape[z].val)))
     # set initial derivative value
-    tape.derivs[V(z.id)] = V(dy)
-    for op in reverse(tape.ops[1:end-1])
-        if op isa Call
-            # ordinary function call
-            for i=1:length(op.args)
-                @show op, i
-                # backpropagate only non-constant vars
-                # note that it also prevents backprop on 1st param of broadcast
-                arg_var = op.args[i]
-                if (arg_var isa Variable &&
-                    !isa(tape[arg_var.id], Constant) &&
-                    !dont_diff(tape, op, i))
-                    step_back!(tape, op, i)
-                end
+    tape.derivs[z] = dy
+    # queue of variables to calculate derivatives for
+    deriv_todo = V[z]
+    while !isempty(deriv_todo)
+        y = popfirst!(deriv_todo)
+        step_back!(tape, y)
+        # add y's dependencies to deriv_todo
+        for x in (tape[y].fn, tape[y].args...)
+            if x isa V
+                push!(deriv_todo, x)
             end
         end
     end
+    # for op in reverse(tape.ops[1:end-1])
+        # if op isa Call
+        #     # ordinary function call
+        #     for i=1:length(op.args)
+        #         @show op, i
+        #         # backpropagate only non-constant vars
+        #         # note that it also prevents backprop on 1st param of broadcast
+        #         arg_var = op.args[i]
+        #         if (arg_var isa Variable &&
+        #             !isa(tape[arg_var.id], Constant) &&
+        #             !dont_diff(tape, op, i))
+        #             step_back!(tape, op, i)
+        #         end
+        #     end
+        # end
+    # end
 end
 
 
@@ -191,7 +148,7 @@ function chainrules_transform!(tape::Tape)
             rr_op = mkcall(rrule, op.fn, op.args...)
             val_op = mkcall(getindex, V(rr_op), 1)
             pb_op = mkcall(getindex, V(rr_op), 2)
-            tape.pb_derivs[V(val_op)] = V(pb_op)
+            tape.pullbacks[V(val_op)] = V(pb_op)
             replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
             i += 3
         else
@@ -215,7 +172,7 @@ function _grad(tape::Tape)
     # consistency check
     check_deriv_sizes(tape)
     # apply postprocessing transformations
-    tape = postprocess(tape)
+    # tape = postprocess(tape)
     return tape
 end
 
