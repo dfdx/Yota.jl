@@ -21,26 +21,28 @@ end
 const DEBUG_STATE = Ref{Any}()
 
 
-getderiv(tape::Tape, id::Int) = haskey(tape.derivs, id) ? tape[tape.derivs[id]] : nothing
-getderiv(tape::Tape, op::AbstractOp) = getderiv(tape, op.id)
-setderiv!(tape::Tape, op_id::Int, grad_op_id::Int) = (tape.derivs[op_id] = grad_op_id)
-setderiv!(tape::Tape, op::AbstractOp, grad_op::AbstractOp) = (tape.derivs[op.id] = grad_op.id)
+getderiv(tape::Tape, v::Variable) = get(tape.derivs, bound(tape, v), nothing)
+setderiv!(tape::Tape, x::Variable, dx::Variable) = (
+    tape.derivs[bound(tape, x)] = bound(tape, dx)
+)
+hasderiv(tape::Tape, v::Variable) = getderiv(tape, v) !== nothing
 
 
-function set_or_add_deriv!(tape::Tape, x::AbstractOp, dx::AbstractOp)
-    if !haskey(tape.derivs, x.id)
+function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
+    if !hasderiv(tape, x)
         setderiv!(tape, x, dx)
     else
         old_dx = getderiv(tape, x)
-        if dx.val isa Composite || old_dx.val isa Composite
-            val = dx.val + old_dx.val
-            new_dx_id = record!(tape, Call, val, (+), [dx.id, old_dx.id])
+        if tape[dx].val isa Composite || tape[old_dx].val isa Composite
+            # val = tape[dx].val + tape[old_dx].val
+            # new_dx_id = push!(tape, Call, val, (+), [dx.id, old_dx.id])
+            new_dx = push!(tape, mkcall(+, dx, old_dx))
         else
-            val = dx.val .+ old_dx.val
-            dot_add_id = record!(tape, Constant, +)
-            new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
+            # val = dx.val .+ old_dx.val
+            # dot_add_id = record!(tape, Constant, +)
+            # new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
+            new_dx = push!(tape, mkcall(broadcast, +, dx, old_dx))
         end
-        new_dx = tape[new_dx_id]
         setderiv!(tape, x, new_dx)
     end
 end
@@ -60,23 +62,59 @@ end
 #     # TODO: finish
 # end
 
-function step_back!(tape::Tape, y::Variable)
-    # 1. [step_back] get pullback (or fail) for y, push! to tape, destruct the tuple, set_or_add_deriv
+"""
+Transofrm the tape replacing calls `fn(args...)` for which `ChainRule.rrule` is defined
+with the following chain or calls:
+
+    * t = rrule(fn, args...)
+    * val = getfield(t, 1)
+    * pb = getfield(t, 2)
+
+where `val = fn(args...)` and `pb` is the pullback function.
+"""
+function chainrules_transform!(tape::Tape)
+    i = 1
+    while i <= length(tape)
+        op = tape[V(i)]
+        if op isa Call && is_chainrules_primitive(call_signature(tape, op))  # TODO: and not normal deriv
+            rr_op = mkcall(rrule, op.fn, op.args...)
+            val_op = mkcall(getfield, V(rr_op), 1)
+            pb_op = mkcall(getfield, V(rr_op), 2)
+            tape.pullbacks[V(val_op)] = V(pb_op)
+            replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
+            i += 3  # rrule + 2 getfield ops
+        else
+            i += 1
+        end
+    end
+    return tape
+end
+
+
+"""
+Make a single step of backpropagation.
+"""
+function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
     @assert haskey(tape.pullbacks, y) "No pullback for op $(tape[y])"
     pb = tape.pullbacks[y]
     dxs = push!(tape, mkcall(pb, y))
-    y_fargs = (tape[y].fn, tape[y].args...)
-    for (i, x) in enumerate(y_fargs)
+    # propage derivs to rrule variable
+    rr = tape[y].args[1]
+    rr_fargs = tape[rr].args
+    for (i, x) in enumerate(rr_fargs)
         if x isa V
             dx = push!(tape, mkcall(getfield, dxs, i))
-            # TODO: set_or_add_deriv!
+            set_or_add_deriv!(tape, x, dx)
+            if tape[x] isa Call
+                push!(deriv_todo, x)
+            end
         end
     end
 end
 
 
 """
-Backpropagate through the tape, record derivatives as new operations
+Backpropagate through the tape, record derivatives as new operations.
 """
 function back!(tape::Tape)
     # z - final variable (usually a loss)
@@ -92,31 +130,10 @@ function back!(tape::Tape)
     # queue of variables to calculate derivatives for
     deriv_todo = V[z]
     while !isempty(deriv_todo)
+        # @show deriv_todo
         y = popfirst!(deriv_todo)
-        step_back!(tape, y)
-        # add y's dependencies to deriv_todo
-        for x in (tape[y].fn, tape[y].args...)
-            if x isa V
-                push!(deriv_todo, x)
-            end
-        end
+        step_back!(tape, y, deriv_todo)
     end
-    # for op in reverse(tape.ops[1:end-1])
-        # if op isa Call
-        #     # ordinary function call
-        #     for i=1:length(op.args)
-        #         @show op, i
-        #         # backpropagate only non-constant vars
-        #         # note that it also prevents backprop on 1st param of broadcast
-        #         arg_var = op.args[i]
-        #         if (arg_var isa Variable &&
-        #             !isa(tape[arg_var.id], Constant) &&
-        #             !dont_diff(tape, op, i))
-        #             step_back!(tape, op, i)
-        #         end
-        #     end
-        # end
-    # end
 end
 
 
@@ -140,39 +157,21 @@ function check_deriv_sizes(tape::Tape)
 end
 
 
-function chainrules_transform!(tape::Tape)
-    i = 1
-    while i <= length(tape)
-        op = tape[V(i)]
-        if op isa Call && is_chainrules_primitive(call_signature(tape, op))  # TODO: and not normal deriv
-            rr_op = mkcall(rrule, op.fn, op.args...)
-            val_op = mkcall(getindex, V(rr_op), 1)
-            pb_op = mkcall(getindex, V(rr_op), 2)
-            tape.pullbacks[V(val_op)] = V(pb_op)
-            replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
-            i += 3
-        else
-            i += 1
-        end
-    end
-    return tape
-end
-
-
 """
 Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes
 """
-function _grad(tape::Tape)
-    # apply preprocessing transformations
-    # tape = preprocess(tape)
+function _grad!(tape::Tape)
     # apply transformations needed for ChainRules
     chainrules_transform!(tape)
     # backpropagate gradients
     back!(tape)
     # consistency check
-    check_deriv_sizes(tape)
-    # apply postprocessing transformations
-    # tape = postprocess(tape)
+    # check_deriv_sizes(tape)
+    # add a tuple of (val, (gradients...))
+    deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : Zero() for v in inputs(tape)]
+    deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
+    new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple))
+    tape.result = new_result
     return tape
 end
 
@@ -180,32 +179,9 @@ end
 function _grad(f::Function, args...)
     val, tape = trace(f, args...)
     # calculate gradients
-    tape = _grad(tape)
-    # construct GradResult object that wraps tape and provides accessors for computed derivatives
+    tape = _grad!(tape)
+
     return val, GradResult(tape)
-end
-
-
-const DYNAMIC_GRAD_CACHE = Dict{Any, Tape}()
-
-function _dynamic_grad(f::Function, args...)
-    val, tape = trace(f, args...)
-    if haskey(DYNAMIC_GRAD_CACHE, tape)
-        # take already processed tape from the cache and just play it
-        key = tape
-        tape = DYNAMIC_GRAD_CACHE[key]
-        # play to propagate both - value (should be unchanged) and gradients
-        val = play!(tape)
-        return val, GradResult(tape)
-    else
-        # copy tape just after tracing to use as key in cache later
-        key = deepcopy(tape)
-        # calculate gradients
-        tape = _grad(tape)
-        # save to cache
-        DYNAMIC_GRAD_CACHE[key] = tape
-        return val, GradResult(tape)
-    end
 end
 
 
@@ -220,23 +196,14 @@ Example:
 
 where:
   - val is the value of `f` at this point
-  - g::GradResult is a collection of gradients
-
-GradResult is indexed by argument index and contains gradients
-in a format most suitable for that argument, namely:
-
-  - for arrays: arrays of the same type and size
-  - for reals: reals
-  - for mutable structs: dictionary of {(:field, :path) => value} pairs.
+  - g is a tuple of gradients
 
 All gradients can be applied to original variables using `update!()` function.
 """
-function grad(f::Function, args...; dynamic=false)
+function grad(f::Function, args...)
     # key consists of function type and type of argument (for structs) or its size
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
-    if dynamic
-        return _dynamic_grad(f, args...)
-    elseif haskey(GRAD_CACHE, cache_key)
+    if haskey(GRAD_CACHE, cache_key)
         tape = GRAD_CACHE[cache_key]
         val = play!(tape, args...)
         return val, GradResult(tape)
@@ -246,10 +213,4 @@ function grad(f::Function, args...; dynamic=false)
         GRAD_CACHE[cache_key] = g.tape
         return val, g
     end
-end
-
-
-function simplegrad(f, args...)
-    val, g = _grad(f, args...)
-    return compile(g.tape, bind=false, ret_grad=true)
 end

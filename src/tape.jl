@@ -286,6 +286,10 @@ end
 #                                 REBIND                                      #
 ###############################################################################
 
+"""Returned version of the var bound to the tape op"""
+bound(tape::Tape, v::Variable) = Variable(tape[v])
+
+
 """
     rebind!(tape::Tape, op, st::Dict)
     rebind!(tape::Tape, st::Dict; from, to)
@@ -347,8 +351,9 @@ exec!(::Tape, ::Input) = ()
 exec!(::Tape, ::Constant) = ()
 
 function exec!(tape::Tape, op::Call)
+    fn = op.fn isa V ? tape[op.fn].val : op.fn
     arg_vals = map_vars(v -> tape[v].val, op.args)
-    op.val = op.fn(arg_vals...)
+    op.val = fn(arg_vals...)
 end
 
 
