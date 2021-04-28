@@ -14,11 +14,11 @@ include("utils.jl")
 include("scatter/scatter.jl")
 include("helpers.jl")
 include("chainrules.jl")
-include("devices.jl")
+include("devices.jl")   # TODO: refactor
 include("tape.jl")
 # include("tapeutils.jl")
 include("trace.jl")
-include("diffrules/diffrules.jl")
+# include("diffrules/diffrules.jl")
 include("grad.jl")
 
 # include("compile.jl")
@@ -35,7 +35,7 @@ function __init__()
     if CUDA.functional()
         BEST_AVAILABLE_DEVICE[] = GPU(1)
     end
-    update_chain_rules!()
+    update_chainrules_primitives!()
 end
 
 

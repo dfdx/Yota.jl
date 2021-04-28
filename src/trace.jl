@@ -28,7 +28,7 @@ const BASE_PRIMITIVE_FUNCTIONS = vcat(
 
 
 const PRIMITIVES = FunctionResolver{Bool}(
-    collect((typeof(f), Vararg) => true for f in BASE_PRIMITIVE_FUNCTIONS)
+    collect(Tuple{typeof(f), Vararg} => true for f in BASE_PRIMITIVE_FUNCTIONS)
 )
 
 
@@ -170,10 +170,10 @@ Params:
 """
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    global STATE = (t, res_sid, farg_irvars, fargs)
+    # global STATE = (t, res_sid, farg_irvars, fargs)
     # fn == __new__ && error()
     # TODO: this fails on __new__(var"...", 2.0)
-    if t.is_primitive(map(typeof, fargs))
+    if t.is_primitive(Tuple{map(typeof, fargs)...})
         tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape
         res = push!(t.tape, mkcall(tape_vars...))
@@ -259,7 +259,7 @@ is a primitive:
 """
 function trace(f, args...; is_primitive=is_primitive, primitives=nothing)
     if primitives !== nothing
-        sigs = FunctionResolver{Bool}([(typeof(f), Vararg) => true for f in primitives])
+        sigs = FunctionResolver{Bool}([Tuple{typeof(f), Vararg} => true for f in primitives])
         is_primitive = sig -> sig in sigs
     end
     t = IRTracer(; is_primitive=is_primitive)

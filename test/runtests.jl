@@ -14,10 +14,12 @@ CUDA.allowscalar(false)
 include("test_funres.jl")
 include("test_tape.jl")
 include("test_trace.jl")
+include("test_grad.jl")
+
 # include("test_helpers.jl")
 
 # include("test_simple.jl")
-# include("test_grad.jl")
+
 # include("test_distributions.jl")
 # include("test_dynamic.jl")
 # include("test_simplegrad.jl")

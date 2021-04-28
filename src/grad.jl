@@ -76,7 +76,7 @@ function chainrules_transform!(tape::Tape)
     i = 1
     while i <= length(tape)
         op = tape[V(i)]
-        if op isa Call && is_chainrules_primitive(call_signature(tape, op))  # TODO: and not normal deriv
+        if op isa Call && is_chainrules_primitive(call_signature(tape, op))
             rr_op = mkcall(rrule, op.fn, op.args...)
             val_op = mkcall(getfield, V(rr_op), 1)
             pb_op = mkcall(getfield, V(rr_op), 2)
@@ -130,7 +130,6 @@ function back!(tape::Tape)
     # queue of variables to calculate derivatives for
     deriv_todo = V[z]
     while !isempty(deriv_todo)
-        # @show deriv_todo
         y = popfirst!(deriv_todo)
         step_back!(tape, y, deriv_todo)
     end
@@ -158,9 +157,13 @@ end
 
 
 """
-Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes
+    gradtape(f::Union{Function, DataType}, args...)
+    gradtape!(tape::Tape)
+
+Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes.
+See grad() for more high-level API.
 """
-function _grad!(tape::Tape)
+function gradtape!(tape::Tape)
     # apply transformations needed for ChainRules
     chainrules_transform!(tape)
     # backpropagate gradients
@@ -176,12 +179,10 @@ function _grad!(tape::Tape)
 end
 
 
-function _grad(f::Function, args...)
+function gradtape(f::Union{Function, DataType}, args...)
     val, tape = trace(f, args...)
-    # calculate gradients
-    tape = _grad!(tape)
-
-    return val, GradResult(tape)
+    tape = gradtape!(tape)
+    return tape
 end
 
 
@@ -189,6 +190,8 @@ const GRAD_CACHE = Dict{Any, Tape}()
 
 
 """
+    grad(f, args...)
+
 Find gradient of `f` w.r.t. its arguments.
 Example:
 
@@ -199,18 +202,30 @@ where:
   - g is a tuple of gradients
 
 All gradients can be applied to original variables using `update!()` function.
+
+See also: gradtape
 """
-function grad(f::Function, args...)
+function grad(f::Union{Function, DataType}, args...)
     # key consists of function type and type of argument (for structs) or its size
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
     if haskey(GRAD_CACHE, cache_key)
+        # TODO: use cached function, don't cache the tape
         tape = GRAD_CACHE[cache_key]
-        val = play!(tape, args...)
-        return val, GradResult(tape)
+        return play!(tape, args...)
     else
-        val, g = _grad(f, args...)
-        compile!(g.tape)
-        GRAD_CACHE[cache_key] = g.tape
-        return val, g
+        # TODO: create a function, cache it, dismiss the tape
+        tape = gradtape(f, args...)
+        # compile!(tape)
+        GRAD_CACHE[cache_key] = tape
+        return tape[V(length(tape))].val
     end
+end
+
+
+"""
+Non-caching version of grad(f, args...)
+"""
+function _grad(f::Union{Function, DataType}, args...)
+    tape = gradtape(f, args...)
+    return tape[V(length(tape))].val
 end
