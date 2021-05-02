@@ -8,9 +8,9 @@
 struct GradContext
     # map from primal var to its pullback var
     # note: LittleDict is required because vars are mutable
-    pullbacks::LittleDict{Variable, Variable}
+    pullbacks::LittleDict{Variable,Variable}
     # map from primal var to its derivative var
-    derivs::LittleDict{Variable, Variable}
+    derivs::LittleDict{Variable,Variable}
 end
 
 
@@ -76,7 +76,9 @@ function chainrules_transform!(tape::Tape)
     i = 1
     while i <= length(tape)
         op = tape[V(i)]
-        if op isa Call && is_chainrules_primitive(call_signature(tape, op))
+        if (op isa Call
+                && is_chainrules_primitive(call_signature(tape, op))
+                && !is_yota_primitive(call_signature(tape, op)))
             rr_op = mkcall(rrule, op.fn, op.args...)
             val_op = mkcall(getfield, V(rr_op), 1)
             pb_op = mkcall(getfield, V(rr_op), 2)
@@ -95,13 +97,22 @@ end
 Make a single step of backpropagation.
 """
 function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
-    @assert haskey(tape.pullbacks, y) "No pullback for op $(tape[y])"
-    pb = tape.pullbacks[y]
-    dxs = push!(tape, mkcall(pb, y))
-    # propage derivs to rrule variable
-    rr = tape[y].args[1]
-    rr_fargs = tape[rr].args
-    for (i, x) in enumerate(rr_fargs)
+    df = get_deriv_function(call_signature(tape, tape[y]))
+    if df !== nothing
+        dy = tape.derivs[y]
+        y_fargs = [tape[y].fn; tape[y].args...]
+        dxs = push!(tape, mkcall(df, dy, y_fargs...))
+    elseif haskey(tape.pullbacks, y)
+        pb = tape.pullbacks[y]
+        dxs = push!(tape, mkcall(pb, y))
+        # propage derivs to rrule variable
+        rr = tape[y].args[1]
+        y_fargs = tape[rr].args
+    else
+        error("Neither ChainRules pullback, nor native Yota " *
+              "derivative found for op $(tape[y])")
+    end
+    for (i, x) in enumerate(y_fargs)
         if x isa V
             dx = push!(tape, mkcall(getfield, dxs, i))
             set_or_add_deriv!(tape, x, dx)
@@ -147,7 +158,7 @@ function check_deriv_sizes(tape::Tape)
         if tape[var_id].val isa AbstractArray && tape[grad_var_id].val isa AbstractArray
             var_size = size(tape[var_id].val)
             grad_var_size = size(tape[grad_var_id].val)
-            if  var_size != grad_var_size
+            if var_size != grad_var_size
                 @warn "Gradient %$grad_var_id has size $grad_var_size, " *
                     "but original variable %$var_id has size $var_size"
             end
@@ -179,14 +190,14 @@ function gradtape!(tape::Tape)
 end
 
 
-function gradtape(f::Union{Function, DataType}, args...)
+function gradtape(f::Union{Function,DataType}, args...)
     val, tape = trace(f, args...)
     tape = gradtape!(tape)
     return tape
 end
 
 
-const GRAD_CACHE = Dict{Any, Tape}()
+const GRAD_CACHE = Dict{Any,Tape}()
 
 
 """
@@ -205,7 +216,7 @@ All gradients can be applied to original variables using `update!()` function.
 
 See also: gradtape
 """
-function grad(f::Union{Function, DataType}, args...)
+function grad(f::Union{Function,DataType}, args...)
     # key consists of function type and type of argument (for structs) or its size
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
     if haskey(GRAD_CACHE, cache_key)
@@ -225,7 +236,7 @@ end
 """
 Non-caching version of grad(f, args...)
 """
-function _grad(f::Union{Function, DataType}, args...)
+function _grad(f::Union{Function,DataType}, args...)
     tape = gradtape(f, args...)
     return tape[V(length(tape))].val
 end

@@ -381,5 +381,6 @@ end
 ########################################################################
 
 function call_signature(tape::Tape, op::Call)
-    return map(typeof, (op.fn, map_vars(v -> tape[v].val, op.args)...))
+    arg_vals = (op.fn, map_vars(v -> tape[v].val, op.args)...)
+    return Tuple{map(typeof, arg_vals)...}
 end

@@ -13,6 +13,7 @@ include("funres.jl")
 include("utils.jl")
 include("scatter/scatter.jl")
 include("helpers.jl")
+include("drules.jl")
 include("chainrules.jl")
 include("devices.jl")   # TODO: refactor
 include("tape.jl")

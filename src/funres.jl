@@ -61,5 +61,5 @@ function order!(rsv::FunctionResolver)
 end
 
 Base.haskey(rsv::FunctionResolver, sig::Type{<:Tuple}) = (rsv[sig] !== nothing)
-Base.in(sig::Type{<:Tuple}, rsv::FunctionResolver{Bool}) = haskey(rsv, sig)
+Base.in(sig::Type{<:Tuple}, rsv::FunctionResolver) = haskey(rsv, sig)
 Base.empty!(rsv::FunctionResolver) = empty!(rsv.signatures)
