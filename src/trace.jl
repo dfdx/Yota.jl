@@ -33,7 +33,9 @@ const PRIMITIVES = FunctionResolver{Bool}(
 
 
 function is_primitive(sig)
-    return sig in PRIMITIVES || is_chainrules_primitive(sig)
+    return (sig in PRIMITIVES ||
+            is_yota_primitive(sig) ||
+            is_chainrules_primitive(sig))
 end
 
 
@@ -124,7 +126,7 @@ function pop_frame!(t::IRTracer, res_sid::Int)
     frame = pop!(t.frames)
     # create mapping from the current SSA ID to the last instruction on the tape
     t.frames[end].ir2tape[res_sid] =
-        (frame.result.id == 0 ? V(tape[length(t.tape)]) : frame.result)
+        (frame.result.id == 0 ? bound(t.tape, V(length(t.tape))) : frame.result)
 end
 
 
@@ -171,8 +173,7 @@ Params:
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
     # global STATE = (t, res_sid, farg_irvars, fargs)
-    # fn == __new__ && error()
-    # TODO: this fails on __new__(var"...", 2.0)
+    # fn == Core.kwfunc(sum) && error()
     if t.is_primitive(Tuple{map(typeof, fargs)...})
         tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape

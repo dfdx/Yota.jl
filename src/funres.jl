@@ -14,6 +14,7 @@ closest matching function signature. Example:
 """
 struct FunctionResolver{T}
     signatures::Dict{Symbol, Vector{Pair{Any, T}}}
+    # signatures::Dict{Symbol, Vector{Any}}
     FunctionResolver{T}() where T = new{T}(Dict())
 end
 
@@ -33,7 +34,9 @@ Base.show(io::IO, rsv::FunctionResolver) = print(io, "FunctionResolver($(length(
 
 function_type(sig) = sig isa UnionAll ? function_type(sig.body) : sig.parameters[1]
 
-function Base.setindex!(rsv::FunctionResolver{T}, val::T, sig::Type{<:Tuple}) where T
+function Base.setindex!(rsv::FunctionResolver{T}, val::T, @nospecialize sig::Type{<:Tuple}) where T
+    # TODO: use @nospecialize instead
+    # Symbol() gives different names depending on imports list
     fn_typ = Symbol(function_type(sig))
     if !haskey(rsv.signatures, fn_typ)
         rsv.signatures[fn_typ] = Pair{Type, T}[]
@@ -42,7 +45,7 @@ function Base.setindex!(rsv::FunctionResolver{T}, val::T, sig::Type{<:Tuple}) wh
     return val
 end
 
-function Base.getindex(rsv::FunctionResolver{T}, sig::Type{<:Tuple}) where T
+function Base.getindex(rsv::FunctionResolver{T}, @nospecialize sig::Type{<:Tuple}) where T
     fn_typ = Symbol(function_type(sig))
     if haskey(rsv.signatures, fn_typ)
         for (TT, val) in rsv.signatures[fn_typ]

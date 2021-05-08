@@ -118,9 +118,14 @@ mutable struct Call <: AbstractOp
     args::Vector{Any}   # vector of Variables or const values
 end
 
+
+pretty_type_name(T) = string(T)
+pretty_type_name(T::Type{<:Broadcast.Broadcasted}) = "Broadcasted{}"
+
 function Base.show(io::IO, op::Call)
     arg_str = join(["$v" for v in op.args], ", ")
-    print(io, "%$(op.id) = $(op.fn)($arg_str)::$(op.typ)")
+    typ_str = pretty_type_name(op.typ)
+    print(io, "%$(op.id) = $(op.fn)($arg_str)::$typ_str")
 end
 
 
@@ -312,6 +317,7 @@ function rebind!(tape::Tape, v::Variable, st::Dict)
 end
 
 rebind!(::Tape, ::Input, ::Dict) = ()
+rebind!(::Tape, ::Constant, ::Dict) = ()
 
 function rebind!(tape::Tape, op::Call, st::Dict)
     for v in op.args
@@ -381,6 +387,6 @@ end
 ########################################################################
 
 function call_signature(tape::Tape, op::Call)
-    arg_vals = (op.fn, map_vars(v -> tape[v].val, op.args)...)
-    return Tuple{map(typeof, arg_vals)...}
+    farg_vals = map_vars(v -> tape[v].val, [op.fn, op.args...])
+    return Tuple{map(typeof, farg_vals)...}
 end

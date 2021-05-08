@@ -38,14 +38,3 @@ function __init__()
     end
     update_chainrules_primitives!()
 end
-
-
-# step 3: update gradient calculation to resolve function signatures
-# step 3.1: make it work with broadcast
-# step 4: add ChainRules support
-# step 5: get rid of Espresso, unbound tape by default (performance tests?)
-
-
-# maybe remove:
-# 1. struct field derivs (is there anything for this in the ChainRuleCore?)
-# 2. @nodiff -> replace with DoesNotExist

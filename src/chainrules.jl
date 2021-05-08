@@ -1,36 +1,32 @@
-function remove_first_parameter(sig)
+function map_type_parameters(fn, sig)
     if sig isa UnionAll
-        new_body = remove_first_parameter(sig.body)
+        new_body = map_type_parameters(fn, sig.body)
         return UnionAll(sig.var, new_body)
     elseif sig isa DataType
         params = sig.parameters
-        return Tuple{params[2:end]...}
+        return Tuple{fn(params)...}
     else
         error("Unsupported type: $sig")
     end
 end
 
 
-# sig1 = (@which rrule(sum, rand(3))).sig
-# sig2 = (@which rrule(mean, rand(3))).sig
-
-
-# function rrule_types(meth::Method)
-#     sig = deepcopy(meth.sig)
-#     subsig = sig
-#     while subsig isa UnionAll
-#         subsig = subsig.body
-#     end
-#     # hey, do you know how to corrupt the method table? know I know
-#     # deepcopy doesn't work for types, so what am I supposed to do?
-#     subsig.parameters = Core.svec(subsig.parameters[2:end])
-#     return sig
-# end
+remove_first_parameter(sig) = map_type_parameters(ps -> ps[2:end], sig)
+kwfunc_signature(sig) = map_type_parameters(sig) do ps
+    F = ps[1]
+    isabstracttype(F) && return []
+    Ts = ps[2:end]
+    kw_F = Core.kwftype(F)
+    return [kw_F, Any, F, Ts...]
+end
 
 
 function chainrules_supported_signatures()
     rrule_methods = methods(rrule).ms
-    return [remove_first_parameter(rr.sig) for rr in rrule_methods]
+    sigs = [remove_first_parameter(rr.sig) for rr in rrule_methods]
+    # add keyword version of these functions as well
+    kw_sigs = [kwsig for kwsig in map(kwfunc_signature, sigs) if kwsig !== Tuple{}]
+    return [sigs; kw_sigs]
 end
 
 
@@ -71,12 +67,23 @@ is_chainrules_primitive(sig) = sig in CHAIN_RULE_PRIMITIVES[]
 # end
 
 
-# function rrule(::typeof(broadcasted), ::F, args...) where F
-#     f = __new__(F)
+# function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
 #     # y = f.(args...)
 #     y1, pb = rrule(f, [a[1] for a in args]...)
 #     function pullback(Δ)
-#         NO_FIELDS, NO_FIELDS, @.(Δ * $df1), @.(Δ * $df2)
+#         NO_FIELDS, NO_FIELDS # , @.(Δ * $df1), @.(Δ * $df2)
 #     end
-#     return y, $pullback
+#     return y, pullback
+# end
+
+
+# function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
+#     df = get_deriv_function(Tuple{F, map(eltype, args)...})
+#     # TODO: write a more descriptive error message
+
+#     darg_tuples = df.(dy, f, args...)
+#     darg_single_tuple = tuple(
+#         [vcat([t[i] for t in darg_tuples]) for i in 1:length(args) + 1]...
+#     )
+#     return NO_FIELDS, darg_single_tuple
 # end

@@ -48,19 +48,9 @@ function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
 end
 
 
-# function step_back!(tape::Tape, op::Union{Call}, i::Int)
-#     y = op
-#     dy = getderiv(tape, y)
-#     dy !== nothing || return           # op is not part of computation graph
-#     op.args[i] isa Variable || return  # constant arg
-#     x = tape[op.args[i].id]
-#     if dy.val isa Zero
-#         # propagate zero to dx (reuse dy node)
-#         set_or_add_deriv!(tape, x, dy)
-#         return
-#     end
-#     # TODO: finish
-# end
+# there's also Core.var"#isa##kw", but I don't understand its semantics
+is_kwfunc(f) = endswith(string(f), "##kw")
+is_kwfunc(v::Variable) = is_kwfunc(v._op.val)
 
 """
 Transofrm the tape replacing calls `fn(args...)` for which `ChainRule.rrule` is defined
@@ -79,7 +69,11 @@ function chainrules_transform!(tape::Tape)
         if (op isa Call
                 && is_chainrules_primitive(call_signature(tape, op))
                 && !is_yota_primitive(call_signature(tape, op)))
-            rr_op = mkcall(rrule, op.fn, op.args...)
+            # replace f(args...) with rrule(f, args...)
+            # if op.fn is a kw function, use kw version of rrule
+            rr_op = (is_kwfunc(op.fn) ?
+                    mkcall(Core.kwfunc(rrule), op.args[1], rrule, op.args[2:end]...) :
+                    mkcall(rrule, op.fn, op.args...))
             val_op = mkcall(getfield, V(rr_op), 1)
             pb_op = mkcall(getfield, V(rr_op), 2)
             tape.pullbacks[V(val_op)] = V(pb_op)
@@ -98,16 +92,18 @@ Make a single step of backpropagation.
 """
 function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
     df = get_deriv_function(call_signature(tape, tape[y]))
+    dy = tape.derivs[y]
     if df !== nothing
-        dy = tape.derivs[y]
+        # Yota rules
         y_fargs = [tape[y].fn; tape[y].args...]
         dxs = push!(tape, mkcall(df, dy, y_fargs...))
     elseif haskey(tape.pullbacks, y)
+        # ChainRules
         pb = tape.pullbacks[y]
-        dxs = push!(tape, mkcall(pb, y))
+        dxs = push!(tape, mkcall(pb, dy))
         # propage derivs to rrule variable
         rr = tape[y].args[1]
-        y_fargs = tape[rr].args
+        y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[3:end] : tape[rr].args
     else
         error("Neither ChainRules pullback, nor native Yota " *
               "derivative found for op $(tape[y])")
@@ -122,6 +118,9 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
         end
     end
 end
+
+
+const BACKPROP_STATE = Ref{Tuple}()
 
 
 """
@@ -142,7 +141,12 @@ function back!(tape::Tape)
     deriv_todo = V[z]
     while !isempty(deriv_todo)
         y = popfirst!(deriv_todo)
-        step_back!(tape, y, deriv_todo)
+        try
+            step_back!(tape, y, deriv_todo)
+        catch e
+            BACKPROP_STATE[] = (tape, y, deriv_todo)
+            rethrow(e)
+        end
     end
 end
 
@@ -222,7 +226,7 @@ function grad(f::Union{Function,DataType}, args...)
     if haskey(GRAD_CACHE, cache_key)
         # TODO: use cached function, don't cache the tape
         tape = GRAD_CACHE[cache_key]
-        return play!(tape, args...)
+        return play!(tape, nothing, args...)
     else
         # TODO: create a function, cache it, dismiss the tape
         tape = gradtape(f, args...)
