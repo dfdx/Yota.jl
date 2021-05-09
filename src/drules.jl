@@ -45,6 +45,8 @@ is_yota_primitive(sig) = sig in DRULES[]
 # @diffrule *(u::AbstractArray, v::Real )            v     sum(u .* dy)
 # @diffrule *(u::AbstractArray, v::AbstractArray)    v     transpose(u) * dy
 
+import Base.Broadcast: broadcasted, materialize
+
 
 function ∇times(dy, ::typeof(*), x::AbstractArray, y::AbstractArray)
     return NO_FIELDS, dy * y', x' * dy
@@ -150,3 +152,27 @@ function ∇iterate(dy, ::typeof(iterate), x::UnitRange, i::Int)
 end
 @drule iterate(x::UnitRange) ∇iterate
 @drule iterate(x::UnitRange, i::Integer) ∇iterate
+
+## special broadcast
+
+# TODO: why this rule isn't used?
+function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(+), x, y)
+    return NO_FIELDS, NO_FIELDS, unbroadcast(x, dy), unbroadcast(y, dy)
+end
+@drule broadcasted(::typeof(+), x::AbstractArray, y::AbstractArray) ∇broadcasted_special
+
+function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(*), x, y)
+    return NO_FIELDS, NO_FIELDS, unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
+end
+@drule broadcasted(::typeof(*), x::AbstractArray, y::AbstractArray) ∇broadcasted_special
+
+function ∇broadcasted(dy, ::typeof(broadcasted), ::typeof(Base.literal_pow),
+    ::typeof(^), x::Any, ::Val{p}) where p
+    return NO_FIELDS, NO_FIELDS, NO_FIELDS, (@. p * x ^ (p - 1) * dy), Zero()
+end
+@drule broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Any, ::Val) ∇broadcasted
+
+# get_val_param(::Val{v}) where v = v
+# @diffrule Base.literal_pow(_, u::Real, v)         u      get_val_param(v) * u ^ (get_val_param(v)-(one(u))) * dy
+# @nodiff Base.literal_pow(_, u::Real, v)           _
+# @nodiff Base.literal_pow(_, u::Real, v)           v

@@ -1,26 +1,3 @@
-function map_type_parameters(fn, sig)
-    if sig isa UnionAll
-        new_body = map_type_parameters(fn, sig.body)
-        return UnionAll(sig.var, new_body)
-    elseif sig isa DataType
-        params = sig.parameters
-        return Tuple{fn(params)...}
-    else
-        error("Unsupported type: $sig")
-    end
-end
-
-
-remove_first_parameter(sig) = map_type_parameters(ps -> ps[2:end], sig)
-kwfunc_signature(sig) = map_type_parameters(sig) do ps
-    F = ps[1]
-    isabstracttype(F) && return []
-    Ts = ps[2:end]
-    kw_F = Core.kwftype(F)
-    return [kw_F, Any, F, Ts...]
-end
-
-
 function chainrules_supported_signatures()
     rrule_methods = methods(rrule).ms
     sigs = [remove_first_parameter(rr.sig) for rr in rrule_methods]

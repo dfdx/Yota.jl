@@ -71,23 +71,23 @@ function ungetindex(x::Tuple, dy, I...)
 end
 
 
-function ∇sum(x::AbstractArray, dy)
-    dx = similar(x)
-    dx .= dy
-    return dx
-end
+# function ∇sum(x::AbstractArray, dy)
+#     dx = similar(x)
+#     dx .= dy
+#     return dx
+# end
 
 
-function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
-    dx = similar(x)
-    dx .= dy ./ prod(size(x, d) for d in dims)
-    return dx
-end
+# function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
+#     dx = similar(x)
+#     dx .= dy ./ prod(size(x, d) for d in dims)
+#     return dx
+# end
 
 
-function sum_dropdims(x::AbstractArray, dims)
-    return dropdims(sum(x; dims=dims); dims=dims)
-end
+# function sum_dropdims(x::AbstractArray, dims)
+#     return dropdims(sum(x; dims=dims); dims=dims)
+# end
 
 
 # unbroadcast from Flux

@@ -76,7 +76,7 @@ sum_bcast(x, y) = sum(x .+ y)
         @test gradcheck(sum_bcast, args...)
         val, g = grad(sum_bcast, args...)
         for i=1:length(args)
-            @test size(g[i]) == size(args[i])
+            @test size(g[i + 1]) == size(args[i])
         end
     end
 end
@@ -97,15 +97,12 @@ sum_prod_bcast(x, y) = sum(x .* y)
         @test gradcheck(sum_prod_bcast, args...)
         val, g = grad(sum_prod_bcast, args...)
         for i=1:length(args)
-            # TODO: need to sum gradients over non-matching dimensions
-            # How did I do it in the old grad?
-            @test size(g[i]) == size(args[i])
+            @test size(g[i + 1]) == size(args[i])
         end
     end
 end
 
 @testset "grad: literal_pow" begin
-    # TODO: no generic broadcasting
     @test gradcheck(x -> sum(x .^ 2), rand(3, 4))
 end
 
@@ -182,38 +179,26 @@ end
 end
 
 
-# HESS = randn(3,3)
-# hessian_fun(x) = x'*(HESS*x)
-# hessian_fun2(x) = 0.5*x'*(HESS*x)
+# @testset "grad: compiled" begin
+#     args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
 
-# @testset "grad: adjoint" begin
-#     H = randn(3,3)
-#     x = rand(3)
-#     val, g = grad(hessian_fun2, x)
-#     @test val isa Real
+#     val, g = grad(loss, args...)
+
+#     # compiled vs. non-compiled
+#     tape = g.tape
+#     args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
+
+#     val1 = play!(tape, args...; use_compiled=true)
+#     last_val1 = tape[end].val
+#     val2 = play!(tape, args...; use_compiled=false)
+#     last_val2 = tape[end].val
+#     @test val1 == val2
+#     @test last_val1 == last_val2
+
+#     # # (* -> mul!) for mixed array-scalar vars
+#     # x = rand(3)
+#     # val1, g1 = grad(hessian_fun, x)  # interpreted
+#     # val2, g2 = grad(hessian_fun, x)  # compiled
+#     # @test val1 == val2
+#     # @test g1[1] == g2[1]
 # end
-
-
-@testset "grad: compiled" begin
-    args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
-
-    val, g = grad(loss, args...)
-
-    # compiled vs. non-compiled
-    tape = g.tape
-    args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
-
-    val1 = play!(tape, args...; use_compiled=true)
-    last_val1 = tape[end].val
-    val2 = play!(tape, args...; use_compiled=false)
-    last_val2 = tape[end].val
-    @test val1 == val2
-    @test last_val1 == last_val2
-
-    # # (* -> mul!) for mixed array-scalar vars
-    # x = rand(3)
-    # val1, g1 = grad(hessian_fun, x)  # interpreted
-    # val2, g2 = grad(hessian_fun, x)  # compiled
-    # @test val1 == val2
-    # @test g1[1] == g2[1]
-end
