@@ -132,17 +132,18 @@ constructor_loss(a) = (p = Point(a, a); p.x + p.y)
 
 @testset "grad: structs" begin
     args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
-    # TODO: no generic rrule for getproperty()
-    val, g = grad(loss, args...)
+    tape = gradtape(loss, args...)
 
-    @test val == loss(args...)
+    @test tape[tape.result].val[1] == loss(args...)
 
-    play!(g.tape)
+    play!(tape)
+    @test tape[tape.result].val[1] == loss(args...)
+
     val, g = grad(loss, args...)
     @test val == loss(args...)
 
     _, g = grad(constructor_loss, 4.0)
-    @test g[1] == 2
+    @test g[2][1] == 2
 end
 
 
@@ -160,7 +161,7 @@ end
     # find_field_source_var
     _, tape = trace(add_points, rand())
 
-    @test grad(add_points, rand())[2][1] == 7
+    @test grad(add_points, rand())[2][2] == 7
 end
 
 
@@ -173,9 +174,8 @@ end
 
 
 @testset "grad: tuple unpack" begin
-    # TODO: no generic rrule for getfield()
     _, g = grad(make_t_loss, 3.0)
-    @test g[1] == 2.0
+    @test g[2] == 2.0
 end
 
 

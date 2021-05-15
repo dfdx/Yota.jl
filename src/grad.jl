@@ -57,8 +57,8 @@ Transofrm the tape replacing calls `fn(args...)` for which `ChainRule.rrule` is 
 with the following chain or calls:
 
     * t = rrule(fn, args...)
-    * val = getfield(t, 1)
-    * pb = getfield(t, 2)
+    * val = _getfield(t, 1)
+    * pb = _getfield(t, 2)
 
 where `val = fn(args...)` and `pb` is the pullback function.
 """
@@ -74,11 +74,11 @@ function chainrules_transform!(tape::Tape)
             rr_op = (is_kwfunc(op.fn) ?
                     mkcall(Core.kwfunc(rrule), op.args[1], rrule, op.args[2:end]...) :
                     mkcall(rrule, op.fn, op.args...))
-            val_op = mkcall(getfield, V(rr_op), 1)
-            pb_op = mkcall(getfield, V(rr_op), 2)
+            val_op = mkcall(_getfield, V(rr_op), 1)
+            pb_op = mkcall(_getfield, V(rr_op), 2)
             tape.pullbacks[V(val_op)] = V(pb_op)
             replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
-            i += 3  # rrule + 2 getfield ops
+            i += 3  # rrule + 2 _getfield ops
         else
             i += 1
         end
@@ -91,15 +91,20 @@ end
 Make a single step of backpropagation.
 """
 function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
+    # TODO: here's the problem with the constructor_loss test:
+    # we reach y = __new__(...) twice and update all its fields twice
+    @debug "step_back!() for $(tape[y])"
     df = get_deriv_function(call_signature(tape, tape[y]))
     dy = tape.derivs[y]
     if df !== nothing
         # Yota rules
+        @debug "Found Yota derivative: $df"
         y_fargs = [tape[y].fn; tape[y].args...]
         dxs = push!(tape, mkcall(df, dy, y_fargs...))
     elseif haskey(tape.pullbacks, y)
         # ChainRules
         pb = tape.pullbacks[y]
+        @debug "Found pullback: $pb"
         dxs = push!(tape, mkcall(pb, dy))
         # propage derivs to rrule variable
         rr = tape[y].args[1]
@@ -111,10 +116,12 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
     for (i, x) in enumerate(y_fargs)
         if x isa V
             dx = push!(tape, mkcall(getfield, dxs, i))
+            @debug "Updating derivative: $x -> $dx"
             set_or_add_deriv!(tape, x, dx)
             if tape[x] isa Call
                 push!(deriv_todo, x)
             end
+            @debug "deriv_todo = $(join(deriv_todo, ", "))"
         end
     end
 end
@@ -139,14 +146,21 @@ function back!(tape::Tape)
     tape.derivs[z] = dy
     # queue of variables to calculate derivatives for
     deriv_todo = V[z]
+    deriv_processed = Set{V}()
     while !isempty(deriv_todo)
         y = popfirst!(deriv_todo)
+        ## skip double calculation for the same var in multupath graphs
+        if y in deriv_processed
+            @debug "Already processed $y, skipping it"
+            continue
+        end
         try
             step_back!(tape, y, deriv_todo)
         catch e
             BACKPROP_STATE[] = (tape, y, deriv_todo)
             rethrow(e)
         end
+        push!(deriv_processed, y)
     end
 end
 
@@ -195,7 +209,7 @@ end
 
 
 function gradtape(f::Union{Function,DataType}, args...)
-    val, tape = trace(f, args...)
+    _, tape = trace(f, args...)
     tape = gradtape!(tape)
     return tape
 end

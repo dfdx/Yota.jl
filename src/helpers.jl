@@ -2,25 +2,10 @@
     return Expr(:splatnew, :T, :args)
 end
 
-
-function ∇getproperty(dy, s, f::Symbol)
-    T = typeof(s)
-    nt = NamedTuple{(f,)}((dy,))
-    return Composite{T}(; nt...)
-end
-
-
-function ∇getfield(dy, s::Tuple, f::Int)
+function ungetfield(dy, s::Tuple, f::Int)
     T = typeof(s)
     return Composite{T}([i == f ? dy : Zero() for i=1:length(s)]...)
 end
-
-
-function ∇__new__(dy, T, idx)
-    fldname = fieldnames(T)[idx]
-    return getproperty(dy, fldname)
-end
-
 
 # TODO (when https://github.com/FluxML/NNlib.jl/pull/296 is done):
 # 1. uncomment this implementation
@@ -70,6 +55,13 @@ function ungetindex(x::Tuple, dy, I...)
     return dx
 end
 
+"""
+    _getfield(value, fld)
+
+This function can be used instead of getfield() to bypass Yota rules
+during backpropagation.
+"""
+_getfield(value, fld) = getfield(value, fld)
 
 # function ∇sum(x::AbstractArray, dy)
 #     dx = similar(x)

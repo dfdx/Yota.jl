@@ -122,40 +122,9 @@ function ∇mean(dy, ::typeof(Statistics.mean), x::AbstractArray, dims=1:ndims(x
 end
 @drule Statistics.mean(x::AbstractArray) ∇mean
 
-## iterate
-
-function ∇iterate(dy, ::typeof(iterate), x::AbstractArray)
-    return NO_FIELDS, ungetindex(x, dy, 1)
-end
-function ∇iterate(dy, ::typeof(iterate), x::AbstractArray, i::Integer)
-    return NO_FIELDS, ungetindex(x, dy, i), Zero()
-end
-@drule iterate(x::AbstractArray) ∇iterate
-@drule iterate(x::AbstractArray, i::Integer) ∇iterate
-
-function ∇iterate(dy, ::typeof(iterate), t::Tuple)
-    return NO_FIELDS, ∇getfield(dy[1], t, 1)
-end
-function ∇iterate(dy, ::typeof(iterate), t::Tuple, i::Int)
-    return NO_FIELDS, ∇getfield(dy[1], t, i), Zero()
-end
-@drule iterate(x::Tuple) ∇iterate
-@drule iterate(x::Tuple, i::Integer) ∇iterate
-
-# here we explicitely stop propagation in iteration
-# over ranges (e.g for i=1:3 ... end)
-function ∇iterate(dy, ::typeof(iterate), x::UnitRange)
-    return NO_FIELDS, Zero()
-end
-function ∇iterate(dy, ::typeof(iterate), x::UnitRange, i::Int)
-    return NO_FIELDS, Zero(), Zero()
-end
-@drule iterate(x::UnitRange) ∇iterate
-@drule iterate(x::UnitRange, i::Integer) ∇iterate
 
 ## special broadcast
 
-# TODO: why this rule isn't used?
 function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(+), x, y)
     return NO_FIELDS, NO_FIELDS, unbroadcast(x, dy), unbroadcast(y, dy)
 end
@@ -172,7 +141,87 @@ function ∇broadcasted(dy, ::typeof(broadcasted), ::typeof(Base.literal_pow),
 end
 @drule broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Any, ::Val) ∇broadcasted
 
-# get_val_param(::Val{v}) where v = v
-# @diffrule Base.literal_pow(_, u::Real, v)         u      get_val_param(v) * u ^ (get_val_param(v)-(one(u))) * dy
-# @nodiff Base.literal_pow(_, u::Real, v)           _
-# @nodiff Base.literal_pow(_, u::Real, v)           v
+
+## __new__, getfield, getproperty
+
+function ∇getproperty(dy, ::typeof(getproperty), s, f::Symbol)
+    T = typeof(s)
+    nt = NamedTuple{(f,)}((dy,))
+    return NO_FIELDS, Composite{T}(; nt...), Zero()
+end
+@drule getproperty(s::Any, f::Symbol) ∇getproperty
+
+
+function ∇getfield(dy, ::typeof(getfield), s::Tuple, f::Int)
+    T = typeof(s)
+    return NO_FIELDS, Composite{T}([i == f ? dy : Zero() for i=1:length(s)]...), Zero()
+end
+@drule getfield(s::Tuple, f::Union{Symbol, Int}) ∇getfield
+
+
+function ∇__new__(dy, ::typeof(__new__), T, args...)
+    return NO_FIELDS, NO_FIELDS, [getproperty(dy, fld) for fld in fieldnames(T)]...
+end
+@drule __new__(T::Any, args::Vararg) ∇__new__
+
+
+## iterate
+
+function ∇iterate(dy, ::typeof(iterate), x::AbstractArray)
+    return NO_FIELDS, ungetindex(x, dy, 1)
+end
+function ∇iterate(dy, ::typeof(iterate), x::AbstractArray, i::Integer)
+    return NO_FIELDS, ungetindex(x, dy, i), Zero()
+end
+@drule iterate(x::AbstractArray) ∇iterate
+@drule iterate(x::AbstractArray, i::Integer) ∇iterate
+
+function ∇iterate(dy, ::typeof(iterate), t::Tuple)
+    return NO_FIELDS, ungetfield(dy[1], t, 1)
+end
+function ∇iterate(dy, ::typeof(iterate), t::Tuple, i::Int)
+    return NO_FIELDS, ungetfield(dy[1], t, i), Zero()
+end
+@drule iterate(x::Tuple) ∇iterate
+@drule iterate(x::Tuple, i::Integer) ∇iterate
+
+# here we explicitely stop propagation in iteration
+# over ranges (e.g for i=1:3 ... end)
+function ∇iterate(dy, ::typeof(iterate), x::UnitRange)
+    return NO_FIELDS, Zero()
+end
+function ∇iterate(dy, ::typeof(iterate), x::UnitRange, i::Int)
+    return NO_FIELDS, Zero(), Zero()
+end
+@drule iterate(x::UnitRange) ∇iterate
+@drule iterate(x::UnitRange, i::Integer) ∇iterate
+
+
+## tuple unpacking
+
+function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int)
+    return NO_FIELDS, ungetfield(dy[1], t, i), Zero()
+end
+@drule Base.indexed_iterate(t::Tuple, i::Int) ∇indexed_iterate
+
+function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int, state::Int)
+    return NO_FIELDS, ungetfield(dy[1], t, i), Zero(), Zero()
+end
+@drule Base.indexed_iterate(t::Tuple, i::Int, state::Int) ∇indexed_iterate
+
+
+## tuple construction
+
+∇tuple(dy, ::typeof(tuple), args...) = (NO_FIELDS, [dy[i] for i=1:length(args)]...)
+@drule tuple(args::Vararg) ∇tuple
+
+# @diffrule tuple(u)        u     dy[1]
+# @diffrule tuple(u,v)      u     dy[1]
+# @diffrule tuple(u,v)      v     dy[2]
+# @diffrule tuple(u,v,w)    u     dy[1]
+# @diffrule tuple(u,v,w)    v     dy[2]
+# @diffrule tuple(u,v,w)    w     dy[3]
+# @diffrule tuple(u,v,w,t)  u     dy[1]
+# @diffrule tuple(u,v,w,t)  v     dy[2]
+# @diffrule tuple(u,v,w,t)  w     dy[3]
+# @diffrule tuple(u,v,w,t)  t     dy[4]
