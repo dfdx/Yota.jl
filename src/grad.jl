@@ -5,7 +5,7 @@
 # TODO: use it in tape instead of hardcoded fields
 # the issue is with rebind_fields!() which must know context details
 # perhaps introduce rebind_context!() wich is no-op by default?
-struct GradContext
+struct GradCtx
     # map from primal var to its pullback var
     # note: LittleDict is required because vars are mutable
     pullbacks::LittleDict{Variable,Variable}
@@ -13,6 +13,18 @@ struct GradContext
     derivs::LittleDict{Variable,Variable}
 end
 
+GradCtx() = GradCtx(LittleDict(), LittleDict())
+
+function rebind_context!(tape::Tape{GradCtx}, st::Dict)
+    for (v, dv) in tape.c.derivs
+        rebind!(tape, v, st)
+        rebind!(tape, dv, st)
+    end
+    for (v, dv) in tape.c.pullbacks
+        rebind!(tape, v, st)
+        rebind!(tape, dv, st)
+    end
+end
 
 ########################################################################
 #                              GRAD                                    #
@@ -21,9 +33,9 @@ end
 const DEBUG_STATE = Ref{Any}()
 
 
-getderiv(tape::Tape, v::Variable) = get(tape.derivs, bound(tape, v), nothing)
+getderiv(tape::Tape, v::Variable) = get(tape.c.derivs, bound(tape, v), nothing)
 setderiv!(tape::Tape, x::Variable, dx::Variable) = (
-    tape.derivs[bound(tape, x)] = bound(tape, dx)
+    tape.c.derivs[bound(tape, x)] = bound(tape, dx)
 )
 hasderiv(tape::Tape, v::Variable) = getderiv(tape, v) !== nothing
 
@@ -76,7 +88,7 @@ function chainrules_transform!(tape::Tape)
                     mkcall(rrule, op.fn, op.args...))
             val_op = mkcall(_getfield, V(rr_op), 1)
             pb_op = mkcall(_getfield, V(rr_op), 2)
-            tape.pullbacks[V(val_op)] = V(pb_op)
+            tape.c.pullbacks[V(val_op)] = V(pb_op)
             replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
             i += 3  # rrule + 2 _getfield ops
         else
@@ -95,15 +107,15 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
     # we reach y = __new__(...) twice and update all its fields twice
     @debug "step_back!() for $(tape[y])"
     df = get_deriv_function(call_signature(tape, tape[y]))
-    dy = tape.derivs[y]
+    dy = tape.c.derivs[y]
     if df !== nothing
         # Yota rules
         @debug "Found Yota derivative: $df"
         y_fargs = [tape[y].fn; tape[y].args...]
         dxs = push!(tape, mkcall(df, dy, y_fargs...))
-    elseif haskey(tape.pullbacks, y)
+    elseif haskey(tape.c.pullbacks, y)
         # ChainRules
-        pb = tape.pullbacks[y]
+        pb = tape.c.pullbacks[y]
         @debug "Found pullback: $pb"
         dxs = push!(tape, mkcall(pb, dy))
         # propage derivs to rrule variable
@@ -143,7 +155,7 @@ function back!(tape::Tape)
     @assert ndims(tape[z].val) == 0 "Function must return scalar!"
     dy = push!(tape, Constant(one(tape[z].val)))
     # set initial derivative value
-    tape.derivs[z] = dy
+    tape.c.derivs[z] = dy
     # queue of variables to calculate derivatives for
     deriv_todo = V[z]
     deriv_processed = Set{V}()
@@ -161,26 +173,6 @@ function back!(tape::Tape)
             rethrow(e)
         end
         push!(deriv_processed, y)
-    end
-end
-
-
-"""
-For each input that has a derivative on this tape check if the derivative
-has the same size as the input.
-"""
-function check_deriv_sizes(tape::Tape)
-    for (var_id, grad_var_id) in tape.derivs   # TODO: apply to pb_derivs as well
-        # type of var and grad var may differ e.g. when grad_var is Zero()
-        # if !isstruct(tape[var_id].val) && !isstruct(tape[grad_var_id].val)
-        if tape[var_id].val isa AbstractArray && tape[grad_var_id].val isa AbstractArray
-            var_size = size(tape[var_id].val)
-            grad_var_size = size(tape[grad_var_id].val)
-            if var_size != grad_var_size
-                @warn "Gradient %$grad_var_id has size $grad_var_size, " *
-                    "but original variable %$var_id has size $var_size"
-            end
-        end
     end
 end
 
@@ -209,7 +201,7 @@ end
 
 
 function gradtape(f::Union{Function,DataType}, args...)
-    _, tape = trace(f, args...)
+    _, tape = trace(f, args...; ctx=GradCtx())
     tape = gradtape!(tape)
     return tape
 end

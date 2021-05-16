@@ -73,8 +73,8 @@ mutable struct IRTracer
     frames::Vector{Frame}
 end
 
-function IRTracer(;is_primitive=is_chainrules_primitive)
-    tape = Tape()
+function IRTracer(; ctx=Dict(), is_primitive=is_chainrules_primitive)
+    tape = Tape(ctx)
     return IRTracer(is_primitive, tape, [])
 end
 
@@ -258,12 +258,12 @@ is a primitive:
 * provide an iterable `primitives`; in this case `trace` matches
     all methods of this function
 """
-function trace(f, args...; is_primitive=is_primitive, primitives=nothing)
+function trace(f, args...; is_primitive=is_primitive, primitives=nothing, ctx=Dict())
     if primitives !== nothing
         sigs = FunctionResolver{Bool}([Tuple{typeof(f), Vararg} => true for f in primitives])
         is_primitive = sig -> sig in sigs
     end
-    t = IRTracer(; is_primitive=is_primitive)
+    t = IRTracer(; ctx=ctx, is_primitive=is_primitive)
     arg_vars = inputs!(t.tape, f, args...)
     frame = Frame(Dict(i => a for (i, a) in enumerate(arg_vars)), V(0), (f, args...))
     push!(t.frames, frame)

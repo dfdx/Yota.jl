@@ -16,8 +16,8 @@ Variables can be:
   to an operation on the tape
 """
 mutable struct Variable
-    _id::Union{<:Integer, Nothing}
-    _op::Union{AbstractOp, Nothing}
+    _id::Union{<:Integer,Nothing}
+    _op::Union{AbstractOp,Nothing}
 end
 
 Variable(id::Integer) = Variable(id, nothing)
@@ -114,7 +114,7 @@ Base.show(io::IO, op::Constant) = print(io, "const %$(op.id) = $(op.val)::$(op.t
 mutable struct Call <: AbstractOp
     id::Int
     val::Any
-    fn::Union{Function, Type, Variable}
+    fn::Union{Function,Type,Variable}
     args::Vector{Any}   # vector of Variables or const values
 end
 
@@ -133,7 +133,7 @@ end
 Helper function to map a function only to Variable arguments of a Call
 leaving constant values as is
 """
-function map_vars(fn::Function, args::Union{Vector, Tuple})
+function map_vars(fn::Function, args::Union{Vector,Tuple})
     return map(v -> v isa Variable ? fn(v) : v, args)
 end
 
@@ -145,7 +145,7 @@ Convenient constructor for Call operation. If val is `missing` (default)
 and call value can be calculated from (bound) variables and constants,
 they are calculated. To prevent this behavior, set val to some neutral value.
 """
-function mkcall(fn::Union{Function, Type, Variable}, args...; val=missing)
+function mkcall(fn::Union{Function,Type,Variable}, args...; val=missing)
     fargs = (fn, args...)
     calculable = all(
         a -> !isa(a, Variable) ||                      # not variable
@@ -167,31 +167,27 @@ end
 #                                 TAPE                                 #
 ########################################################################
 
-const MaybeFunction = Union{Function, Nothing}
 
-mutable struct Tape
+mutable struct Tape{C}
     # linearized execution graph
     ops::Vector{<:AbstractOp}
-    # id of result variable
+    # result variable
     result::Variable
-    # derivs[var] == grad_var
-    derivs::LittleDict{Variable, Variable}
-    # pb_derivs[var] == pullback_var
-    pullbacks::LittleDict{Variable, Variable}
-    # compiled tape or nothing
-    compiled::MaybeFunction
-    # device of the tape
-    device::AbstractDevice
+    # application-specific context
+    c::C
+    # # derivs[var] == grad_var
+    # derivs::LittleDict{Variable, Variable}
+    # # pb_derivs[var] == pullback_var
+    # pullbacks::LittleDict{Variable, Variable}
 end
 
-Tape(device::AbstractDevice) = Tape(AbstractOp[], Variable(0), Dict(), Dict(), nothing, device)
-Tape() = Tape(CPU())
-# Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
-#                                 tape.compiled, tape.device)
+Tape(c::C) where C = Tape(AbstractOp[], Variable(0), c)
+# by default context is just a Dict{Any, Any}
+Tape() = Tape(Dict{Any,Any}())
 
 
-function Base.show(io::IO, tape::Tape)
-    println(io, "Tape")
+function Base.show(io::IO, tape::Tape{C}) where C
+    println(io, "Tape{$C}")
     for op in tape.ops
         println(io, "  $op")
     end
@@ -244,17 +240,17 @@ function Base.insert!(tape::Tape, idx::Integer, ops::AbstractOp...)
     old_ops = tape.ops
     new_ops = Vector{AbstractOp}(undef, length(tape) + num_new_ops)
     # copy old ops before insertion point
-    for i=1:idx - 1
+    for i = 1:idx - 1
         new_ops[i] = old_ops[i]
     end
     # insert target ops, assign ids
-    for i=1:num_new_ops
+    for i = 1:num_new_ops
         id = idx + i - 1
         new_ops[id] = ops[i]
         new_ops[id].id = id
     end
     # insert the rest of old ops
-    for i=idx:length(old_ops)
+    for i = idx:length(old_ops)
         id = i + num_new_ops
         new_ops[id] = old_ops[i]
         new_ops[id].id = id
@@ -270,7 +266,7 @@ end
 Replace operation at specified index with 1 or more other operations,
 rebind variables in the reminder of the tape to ops[rebind_to].
 """
-function Base.replace!(tape::Tape, idx_ops::Pair{<:Integer, <:Union{Tuple, Vector}};
+function Base.replace!(tape::Tape, idx_ops::Pair{<:Integer,<:Union{Tuple,Vector}};
                        rebind_to=length(idx_ops[2]))
     idx, ops = idx_ops
     tape[V(idx)] = ops[1]
@@ -308,12 +304,13 @@ Rebind all variables according to substitution table. Example:
     rebind!(tape, st)
     @assert tape[v3].args[1].id == v2.id
 
+See also: rebind_context!()
 """
 function rebind!(tape::Tape, v::Variable, st::Dict)
     if haskey(st, v.id)
         # rebind to a new op
         v._op = tape[V(st[v.id])]
-    end
+end
 end
 
 rebind!(::Tape, ::Input, ::Dict) = ()
@@ -328,23 +325,21 @@ function rebind!(tape::Tape, op::Call, st::Dict)
     return op
 end
 
-function rebind_fields!(tape::Tape, st::Dict)
-    rebind!(tape, tape.result, st)
-    for (v, dv) in tape.derivs
-        rebind!(tape, v, st)
-        rebind!(tape, dv, st)
-    end
-    for (v, dv) in tape.pullbacks
-        rebind!(tape, v, st)
-        rebind!(tape, dv, st)
-    end
-end
+"""
+    rebind_context!(tape::Tape, st::Dict)
+
+Rebind variables in the tape's context according to substitution table.
+By default does nothing, but can be overwitten for specific Tape{C}
+"""
+rebind_context!(tape::Tape, st::Dict) = ()
+
 
 function rebind!(tape::Tape, st::Dict; from=1, to=length(tape))
-    for id=from:to
+    for id = from:to
         rebind!(tape, tape[V(id)], st)
     end
-    rebind_fields!(tape, st)
+    rebind!(tape, tape.result, st)
+    rebind_context!(tape, st)
     return tape
 end
 
@@ -363,20 +358,16 @@ function exec!(tape::Tape, op::Call)
 end
 
 
-function play!(tape::Tape, args...; use_compiled=true, debug=false)
+function play!(tape::Tape, args...; debug=false)
     for (i, val) in enumerate(args)
         @assert(tape[V(i)] isa Input, "More arguments than the original function had")
         tape[V(i)].val = val
     end
-    if use_compiled && tape.compiled !== nothing
-        Base.invokelatest(tape.compiled)
-    else
-        for op in tape
-            if debug
-                println(op)
-            end
-            exec!(tape, op)
+    for op in tape
+        if debug
+            println(op)
         end
+        exec!(tape, op)
     end
     return tape[tape.result].val
 end
