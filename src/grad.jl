@@ -207,7 +207,7 @@ function gradtape(f::Union{Function,DataType}, args...)
 end
 
 
-const GRAD_CACHE = Dict{Any,Tape}()
+const GRAD_CACHE = Dict{Any,Any}()
 
 
 """
@@ -230,23 +230,12 @@ function grad(f::Union{Function,DataType}, args...)
     # key consists of function type and type of argument (for structs) or its size
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
     if haskey(GRAD_CACHE, cache_key)
-        # TODO: use cached function, don't cache the tape
-        tape = GRAD_CACHE[cache_key]
-        return play!(tape, nothing, args...)
+        gf = GRAD_CACHE[cache_key]
+        return gf(f, args...)
     else
-        # TODO: create a function, cache it, dismiss the tape
         tape = gradtape(f, args...)
-        # compile!(tape)
-        GRAD_CACHE[cache_key] = tape
-        return tape[V(length(tape))].val
+        gf = compile(tape)
+        GRAD_CACHE[cache_key] = gf
+        return tape.retval
     end
-end
-
-
-"""
-Non-caching version of grad(f, args...)
-"""
-function _grad(f::Union{Function,DataType}, args...)
-    tape = gradtape(f, args...)
-    return tape[V(length(tape))].val
 end

@@ -22,7 +22,7 @@ include("trace.jl")
 # include("diffrules/diffrules.jl")
 include("grad.jl")
 
-# include("compile.jl")
+include("compile.jl")
 # include("update.jl")
 # include("transform.jl")
 # include("cuda.jl")

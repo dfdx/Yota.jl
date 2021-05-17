@@ -194,6 +194,15 @@ function Base.show(io::IO, tape::Tape{C}) where C
 end
 
 
+function Base.getproperty(tape::Tape, p::Symbol)
+    if p == :retval
+        return tape[tape.result].val
+    else
+        return getfield(tape, p)
+    end
+end
+
+
 inputs(tape::Tape) = [V(op) for op in tape.ops if op isa Input]
 function inputs!(tape::Tape, vals...)
     @assert length(tape) == 0 "Can only set inputs to an empty tape"

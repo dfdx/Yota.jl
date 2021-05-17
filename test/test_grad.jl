@@ -179,26 +179,22 @@ end
 end
 
 
-# @testset "grad: compiled" begin
-#     args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
+@testset "grad: compiled" begin
+    args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
+    tape = gradtape(loss, args...)
 
-#     val, g = grad(loss, args...)
+    # generate new args
+    args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
 
-#     # compiled vs. non-compiled
-#     tape = g.tape
-#     args = Any[Linear(rand(3,4), rand(3)), rand(4,5)]
+    # compiled vs. non-compiled
+    res1 = play!(tape, loss, args...)
+    grad_loss = compile(tape)
+    res2 = grad_loss(loss, args...)
+    @test res1 == res2
 
-#     val1 = play!(tape, args...; use_compiled=true)
-#     last_val1 = tape[end].val
-#     val2 = play!(tape, args...; use_compiled=false)
-#     last_val2 = tape[end].val
-#     @test val1 == val2
-#     @test last_val1 == last_val2
-
-#     # # (* -> mul!) for mixed array-scalar vars
-#     # x = rand(3)
-#     # val1, g1 = grad(hessian_fun, x)  # interpreted
-#     # val2, g2 = grad(hessian_fun, x)  # compiled
-#     # @test val1 == val2
-#     # @test g1[1] == g2[1]
-# end
+    # fresh vs. cached version
+    res3 = grad(loss, args...)
+    res4 = grad(loss, args...)
+    @test res3 == res2
+    @test res4 == res2
+end

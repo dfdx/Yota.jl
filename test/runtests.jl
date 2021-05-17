@@ -4,7 +4,7 @@ using Yota
 # using Yota: ∇mean, setfield_nested!, copy_with, simplegrad, remove_unused
 # using Yota: eliminate_common  # unwind_iterate, find_field_source_var
 # using Yota: unvcat, unhcat, uncat, ungetindex!, ungetindex
-using Yota: gradtape, gradcheck, update_chainrules_primitives!
+using Yota: gradtape, gradcheck, update_chainrules_primitives!, compile
 using CUDA
 import ChainRulesCore: Composite, Zero
 
