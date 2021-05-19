@@ -215,13 +215,28 @@ end
 ∇tuple(dy, ::typeof(tuple), args...) = (NO_FIELDS, [dy[i] for i=1:length(args)]...)
 @drule tuple(args::Vararg) ∇tuple
 
-# @diffrule tuple(u)        u     dy[1]
-# @diffrule tuple(u,v)      u     dy[1]
-# @diffrule tuple(u,v)      v     dy[2]
-# @diffrule tuple(u,v,w)    u     dy[1]
-# @diffrule tuple(u,v,w)    v     dy[2]
-# @diffrule tuple(u,v,w)    w     dy[3]
-# @diffrule tuple(u,v,w,t)  u     dy[1]
-# @diffrule tuple(u,v,w,t)  v     dy[2]
-# @diffrule tuple(u,v,w,t)  w     dy[3]
-# @diffrule tuple(u,v,w,t)  t     dy[4]
+## some no diff functions
+
+@drule Core.kwfunc(f::Any) (dy, _, f) -> NO_FIELDS
+
+## cat & co.
+
+function ∇cat_kw(dy, ::typeof(Core.kwfunc(cat)), kw::Any, ::typeof(cat), arrs...)
+    return (
+        NO_FIELDS,
+        NO_FIELDS,
+        NO_FIELDS,
+        [uncat(dy, i, arrs...; dims=kw.dims) for i=1:length(arrs)]...
+    )
+end
+@drule Core.kwfunc(cat)(kw::Any, _::typeof(cat), arrs::Vararg) ∇cat_kw
+
+function ∇vcat(dy, ::typeof(vcat), arrs...)
+    return NO_FIELDS, [uncat(dy, i, arrs...; dims=1) for i=1:length(arrs)]...
+end
+@drule vcat(arrs::Vararg) ∇vcat
+
+function ∇hcat(dy, ::typeof(hcat), arrs...)
+    return NO_FIELDS, [uncat(dy, i, arrs...; dims=2) for i=1:length(arrs)]...
+end
+@drule hcat(arrs::Vararg) ∇hcat

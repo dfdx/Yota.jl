@@ -128,20 +128,20 @@ untranspose_vec(ds::Adjoint{T, <:AbstractVector{T}}) where T = adjoint(ds)
 untranspose_vec(ds::AbstractMatrix) = dropdims(transpose(ds); dims=2)
 
 
-function unvcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-    a = arrs[n]
-    from = n == 1 ? 1 : sum(size(arr, 1) for arr in arrs[1:n-1]) + 1
-    to = from + size(a, 1) - 1
-    return dy[from:to, [(:) for i=1:length(size(dy)) - 1]...]
-end
+# function unvcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
+#     a = arrs[n]
+#     from = n == 1 ? 1 : sum(size(arr, 1) for arr in arrs[1:n-1]) + 1
+#     to = from + size(a, 1) - 1
+#     return dy[from:to, [(:) for i=1:length(size(dy)) - 1]...]
+# end
 
 
-function unhcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-    a = arrs[n]
-    from = n == 1 ? 1 : sum(size(arr, 2) for arr in arrs[1:n-1]) + 1
-    to = from + size(a, 2) - 1
-    return dy[:, from:to, [(:) for i=1:length(size(dy)) - 2]...]
-end
+# function unhcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
+#     a = arrs[n]
+#     from = n == 1 ? 1 : sum(size(arr, 2) for arr in arrs[1:n-1]) + 1
+#     to = from + size(a, 2) - 1
+#     return dy[:, from:to, [(:) for i=1:length(size(dy)) - 2]...]
+# end
 
 
 function uncat(dy::AbstractArray, n::Int, arrs::AbstractArray...; dims)

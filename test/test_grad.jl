@@ -14,7 +14,17 @@ end
 update_chainrules_primitives!()
 
 
-@testset "grad: basic" begin
+# TODO: uncomment when we have a general rrule() or @drule for primitive broadcasting
+# @testset "grad: simple" begin
+#     args3 = (rand(4, 3), rand(4), rand(3))
+#     args4 = (rand(4, 3), rand(4), rand(3), rand(4))
+#     @test gradcheck((W, b, x) -> sum(W * x .+ b), args3...)
+#     @test gradcheck((W, b, x) -> sum(tanh.(W * x .+ b)), args3...)
+#     @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
+# end
+
+
+@testset "grad: kw" begin
     args = (rand(3, 4), rand(3), rand(4))
     @test gradcheck(loss_simple, args...)
     @test gradcheck(loss_double_broadcast, args...)
@@ -35,6 +45,15 @@ end
     @test grad(x -> x[1, 2, 1], x)[2][2] == x2
     x3 = zero(x); x3[:, 1, :] .= 1
     @test grad(x -> sum(x[:, 1, :]), x)[2][2] == x3
+end
+
+
+@testset "grad: cat" begin
+    @test gradcheck((a, b) -> sum(vcat(a, b)), ones(2, 3), ones(3, 3))
+    @test gradcheck((a, b) -> sum(hcat(a, b)), ones(2, 3), ones(2, 4))
+
+    arrs = Any[i * ones(3, 4, i, 6) for i=1:4]
+    @test gradcheck((a, b, c, d) -> sum(cat(a, b, c, d; dims=3)), arrs...)
 end
 
 

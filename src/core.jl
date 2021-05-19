@@ -17,14 +17,11 @@ include("drules.jl")
 include("chainrules.jl")
 include("devices.jl")   # TODO: refactor
 include("tape.jl")
-# include("tapeutils.jl")
 include("trace.jl")
-# include("diffrules/diffrules.jl")
 include("grad.jl")
 
 include("compile.jl")
 # include("update.jl")
-# include("transform.jl")
 # include("cuda.jl")
 include("gradcheck.jl")
 

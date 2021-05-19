@@ -24,7 +24,7 @@ const BASE_PRIMITIVE_FUNCTIONS = vcat(
     [Broadcast.materialize, Broadcast.broadcasted, Colon(), (:),
      Base.not_int,
      # our own special functions
-     __new__, namedtuple, guess_device]);
+     __new__, namedtuple]);
 
 
 const PRIMITIVES = FunctionResolver{Bool}(
@@ -265,13 +265,12 @@ function trace(f, args...; is_primitive=is_primitive, primitives=nothing, ctx=Di
     end
     t = IRTracer(; ctx=ctx, is_primitive=is_primitive)
     arg_vars = inputs!(t.tape, f, args...)
-    frame = Frame(Dict(i => a for (i, a) in enumerate(arg_vars)), V(0), (f, args...))
+    frame = Frame(
+        Dict(i => a for (i, a) in enumerate(arg_vars)), V(0), (f, args...)
+    )
     push!(t.frames, frame)
     val = t(f, args...)
     t.tape.result = t.frames[1].result
     tape = t.tape
-    # if optimize
-    #     tape = simplify(tape)
-    # end
     return val, tape
 end

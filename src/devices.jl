@@ -7,22 +7,18 @@ struct GPU <: AbstractDevice
     id::Int
 end
 
+# currently GPU's ID is just a placeholder
 GPU() = GPU(1)
 
-is_cuarray(x) = x isa CuArray
-
-
-# currently GPU's ID is just a placeholder
-guess_device(args) = any(is_cuarray, args) ? GPU(1) : CPU()
 device_of(A) = A isa CuArray ? GPU(1) : CPU()
+to_same_device(A, example) = device_of(example)(A)
 
 
-"""
-Retrieve function compatible with specified device
-
-See also: to_device(device, f)
-"""
-device_function(device::CPU, f) = f
+to_device_simple(::CPU, x::CuArray) = convert(Array, x)
+to_device_simple(::CPU, x::AbstractArray) = x
+to_device_simple(::CPU, x::Real) = x
+to_device_simple(::GPU, x::AbstractArray) = cu(x)
+to_device_simple(::GPU, x::Real) = Float32(x)
 
 
 """
@@ -32,12 +28,24 @@ For CPU it's usually no-op. For GPU behavior differs between object types:
 
  * Arrays are converted to CuArrays
  * structs are converted recursively
- * functions are looked up using `device_function()` or transformed using tracer
  * all other objects are returned as is
 """
-to_device(device::CPU, x) = x
-to_device(device::CPU, f::Function, args) = f
-# see also cuda.jl
+function to_device(device::Union{CPU, GPU}, x)
+    T = typeof(x)
+    flds = fieldnames(T)
+    if isa(x, Tuple)
+        return ((to_device(device, el) for el in x)...,)
+    elseif x isa AbstractArray
+        return to_device_simple(device, x)
+    elseif isempty(flds)
+        # primitive or array
+        return to_device_simple(device, x)
+    else
+        # struct, recursively convert and construct type from fields
+        fld_vals = [to_device(device, getfield(x, fld)) for fld in flds]
+        return T(fld_vals...)
+    end
+end
 
 
 (device::CPU)(x) = to_device(device, x)
@@ -47,5 +55,3 @@ to_cpu(A) = A
 to_cpu(A::CuArray) = convert(Array, A)
 to_cuda(A) = cu(A)
 to_cuda(A::CuArray) = A
-
-to_same_device(A, example) = device_of(example)(A)
