@@ -141,6 +141,13 @@ function ∇broadcasted(dy, ::typeof(broadcasted), ::typeof(Base.literal_pow),
 end
 @drule broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Any, ::Val) ∇broadcasted
 
+function ∇broadcasted(dy, ::typeof(broadcasted),
+    ::typeof(^), x::Any, p::Real)
+    return NO_FIELDS, NO_FIELDS, (@. p * x ^ (p - 1) * dy), Zero()
+end
+@drule broadcasted(::typeof(^), x::Any, ::Real) ∇broadcasted
+
+
 
 ## __new__, getfield, getproperty
 

@@ -1,3 +1,6 @@
+import ChainRules.rrule
+
+
 function chainrules_supported_signatures()
     rrule_methods = methods(rrule).ms
     sigs = [remove_first_parameter(rr.sig) for rr in rrule_methods]
@@ -22,45 +25,26 @@ is_chainrules_primitive(sig) = sig in CHAIN_RULE_PRIMITIVES[]
 
 ################################################################
 
+# from Zygote:
+# https://github.com/FluxML/Zygote.jl/blob/d5be4d5ca80e79278d714eaac15ca71904a262e3/src/lib/array.jl#L177-L185
+struct StaticGetter{i} end
+(::StaticGetter{i})(v) where {i} = v[i]
 
-# ∇mul(dy, ::typeof(*), x::Number, y::Number) = (NO_FIELDS, dy * y, dy * x)
+@generated function _unzip(tuples, ::Val{N}) where {N}
+  Expr(:tuple, (:(map($(StaticGetter{i}()), tuples)) for i ∈ 1:N)...)
+end
 
-
-# x = ...
-# y = ...
-# dy = 1.0
-# r = ∇mul(dy, *, x, y)
-# dx = getfield(r, 2)
-# dy = getfield(r, 3)
-
-
-
-# value, state, deriv function
-
-# function yo_rule(::typeof(broadcasted), ::F, args...) where F
-#     f = __new__(F)
-#     df = get_yo_rule(F, map(eltype, args)...)
-#     return @. df(dy, args...)
-# end
+function unzip(tuples)
+  N = length(first(tuples))
+  _unzip(tuples, Val(N))
+end
 
 
-# function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
-#     # y = f.(args...)
-#     y1, pb = rrule(f, [a[1] for a in args]...)
-#     function pullback(Δ)
-#         NO_FIELDS, NO_FIELDS # , @.(Δ * $df1), @.(Δ * $df2)
-#     end
-#     return y, pullback
-# end
-
-
-# function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
-#     df = get_deriv_function(Tuple{F, map(eltype, args)...})
-#     # TODO: write a more descriptive error message
-
-#     darg_tuples = df.(dy, f, args...)
-#     darg_single_tuple = tuple(
-#         [vcat([t[i] for t in darg_tuples]) for i in 1:length(args) + 1]...
-#     )
-#     return NO_FIELDS, darg_single_tuple
-# end
+function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
+    ys, pbs = unzip(rrule.(f, args...))
+    function pullback(Δ)
+        dxs = map((pb, Δ) -> pb(Δ), pbs, Δ)
+        return NO_FIELDS, unzip(dxs)...
+    end
+    return ys, pullback
+end

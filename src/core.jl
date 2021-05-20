@@ -2,9 +2,7 @@ import Statistics
 using LinearAlgebra
 using Setfield
 using OrderedCollections
-# using Espresso
 using IRTools
-# using Distributions
 using ChainRules
 using CUDA
 
@@ -15,14 +13,12 @@ include("scatter/scatter.jl")
 include("helpers.jl")
 include("drules.jl")
 include("chainrules.jl")
-include("devices.jl")   # TODO: refactor
+include("devices.jl")
 include("tape.jl")
 include("trace.jl")
 include("grad.jl")
-
 include("compile.jl")
-# include("update.jl")
-# include("cuda.jl")
+include("update.jl")
 include("gradcheck.jl")
 
 
