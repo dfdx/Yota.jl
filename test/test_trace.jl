@@ -1,19 +1,40 @@
+import Yota: trace, V, Call, play!
+
 inc_mul(a::Real, b::Real) = a * (b + 1.0)
 inc_mul(A::AbstractArray, B::AbstractArray) = inc_mul.(A, B)
 inc_mul2(A::AbstractArray, B::AbstractArray) = A .* (B .+ 1)
+
 
 non_primitive(x) = 2x + 1
 non_primitive_caller(x) = sin(non_primitive(x))
 
 
-@testset "tracer: calls" begin
+make_tuple(a, b) = (a, b)
+
+function tuple_unpack(x)
+    a, b = make_tuple(1, 2)
+    x + a
+end
+
+
+function make_adder(x)
+    return y -> x + y
+end
+
+function add(x, y)
+    adder = make_adder(x)
+    adder(y)
+end
+
+
+@testset "trace" begin
+    # calls
     val, tape = trace(inc_mul, 2.0, 3.0)
     @test val == inc_mul(2.0, 3.0)
     @test length(tape) == 5
-    @test tape[3] isa Constant
-end
+    @test tape[V(5)].args[1].id == 2
 
-@testset "tracer: bcast" begin
+    # bcast
     A = rand(3)
     B = rand(3)
     val, tape = trace(inc_mul, A, B)
@@ -23,16 +44,85 @@ end
 
     val, tape = trace(inc_mul2, A, B)
     @test val == inc_mul2(A, B)
-end
 
-@testset "tracer: primitives" begin
+    # primitives
     x = 3.0
     val1, tape1 = trace(non_primitive_caller, x)
     val2, tape2 = trace(non_primitive_caller, x; primitives=Set([non_primitive, sin]))
 
     @test val1 == val2
     @test any(op isa Call && op.fn == (*) for op in tape1)
-    @test tape2[2].fn == non_primitive
-    @test tape2[3].fn == sin
-    
+    @test tape2[V(3)].fn == non_primitive
+    @test tape2[V(4)].fn == sin
+
+    # tuple unpacking
+    val, tape = trace(tuple_unpack, 4.0)
+    @test val == tuple_unpack(4.0)
+
+    # closures
+    val, tape = trace(add, 2.0, 4.0)
+    @test val == add(2.0, 4.0)
+    @test play!(tape, add, 2.0, 5.0) == add(2.0, 5.0)
+    @test play!(tape, add, 3.0, 5.0) == add(3.0, 5.0)
+
+    # iterators
+    xs = rand(3)
+    f = xs -> [x + 1 for x in xs]
+    val, tape = trace(f, xs)
+    @test val == f(xs)
+    xs2 = rand(5)
+    @test play!(tape, nothing, xs2) == f(xs2)
+end
+
+
+function loop1(a, n)
+    a = 2a
+    for i in 1:n
+        a = a * n
+        n = n + 1
+    end
+    a = a + n
+    return a
+end
+
+function loop2(a, b)
+    while b > 0
+        a = a * b
+        b = b - 1
+    end
+    return a
+end
+
+
+function loop3(a, b)
+    while b > 1
+        b = b - 1
+        a = b
+        while a < 100
+            a = a * b + 1
+        end
+    end
+    return a
+end
+
+
+function cond1(a, b)
+    if b > 0
+        a = 2a
+    end
+    return a
+end
+
+
+@testset "trace: loops" begin
+    # smoke tests, will be replaced with loop testing when it's ready
+    val, tape = trace(loop1, 8.0, 2)
+    @test val == loop1(8.0, 2)
+
+    val, tape = trace(loop2, 5, 10)
+    @test val == loop2(5, 10)
+
+    val, tape = trace(loop3, 1, 3)
+    @test val == loop3(1, 3)
+
 end

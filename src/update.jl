@@ -1,11 +1,11 @@
 ## update inputs vars using calculated gradients
 
-function path_value_pairs(gx::Composite; current_path=[])
+function path_value_pairs(gx::Tangent; current_path=[])
     result = []
     ks = collect(keys(gx))
     vals = collect(gx)
     for (k, v) in zip(ks, vals)
-        if v isa Composite
+        if v isa Tangent
             subresults = path_value_pairs(v; current_path=vcat(current_path, k))
             result = vcat(result, subresults)
         else
@@ -48,7 +48,7 @@ end
 
 function update!(x, gx, fn::Function=minus_updater; ignore=Set())
     @assert isstruct(x) "Expected mutable struct as 1st argument"
-    @assert gx isa Composite "Gradient for structs should be Composite"
+    @assert gx isa Tangent "Gradient for structs should be Tangent"
     for (path, gv) in path_value_pairs(gx)
         if !in(path, ignore)
             v = getfield_nested(x, path)

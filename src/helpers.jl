@@ -1,21 +1,11 @@
-function ∇getproperty(dy, s, f::Symbol)
+@generated function __new__(T, args...)
+    return Expr(:splatnew, :T, :args)
+end
+
+function ungetfield(dy, s::Tuple, f::Int)
     T = typeof(s)
-    nt = NamedTuple{(f,)}((dy,))
-    return Composite{T}(; nt...)
+    return Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...)
 end
-
-
-function ∇getfield(dy, s::Tuple, f::Int)
-    T = typeof(s)
-    return Composite{T}([i == f ? dy : Zero() for i=1:length(s)]...)
-end
-
-
-function ∇__new__(dy, T, idx)
-    fldname = fieldnames(T)[idx]
-    return getproperty(dy, fldname)
-end
-
 
 # TODO (when https://github.com/FluxML/NNlib.jl/pull/296 is done):
 # 1. uncomment this implementation
@@ -65,24 +55,31 @@ function ungetindex(x::Tuple, dy, I...)
     return dx
 end
 
+"""
+    _getfield(value, fld)
 
-function ∇sum(x::AbstractArray, dy)
-    dx = similar(x)
-    dx .= dy
-    return dx
-end
+This function can be used instead of getfield() to bypass Yota rules
+during backpropagation.
+"""
+_getfield(value, fld) = getfield(value, fld)
+
+# function ∇sum(x::AbstractArray, dy)
+#     dx = similar(x)
+#     dx .= dy
+#     return dx
+# end
 
 
-function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
-    dx = similar(x)
-    dx .= dy ./ prod(size(x, d) for d in dims)
-    return dx
-end
+# function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
+#     dx = similar(x)
+#     dx .= dy ./ prod(size(x, d) for d in dims)
+#     return dx
+# end
 
 
-function sum_dropdims(x::AbstractArray, dims)
-    return dropdims(sum(x; dims=dims); dims=dims)
-end
+# function sum_dropdims(x::AbstractArray, dims)
+#     return dropdims(sum(x; dims=dims); dims=dims)
+# end
 
 
 # unbroadcast from Flux
@@ -131,20 +128,20 @@ untranspose_vec(ds::Adjoint{T, <:AbstractVector{T}}) where T = adjoint(ds)
 untranspose_vec(ds::AbstractMatrix) = dropdims(transpose(ds); dims=2)
 
 
-function unvcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-    a = arrs[n]
-    from = n == 1 ? 1 : sum(size(arr, 1) for arr in arrs[1:n-1]) + 1
-    to = from + size(a, 1) - 1
-    return dy[from:to, [(:) for i=1:length(size(dy)) - 1]...]
-end
+# function unvcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
+#     a = arrs[n]
+#     from = n == 1 ? 1 : sum(size(arr, 1) for arr in arrs[1:n-1]) + 1
+#     to = from + size(a, 1) - 1
+#     return dy[from:to, [(:) for i=1:length(size(dy)) - 1]...]
+# end
 
 
-function unhcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-    a = arrs[n]
-    from = n == 1 ? 1 : sum(size(arr, 2) for arr in arrs[1:n-1]) + 1
-    to = from + size(a, 2) - 1
-    return dy[:, from:to, [(:) for i=1:length(size(dy)) - 2]...]
-end
+# function unhcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
+#     a = arrs[n]
+#     from = n == 1 ? 1 : sum(size(arr, 2) for arr in arrs[1:n-1]) + 1
+#     to = from + size(a, 2) - 1
+#     return dy[:, from:to, [(:) for i=1:length(size(dy)) - 2]...]
+# end
 
 
 function uncat(dy::AbstractArray, n::Int, arrs::AbstractArray...; dims)

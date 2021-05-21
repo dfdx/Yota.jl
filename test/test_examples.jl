@@ -24,7 +24,7 @@ obj(Y, X, b) = mean((Y .- X * b) .^ 2.0) # objective to minimize
     for i in 1:epochs
         loss_last, g = grad(obj, Y, X, θ)
         # println("Epoch: $i; loss = $loss_last")
-        δ = 0.01 * g[3]
+        δ = 0.01 * g[4]
         θ -= δ
     end
     @test loss_last < loss_first / 10   # loss reduced at least 10 times
@@ -57,7 +57,7 @@ linear_loss(m::Linear2, X, y) = mean((m.W * X .+ m.b .- y) .^ 2.0)
     for i in 1:epochs
         val, g = grad(linear_loss, m, X, Y)
         # println("Epoch: $i; loss = $val")
-        update!(m, g[1], (x, gx) -> x - 0.1 * gx)
+        update!(m, g[2], (x, gx) -> x - 0.1 * gx)
     end
 
     @test isapprox(m.W, W_true; atol=0.1)
