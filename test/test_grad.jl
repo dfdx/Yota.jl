@@ -60,10 +60,10 @@ end
 @testset "grad: iterate" begin
     # iterate over tuple, e.g. for x in (1.0, 2.0, 3.0)
     x = (1.0, 2.0, 3.0)
-    CT = Composite{typeof(x)}
-    @test grad(x -> iterate(x)[1], x)[2][2] == CT(1.0, Zero(), Zero())
-    @test grad(x -> iterate(x, 2)[1], x)[2][2] == CT(Zero(), 1.0, Zero())
-    @test grad(x -> iterate(x, 3)[1], x)[2][2] == CT(Zero(), Zero(), 1.0)
+    CT = Tangent{typeof(x)}
+    @test grad(x -> iterate(x)[1], x)[2][2] == CT(1.0, ZeroTangent(), ZeroTangent())
+    @test grad(x -> iterate(x, 2)[1], x)[2][2] == CT(ZeroTangent(), 1.0, ZeroTangent())
+    @test grad(x -> iterate(x, 3)[1], x)[2][2] == CT(ZeroTangent(), ZeroTangent(), 1.0)
 
     # iterate over array, e.g. for x in [1.0, 2.0, 3.0]
     x = [1.0, 2.0, 3.0]
@@ -73,8 +73,8 @@ end
     # @test grad(x -> iterate(x, 3)[1], x)[2][1] == [0, 0, 1.0]
 
     x = (1:3)
-    @test grad(x -> iterate(x)[1], x)[2][2] == Zero()
-    @test grad(x -> iterate(x, 1)[1], x)[2][2] == Zero()
+    @test grad(x -> iterate(x)[1], x)[2][2] == ZeroTangent()
+    @test grad(x -> iterate(x, 1)[1], x)[2][2] == ZeroTangent()
 
 end
 

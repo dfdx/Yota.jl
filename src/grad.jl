@@ -45,7 +45,7 @@ function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
         setderiv!(tape, x, dx)
     else
         old_dx = getderiv(tape, x)
-        if tape[dx].val isa Composite || tape[old_dx].val isa Composite
+        if tape[dx].val isa Tangent || tape[old_dx].val isa Tangent
             # val = tape[dx].val + tape[old_dx].val
             # new_dx_id = push!(tape, Call, val, (+), [dx.id, old_dx.id])
             new_dx = push!(tape, mkcall(+, dx, old_dx))
@@ -189,12 +189,11 @@ function gradtape!(tape::Tape)
     chainrules_transform!(tape)
     # backpropagate gradients
     back!(tape)
-    # consistency check
-    # check_deriv_sizes(tape)
     # add a tuple of (val, (gradients...))
-    deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : Zero() for v in inputs(tape)]
+    deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
-    new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple))
+    deriv_tuple_unthunked = push!(tape, mkcall(map, ChainRules.unthunk, deriv_tuple))
+    new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple_unthunked))
     tape.result = new_result
     return tape
 end

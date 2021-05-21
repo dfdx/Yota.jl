@@ -102,7 +102,7 @@ end
 # @diffrule getindex(u::AbstractArray, i)         u    ungetindex(u, dy, i)
 
 function ∇getindex(dy, ::typeof(getindex), x, I...)
-    return NO_FIELDS, ungetindex(x, dy, I...), [Zero() for i in I]...
+    return NO_FIELDS, ungetindex(x, dy, I...), [ZeroTangent() for i in I]...
 end
 @drule getindex(x::Any, I::Vararg) ∇getindex
 
@@ -137,13 +137,13 @@ end
 
 function ∇broadcasted(dy, ::typeof(broadcasted), ::typeof(Base.literal_pow),
     ::typeof(^), x::Any, ::Val{p}) where p
-    return NO_FIELDS, NO_FIELDS, NO_FIELDS, (@. p * x ^ (p - 1) * dy), Zero()
+    return NO_FIELDS, NO_FIELDS, NO_FIELDS, (@. p * x ^ (p - 1) * dy), ZeroTangent()
 end
 @drule broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Any, ::Val) ∇broadcasted
 
 function ∇broadcasted(dy, ::typeof(broadcasted),
     ::typeof(^), x::Any, p::Real)
-    return NO_FIELDS, NO_FIELDS, (@. p * x ^ (p - 1) * dy), Zero()
+    return NO_FIELDS, NO_FIELDS, (@. p * x ^ (p - 1) * dy), ZeroTangent()
 end
 @drule broadcasted(::typeof(^), x::Any, ::Real) ∇broadcasted
 
@@ -154,14 +154,14 @@ end
 function ∇getproperty(dy, ::typeof(getproperty), s, f::Symbol)
     T = typeof(s)
     nt = NamedTuple{(f,)}((dy,))
-    return NO_FIELDS, Composite{T}(; nt...), Zero()
+    return NO_FIELDS, Tangent{T}(; nt...), ZeroTangent()
 end
 @drule getproperty(s::Any, f::Symbol) ∇getproperty
 
 
 function ∇getfield(dy, ::typeof(getfield), s::Tuple, f::Int)
     T = typeof(s)
-    return NO_FIELDS, Composite{T}([i == f ? dy : Zero() for i=1:length(s)]...), Zero()
+    return NO_FIELDS, Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), ZeroTangent()
 end
 @drule getfield(s::Tuple, f::Union{Symbol, Int}) ∇getfield
 
@@ -178,7 +178,7 @@ function ∇iterate(dy, ::typeof(iterate), x::AbstractArray)
     return NO_FIELDS, ungetindex(x, dy, 1)
 end
 function ∇iterate(dy, ::typeof(iterate), x::AbstractArray, i::Integer)
-    return NO_FIELDS, ungetindex(x, dy, i), Zero()
+    return NO_FIELDS, ungetindex(x, dy, i), ZeroTangent()
 end
 @drule iterate(x::AbstractArray) ∇iterate
 @drule iterate(x::AbstractArray, i::Integer) ∇iterate
@@ -187,7 +187,7 @@ function ∇iterate(dy, ::typeof(iterate), t::Tuple)
     return NO_FIELDS, ungetfield(dy[1], t, 1)
 end
 function ∇iterate(dy, ::typeof(iterate), t::Tuple, i::Int)
-    return NO_FIELDS, ungetfield(dy[1], t, i), Zero()
+    return NO_FIELDS, ungetfield(dy[1], t, i), ZeroTangent()
 end
 @drule iterate(x::Tuple) ∇iterate
 @drule iterate(x::Tuple, i::Integer) ∇iterate
@@ -195,10 +195,10 @@ end
 # here we explicitely stop propagation in iteration
 # over ranges (e.g for i=1:3 ... end)
 function ∇iterate(dy, ::typeof(iterate), x::UnitRange)
-    return NO_FIELDS, Zero()
+    return NO_FIELDS, ZeroTangent()
 end
 function ∇iterate(dy, ::typeof(iterate), x::UnitRange, i::Int)
-    return NO_FIELDS, Zero(), Zero()
+    return NO_FIELDS, ZeroTangent(), ZeroTangent()
 end
 @drule iterate(x::UnitRange) ∇iterate
 @drule iterate(x::UnitRange, i::Integer) ∇iterate
@@ -207,12 +207,12 @@ end
 ## tuple unpacking
 
 function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int)
-    return NO_FIELDS, ungetfield(dy[1], t, i), Zero()
+    return NO_FIELDS, ungetfield(dy[1], t, i), ZeroTangent()
 end
 @drule Base.indexed_iterate(t::Tuple, i::Int) ∇indexed_iterate
 
 function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int, state::Int)
-    return NO_FIELDS, ungetfield(dy[1], t, i), Zero(), Zero()
+    return NO_FIELDS, ungetfield(dy[1], t, i), ZeroTangent(), ZeroTangent()
 end
 @drule Base.indexed_iterate(t::Tuple, i::Int, state::Int) ∇indexed_iterate
 

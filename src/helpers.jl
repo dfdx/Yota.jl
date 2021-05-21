@@ -4,7 +4,7 @@ end
 
 function ungetfield(dy, s::Tuple, f::Int)
     T = typeof(s)
-    return Composite{T}([i == f ? dy : Zero() for i=1:length(s)]...)
+    return Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...)
 end
 
 # TODO (when https://github.com/FluxML/NNlib.jl/pull/296 is done):

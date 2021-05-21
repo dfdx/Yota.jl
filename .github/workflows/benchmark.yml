@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
         with:
-          version: '1.5'
+          version: '1.6'
       - run: git fetch origin '+refs/heads/master:refs/remotes/origin/master'
       - run: git branch master origin/master
       - run: |

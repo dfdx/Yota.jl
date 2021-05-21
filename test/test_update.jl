@@ -1,4 +1,4 @@
-import ChainRulesCore.Composite
+import ChainRulesCore.Tangent
 import Yota: update!, setfield_nested!
 
 
@@ -28,7 +28,7 @@ end
     g = Dict((:a, :t) => [1.0, 2.0, 3.0],
              (:a, :s) => 4.0,
              (:s,) => 5.0)
-    g = Composite{StructB}(s=5.0, a=Composite{StructA}(t=[1.0, 2.0, 3.0], s=4.0))
+    g = Tangent{StructB}(s=5.0, a=Tangent{StructA}(t=[1.0, 2.0, 3.0], s=4.0))
     update!(b, g)
     @test b.a.t == [-2.0, -4.0, -6.0]
     @test b.a.s == -8.0

@@ -2,7 +2,7 @@ using Test
 using Yota
 using Yota: gradtape, gradcheck, update_chainrules_primitives!, compile
 using CUDA
-import ChainRulesCore: Composite, Zero
+import ChainRulesCore: Tangent, ZeroTangent
 
 
 CUDA.allowscalar(false)
