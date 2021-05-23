@@ -171,44 +171,19 @@ end
 mutable struct Tape{C}
     # linearized execution graph
     ops::Vector{<:AbstractOp}
-<<<<<<< HEAD
     # result variable
     result::Variable
-    # application-specific context
-    c::C
-    # # derivs[var] == grad_var
-    # derivs::LittleDict{Variable, Variable}
-    # # pb_derivs[var] == pullback_var
-    # pullbacks::LittleDict{Variable, Variable}
-end
-
-Tape(c::C) where C = Tape(AbstractOp[], Variable(0), c)
-# by default context is just a Dict{Any, Any}
-Tape() = Tape(Dict{Any,Any}())
-=======
-    # id of result variable
-    resultid::Int
-    # derivs[var_id] == grad_id
-    derivs::Dict{Int,Int}
-    # compiled tape or nothing
-    compiled::MaybeFunction
-    # device of the tape
-    device::AbstractDevice
     # for subtapes - parent tape
     parent::Union{Tape, Nothing}
     # tape metadata (depends on the context)
     meta::Dict
+    # application-specific context
+    c::C
 end
 
-Tape(device::AbstractDevice) = Tape(AbstractOp[], -1, Dict(), nothing, device, nothing, Dict())
-Tape() = Tape(CPU())
-Base.similar(tape::Tape) = Tape(AbstractOp[], tape.resultid, tape.derivs,
-<<<<<<< HEAD
-                                tape.compiled, tape.device, tape.parent, tape.traced)
->>>>>>> 8631569 (Partially implement exit_loop!() in the new tracer)
-=======
-                                tape.compiled, tape.device, tape.parent, tape.meta)
->>>>>>> 268d111 (Finish Loop's subtape)
+Tape(c::C) where C = Tape(AbstractOp[], Variable(0), nothing, Dict(), c)
+# by default context is just a Dict{Any, Any}
+Tape() = Tape(Dict{Any,Any}())
 
 
 function Base.show(io::IO, tape::Tape{C}) where C
@@ -317,20 +292,12 @@ function Base.replace!(tape::Tape, idx_ops::Pair{<:Integer,<:Union{Tuple,Vector}
 end
 
 
-###############################################################################
-#                                 REBIND                                      #
-###############################################################################
+########################################################################
+#                       SPECIAL OPERATIONS                             #
+########################################################################
 
-"""Returned version of the var bound to the tape op"""
-bound(tape::Tape, v::Variable) = Variable(tape[v])
+## Loop
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-"""
-    rebind!(tape::Tape, op, st::Dict)
-    rebind!(tape::Tape, st::Dict; from, to)
-=======
 mutable struct Loop <: AbstractOp
     id::Int
     parent_input_ids::Vector{Int}
@@ -346,14 +313,19 @@ function Base.show(io::IO, loop::Loop)
     print(io, "%$(loop.id) = Loop($input_id_str)")
 end
 
->>>>>>> a745a45 (Create (incomplete) Loop op on parent tape)
+###############################################################################
+#                                 REBIND                                      #
+###############################################################################
+
+"""Returned version of the var bound to the tape op"""
+bound(tape::Tape, v::Variable) = Variable(tape[v])
+
+
+"""
+    rebind!(tape::Tape, op, st::Dict)
+    rebind!(tape::Tape, st::Dict; from, to)
 
 Rebind all variables according to substitution table. Example:
-=======
-########################################################################
-#                           TRANSFORMATIONS                            #
-########################################################################
->>>>>>> 8631569 (Partially implement exit_loop!() in the new tracer)
 
     tape = Tape()
     v1, v2 = inputs!(tape, nothing, 3.0, 5.0)
@@ -383,9 +355,9 @@ function rebind!(tape::Tape, op::Call, st::Dict)
     return op
 end
 
+
 """
     rebind_context!(tape::Tape, st::Dict)
-
 Rebind variables in the tape's context according to substitution table.
 By default does nothing, but can be overwitten for specific Tape{C}
 """
@@ -416,11 +388,11 @@ function exec!(tape::Tape, op::Call)
 end
 
 function exec!(tape::Tape, op::Loop)
-    subtape = op.subtape    
+    subtape = op.subtape
     # note: not passing play! options
     play!(subtape, [tape[id].val for id in op.parent_input_ids]...)
-    while op.subtape[op.cond_id].val        
-        play!(subtape, [subtape[id].val for id in op.continue_ids]...)        
+    while op.subtape[op.cond_id].val
+        play!(subtape, [subtape[id].val for id in op.continue_ids]...)
     end
     op.val = subtape[op.exit_id].val
 end
