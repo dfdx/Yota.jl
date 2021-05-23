@@ -300,17 +300,17 @@ end
 
 mutable struct Loop <: AbstractOp
     id::Int
-    parent_input_ids::Vector{Int}
-    cond_id::Int
-    continue_ids::Vector{Int}
-    exit_id::Int
+    parent_inputs::Vector{Variable}
+    cond_var::Variable
+    continue_vars::Vector{Variable}
+    exit_var::Variable
     subtape::Tape
     val::Any
 end
 
 function Base.show(io::IO, loop::Loop)
-    input_id_str = join(["%$id" for id in loop.parent_input_ids], ", ")
-    print(io, "%$(loop.id) = Loop($input_id_str)")
+    input_str = join(map(string, loop.parent_inputs), ", ")
+    print(io, "%$(loop.id) = Loop($input_str)")
 end
 
 ###############################################################################
@@ -340,7 +340,7 @@ function rebind!(tape::Tape, v::Variable, st::Dict)
     if haskey(st, v.id)
         # rebind to a new op
         v._op = tape[V(st[v.id])]
-end
+    end
 end
 
 rebind!(::Tape, ::Input, ::Dict) = ()
@@ -390,11 +390,11 @@ end
 function exec!(tape::Tape, op::Loop)
     subtape = op.subtape
     # note: not passing play! options
-    play!(subtape, [tape[id].val for id in op.parent_input_ids]...)
-    while op.subtape[op.cond_id].val
-        play!(subtape, [subtape[id].val for id in op.continue_ids]...)
+    play!(subtape, [tape[v].val for v in op.parent_inputs]...)
+    while op.subtape[op.cond_var].val
+        play!(subtape, [subtape[v].val for v in op.continue_vars]...)
     end
-    op.val = subtape[op.exit_id].val
+    op.val = subtape[op.exit_var].val
 end
 
 

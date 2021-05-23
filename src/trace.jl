@@ -249,8 +249,8 @@ Arguments:
 
  * t :: IRTracer
     Current tracer
- * loop_input_ssa_ids :: Vector{Int}
-    SSA IDs of variables which will be used as loop inputs. Includes
+ * loop_input_ir_ids :: Vector{Int}
+    IR IDs of variables which will be used as loop inputs. Includes
     loop block inputs and any outside IDs
 
 This function is added to the very beginning of the loop block(s).
@@ -268,15 +268,16 @@ function enter_loop!(t::IRTracer, loop_input_ir_ids::Vector)
     # skip if it's not the first iteration
     haskey(t.tape.meta, LOOP_TRACED_FLAG) && return
     # create subtape, with the current tape as parent
-    subtape = Tape(typeof(t.tape.c)())
+    C = typeof(t.tape.c)
+    subtape = Tape(C())
     subtape.parent = t.tape
     # create a new frame and push to the list
     frame = Frame(Dict(), V(0), ())
     push!(t.frames, frame)
-    # record inputs to the subtape & populate the new frame's ssa2id
+    # record inputs to the subtape & populate the new frame's ir2tape
     for ir_id in loop_input_ir_ids
-        parent_tape_id = t.frames[end - 1].ir2tape[ir_id]
-        val = subtape.parent[parent_tape_id].val
+        parent_tape_var = t.frames[end - 1].ir2tape[ir_id]
+        val = subtape.parent[parent_tape_var].val
         tape_var = push!(subtape, Input(val))
         t.frames[end].ir2tape[ir_id] = tape_var
     end
@@ -318,11 +319,10 @@ function exit_loop!(t::IRTracer,
     # loop subtape already contains a variable designating condition
     # of loop continuation; if this condition is false,
     # we are ready to exit the loop and record Loop operation
-    cond_var = t.tape[t.frames[end].ir2tape[cond_ir_id]]
-    if !cond_var.val
+    cond_op = t.tape[t.frames[end].ir2tape[cond_ir_id]]
+    if !cond_op.val
         # swap active tape back
-        loop_frame = pop!(t.frames)
-        # ir2tape = loop_frame.ir2tape
+        pop!(t.frames)
         parent_ir2tape = t.frames[end].ir2tape
         subtape = t.tape
         t.tape = t.tape.parent
@@ -330,31 +330,25 @@ function exit_loop!(t::IRTracer,
         first_loop_end = findfirst(op -> isa(op, _LoopEnd), subtape.ops)
         subtape.ops = subtape.ops[1:first_loop_end-1]
         # record output tuple
-        exit_tape_ids = subtape.meta[LOOP_EXIT_TAPE_IDS]
-        exit_val = tuple([subtape[id].val for id in exit_tape_ids]...)
+        exit_tape_vars = subtape.meta[LOOP_EXIT_TAPE_IDS]
+        # exit_val = tuple([subtape[id].val for id in exit_tape_vars]...)
         # exit_var = push!(subtape, Call, exit_val, tuple, exit_tape_ids)
-        exit_var = push!(subtape, mkcall(tuple, exit_tape_ids; val=exit_val))
+        exit_var = push!(subtape, mkcall(tuple, exit_tape_vars...))
+        exit_val = subtape[exit_var].val
         subtape.result = exit_var
         # record the loop operation
-        parent_input_ids = [parent_ir2tape[ir_id] for ir_id in input_ir_ids]
-        cond_id = subtape.meta[LOOP_COND_ID]
-        continue_ids = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
-        loop_id = push!(t.tape, Loop(parent_input_ids,
-                          cond_id, continue_ids,
+        parent_input_vars = [parent_ir2tape[ir_id] for ir_id in input_ir_ids]
+        cond_var = subtape.meta[LOOP_COND_ID]
+        continue_vars = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
+        loop_id = push!(t.tape, Loop(0, parent_input_vars,
+                          cond_var, continue_vars,
                           exit_var, subtape, exit_val))
         # destructure loop return values to separate vars on the main tape
         # and map branch arguments to these vars
         for i=1:length(exit_val)
-            idx_id = push!(t.tape, Constant(i))
-            res_id = push!(t.tape, mkcall(getfield, loop_id, idx_id; val=exit_val[i]))
-            # parent_ssa2tape[exit_ssa_ids[i]] = res_id
+            res_id = push!(t.tape, mkcall(getfield, loop_id, i))
             parent_ir2tape[exit_target_ir_ids[i]] = res_id
-            # TODO: exit_ssa_ids (local to loop) -> branch target param ssa_ids (global)
         end
-        # TODO:
-        # 1. write x = getfield(loop_op, i), i.e. destructure loop exit vars
-        # 2. parent_ssa2tape[branch_exit_ssa_id] = x.id
-
     end
 end
 
@@ -496,7 +490,7 @@ end
         end
     end
     trace_branches!(ir)
-    # trace_loops!(ir)
+    trace_loops!(ir)
     return ir
 end
 
