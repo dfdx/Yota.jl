@@ -393,6 +393,10 @@ function exec!(tape::Tape, op::Call)
     op.val = fn(arg_vals...)
 end
 
+function exec!(tape::Tape, op::Loop)
+
+end
+
 
 function play!(tape::Tape, args...; debug=false)
     for (i, val) in enumerate(args)
