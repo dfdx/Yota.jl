@@ -205,9 +205,19 @@ end
 
 inputs(tape::Tape) = [V(op) for op in tape.ops if op isa Input]
 function inputs!(tape::Tape, vals...)
-    @assert length(tape) == 0 "Can only set inputs to an empty tape"
-    for val in vals
-        push!(tape, Input(val))
+    @assert(isempty(tape) || length(inputs(tape)) == length(vals),
+            "This tape contains $(length(inputs(tape))) inputs, but " *
+            "$(length(vals)) value(s) were provided")
+    if isempty(tape)
+        # initialize inputs
+        for val in vals
+            push!(tape, Input(val))
+        end
+    else
+        # rewrite input values
+        for (i, val) in enumerate(vals)
+            tape[V(i)].val = val
+        end
     end
     return [V(op) for op in tape.ops[1:length(vals)]]
 end
@@ -389,10 +399,27 @@ end
 
 function exec!(tape::Tape, op::Loop)
     subtape = op.subtape
-    # note: not passing play! options
-    play!(subtape, [tape[v].val for v in op.parent_inputs]...)
-    while op.subtape[op.cond_var].val
-        play!(subtape, [subtape[v].val for v in op.continue_vars]...)
+    # initialize inputs
+    inputs!(subtape, [tape[v].val for v in op.parent_inputs]...)
+    # reset condition var
+    # * for loops where condition is renewed at the end, it will be
+    #   overwritten later
+    # * for loops where condition is the first operation and depends
+    #   on inputs, it will reset previous run state
+    exec!(subtape, subtape[op.cond_var])
+    # run the loop strictly while continue condition is true
+    # note that subtape execution may finish before the full
+    # iteration is done
+    cond_var = op.cond_var
+    vi0 = length(op.parent_inputs) + 1
+    vi = vi0
+    while subtape[cond_var].val
+        if vi > length(subtape)
+            vi = vi0
+            inputs!(subtape, [subtape[v].val for v in op.continue_vars]...)
+        end
+        exec!(subtape, subtape[V(vi)])
+        vi += 1
     end
     op.val = subtape[op.exit_var].val
 end
