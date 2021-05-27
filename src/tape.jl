@@ -401,26 +401,32 @@ function exec!(tape::Tape, op::Loop)
     subtape = op.subtape
     # initialize inputs
     inputs!(subtape, [tape[v].val for v in op.parent_inputs]...)
-    # reset condition var
-    # * for loops where condition is renewed at the end, it will be
-    #   overwritten later
-    # * for loops where condition is the first operation and depends
-    #   on inputs, it will reset previous run state
-    exec!(subtape, subtape[op.cond_var])
     # run the loop strictly while continue condition is true
     # note that subtape execution may finish before the full
     # iteration is done
     cond_var = op.cond_var
     vi0 = length(op.parent_inputs) + 1
     vi = vi0
-    while subtape[cond_var].val
+    while true
+        # @show vi
+        # @show subtape[V(1)].val
+        # @show subtape[V(2)].val
+        # @show subtape[V(7)].val
+        # sleep(1)
+        exec!(subtape, subtape[V(vi)])
+        if vi == cond_var.id && subtape[V(vi)].val == false
+            break
+        end
+        vi += 1
         if vi > length(subtape)
             vi = vi0
             inputs!(subtape, [subtape[v].val for v in op.continue_vars]...)
         end
-        exec!(subtape, subtape[V(vi)])
-        vi += 1
     end
+    # exit_var is special - it's a tuple combining all the exit variables
+    # since it doesn't exist in the original code, it may be not executed
+    # by loop logic at the last iteration; hence, we execute it manually
+    exec!(subtape, subtape[op.exit_var])
     op.val = subtape[op.exit_var].val
 end
 
