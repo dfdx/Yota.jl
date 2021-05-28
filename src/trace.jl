@@ -237,10 +237,13 @@ end
 _LoopEnd() = _LoopEnd(0)
 
 
-const LOOP_TRACED_FLAG = "loop_already_traced"
 const LOOP_EXIT_TAPE_IDS = "loop_exit_tape_ids"
 const LOOP_COND_ID = "loop_cond_id"
 const LOOP_CONTINUE_TAPE_IDS = "loop_continue_tape_ids"
+
+
+is_loop_traced(t::IRTracer, loop_id::Int) = haskey(t.tape.meta, "loop_already_traced_$loop_id")
+loop_traced!(t::IRTracer, loop_id::Int) = (t.tape.meta["loop_already_traced_$loop_id"] = true)
 
 
 """
@@ -251,6 +254,8 @@ Arguments:
 
  * t :: IRTracer
     Current tracer
+ * loop_id :: Int
+    Unique ID of a loop being entered
  * loop_input_ir_ids :: Vector{Int}
     IR IDs of variables which will be used as loop inputs. Includes
     loop block inputs and any outside IDs
@@ -266,10 +271,10 @@ Another important detail is that Loop's subtape is a completely valid
 and independent tape with its own call frame and inputs which include
 all explicit and implicit inputs to the loop's block in the original IR.
 """
-function enter_loop!(t::IRTracer, loop_input_ir_ids::Vector)
+function enter_loop!(t::IRTracer, loop_id, loop_input_ir_ids::Vector)
     # global STATE = (t, loop_input_ir_ids)
     # skip if it's not the first iteration
-    haskey(t.tape.meta, LOOP_TRACED_FLAG) && return
+    is_loop_traced(t, loop_id) && return
     # create subtape, with the current tape as parent
     C = typeof(t.tape.c)
     subtape = Tape(C())
@@ -290,12 +295,13 @@ end
 
 
 function stop_loop_tracing!(t::IRTracer,
+                            loop_id::Any,
                             input_ir_ids::Vector,
                             cond_ir_id::Any,
                             cont_ir_ids::Vector,
                             exit_ir_ids::Vector,
                             exit_target_ir_ids::Vector)
-    if !haskey(t.tape.meta, LOOP_TRACED_FLAG)
+    if !is_loop_traced(t, loop_id)
         # record exit tape IDs as of first iteration
         # we will use them later
         t.tape.meta[LOOP_EXIT_TAPE_IDS] =
@@ -304,7 +310,7 @@ function stop_loop_tracing!(t::IRTracer,
         t.tape.meta[LOOP_CONTINUE_TAPE_IDS] =
             [t.frames[end].ir2tape[ir_id] for ir_id in cont_ir_ids]
         # set flag to stop creatnig new subtapes
-        t.tape.meta[LOOP_TRACED_FLAG] = true
+        loop_traced!(t, loop_id)
     end
     # record a special op to designate the end of the loop code
     # tracer will continue to record ops, but later we truncate
@@ -326,17 +332,11 @@ function exit_loop!(t::IRTracer,
                     cont_ir_ids::Vector,
                     exit_ir_ids::Vector,
                     exit_target_ir_ids::Vector)
-    # global STATE = (t, input_ir_ids, cond_ir_id, cont_ir_ids, exit_ir_ids, exit_target_ir_ids)
-    # error("STOP HERE!")
-
     # loop subtape already contains a variable designating condition
     # of loop continuation; if this condition is false,
     # we are ready to exit the loop and record Loop operation
     cond_op = t.tape[t.frames[end].ir2tape[cond_ir_id]]
-    @show t.frames[end]
-    @show cond_op.val
     if !cond_op.val
-        # error("STOP HERE 2!!")
         # swap active tape back
         pop!(t.frames)
         parent_ir2tape = t.frames[end].ir2tape
@@ -395,8 +395,6 @@ Params:
 """
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    # global STATE = (t, res_sid, farg_irvars, fargs)
-    # fn == Core.kwfunc(sum) && error()
     if t.is_primitive(Tuple{map(typeof, fargs)...})
         tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape
@@ -483,17 +481,19 @@ end
 function trace_loops!(ir::IR)
     for block in IRTools.blocks(ir)
         if is_loop(block)
+            loop_id = block.id   # unique ID of this loop
             start_block, end_block = loop_start_end_blocks(ir, block)
             # loop start - the first block of the loop
             loop_input_ir_ids = vcat(
                 block_input_ir_ids(start_block),
                 block_outsider_ir_ids(start_block),
             )
-            pushfirst!(start_block, Expr(:call, enter_loop!, self, loop_input_ir_ids))
+            pushfirst!(start_block, Expr(:call, enter_loop!, self, loop_id, loop_input_ir_ids))
             # loop tracing border - at this point all operations of the loop
             # have been executed at least once, even if continuation condition
             # is in another block
             push!(block, Expr(:call, stop_loop_tracing!, self,
+                              loop_id,
                               loop_input_ir_ids,
                               loop_condition_ir_id(end_block),
                               loop_continue_ir_ids(block),
