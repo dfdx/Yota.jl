@@ -64,6 +64,34 @@ end
 
 
 ################################################################################
+#                              Tracer Options                                  #
+################################################################################
+
+const TRACING_OPTIONS = Ref(Dict())
+
+"""
+    should_trace_loops!(val=false)
+
+Turn on/off loop tracing. Without parameters, resets the flag to the default value
+"""
+should_trace_loops!(val::Bool=true) = (TRACING_OPTIONS[][:trace_loops] = val)
+should_trace_loops() = get(TRACING_OPTIONS[], :trace_loops, true)
+
+
+"""
+Tracer options. Configured globally via the following methods:
+
+- should_trace_loops!()
+"""
+struct TracerOptions
+    trace_loops::Bool
+end
+
+
+TracerOptions() = TracerOptions(should_trace_loops())
+
+
+################################################################################
 #                        IRTracer (defs and utils)                             #
 ################################################################################
 
@@ -71,11 +99,12 @@ mutable struct IRTracer
     is_primitive::Function
     tape::Tape
     frames::Vector{Frame}
+    options::TracerOptions
 end
 
 function IRTracer(; ctx=Dict(), is_primitive=is_chainrules_primitive)
     tape = Tape(ctx)
-    return IRTracer(is_primitive, tape, [])
+    return IRTracer(is_primitive, tape, [], TracerOptions())
 end
 
 Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
@@ -152,7 +181,6 @@ end
 ################################################################################
 
 
-# TODO: check on several examples
 function is_loop(block::IRTools.Block)
     for br in IRTools.branches(block)
         # if a branch refers to an earlier block and is not return
@@ -272,7 +300,7 @@ and independent tape with its own call frame and inputs which include
 all explicit and implicit inputs to the loop's block in the original IR.
 """
 function enter_loop!(t::IRTracer, loop_id, loop_input_ir_ids::Vector)
-    # global STATE = (t, loop_input_ir_ids)
+    t.options.trace_loops || return
     # skip if it's not the first iteration
     is_loop_traced(t, loop_id) && return
     # create subtape, with the current tape as parent
@@ -294,6 +322,9 @@ function enter_loop!(t::IRTracer, loop_id, loop_input_ir_ids::Vector)
 end
 
 
+"""
+Set flags designating the end of the first run of the loop.
+"""
 function stop_loop_tracing!(t::IRTracer,
                             loop_id::Any,
                             input_ir_ids::Vector,
@@ -301,6 +332,7 @@ function stop_loop_tracing!(t::IRTracer,
                             cont_ir_ids::Vector,
                             exit_ir_ids::Vector,
                             exit_target_ir_ids::Vector)
+    t.options.trace_loops || return
     if !is_loop_traced(t, loop_id)
         # record exit tape IDs as of first iteration
         # we will use them later
@@ -332,6 +364,7 @@ function exit_loop!(t::IRTracer,
                     cont_ir_ids::Vector,
                     exit_ir_ids::Vector,
                     exit_target_ir_ids::Vector)
+    t.options.trace_loops || return
     # loop subtape already contains a variable designating condition
     # of loop continuation; if this condition is false,
     # we are ready to exit the loop and record Loop operation
