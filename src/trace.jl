@@ -1,5 +1,6 @@
 import IRTools
 import IRTools: IR, @dynamo, self, insertafter!
+import UUIDs: UUID, uuid1
 
 
 function module_functions(modl)
@@ -74,8 +75,8 @@ const TRACING_OPTIONS = Ref(Dict())
 
 Turn on/off loop tracing. Without parameters, resets the flag to the default value
 """
-should_trace_loops!(val::Bool=true) = (TRACING_OPTIONS[][:trace_loops] = val)
-should_trace_loops() = get(TRACING_OPTIONS[], :trace_loops, true)
+should_trace_loops!(val::Bool=false) = (TRACING_OPTIONS[][:trace_loops] = val)
+should_trace_loops() = get(TRACING_OPTIONS[], :trace_loops, false)
 
 
 """
@@ -171,6 +172,8 @@ end
 
 """Set return variable for the current frame"""
 function set_return!(t::IRTracer, arg_sid_ref)
+    @assert(arg_sid_ref[] !== nothing,
+    "Cannot set return value to nothing. Does this function actually return a value?")
     tape_var = get_tape_vars(t, [arg_sid_ref[]])[1]
     t.frames[end].result = tape_var
 end
@@ -212,7 +215,7 @@ Get SSA IDs of arguments which are not part of this block
 function block_outsider_ir_ids(block::IRTools.Block)
     result = []
     min_id = minimum(block_input_ir_ids(block))
-    for (v, stmt) in block
+    for (_, stmt) in block
         ex = stmt.expr
         @assert Meta.isexpr(ex, :call)
         for arg in ex.args[2:end]
@@ -270,8 +273,8 @@ const LOOP_COND_ID = "loop_cond_id"
 const LOOP_CONTINUE_TAPE_IDS = "loop_continue_tape_ids"
 
 
-is_loop_traced(t::IRTracer, loop_id::Int) = haskey(t.tape.meta, "loop_already_traced_$loop_id")
-loop_traced!(t::IRTracer, loop_id::Int) = (t.tape.meta["loop_already_traced_$loop_id"] = true)
+is_loop_traced(t::IRTracer, loop_id::UUID) = haskey(t.tape.meta, "loop_already_traced_$loop_id")
+loop_traced!(t::IRTracer, loop_id::UUID) = (t.tape.meta["loop_already_traced_$loop_id"] = true)
 
 
 """
@@ -386,6 +389,7 @@ function exit_loop!(t::IRTracer,
         exit_val = subtape[exit_var].val
         subtape.result = exit_var
         # record the loop operation
+        global STATE = (t, input_ir_ids, exit_target_ir_ids)
         parent_input_vars = [parent_ir2tape[ir_id] for ir_id in input_ir_ids]
         cond_var = subtape.meta[LOOP_COND_ID]
         continue_vars = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
@@ -514,7 +518,7 @@ end
 function trace_loops!(ir::IR)
     for block in IRTools.blocks(ir)
         if is_loop(block)
-            loop_id = block.id   # unique ID of this loop
+            loop_id = uuid1()   # unique ID of this loop
             start_block, end_block = loop_start_end_blocks(ir, block)
             # loop start - the first block of the loop
             loop_input_ir_ids = vcat(

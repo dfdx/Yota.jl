@@ -114,6 +114,14 @@ function loop4(x, n, m)
 end
 
 
+function loop5(a, n)
+    for i=1:3
+        a = loop1(a, n)
+    end
+    return a
+end
+
+
 @testset "trace: loops" begin
     should_trace_loops!(false)
 
@@ -140,6 +148,13 @@ end
 
     _, tape = trace(loop4, 1.0, 2, 3)
     @test play!(tape, loop4, 2.0, 3, 4) == loop4(2.0, 3, 4)
+    loop_idx = findfirst(op -> op isa Loop, tape.ops)
+    @test loop_idx !== nothing
+    subtape = tape[V(loop_idx)].subtape
+    @test findfirst(op -> op isa Loop, subtape.ops) !== nothing
+
+    _, tape = trace(loop5, 1.0, 3)
+    @test play!(tape, loop5, 2.0, 4) == loop5(2.0, 4)
     loop_idx = findfirst(op -> op isa Loop, tape.ops)
     @test loop_idx !== nothing
     subtape = tape[V(loop_idx)].subtape
