@@ -18,8 +18,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 CUDA = "3"
-ChainRules = "0.7.65"
-ChainRulesCore = "0.9"
+ChainRules = "0.8"
+ChainRulesCore = "0.10"
 FiniteDifferences = "0.12"
 IRTools = "0.4"
 OrderedCollections = "1.4"
