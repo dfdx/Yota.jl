@@ -415,6 +415,8 @@ function exec!(tape::Tape, op::Loop)
         # sleep(1)
         exec!(subtape, subtape[V(vi)])
         if vi == cond_var.id && subtape[V(vi)].val == false
+            # TODO: update exit tuple here, not at the end
+            #       follow the same logic we use in compilation
             break
         end
         vi += 1

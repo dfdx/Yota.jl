@@ -389,7 +389,7 @@ function exit_loop!(t::IRTracer,
         exit_val = subtape[exit_var].val
         subtape.result = exit_var
         # record the loop operation
-        global STATE = (t, input_ir_ids, exit_target_ir_ids)
+        # global STATE = (t, input_ir_ids, exit_target_ir_ids)
         parent_input_vars = [parent_ir2tape[ir_id] for ir_id in input_ir_ids]
         cond_var = subtape.meta[LOOP_COND_ID]
         continue_vars = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
