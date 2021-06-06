@@ -52,7 +52,12 @@ function to_expr(op::Loop, prefix="")
     body = loop_ex.args[2]
     for (id, subop) in enumerate(op.subtape)
         if !isa(subop, Input)
-            push!(body.args, to_expr(subop, loop_prefix))
+            subex = to_expr(subop, loop_prefix)
+            if subex isa Vector
+                push!(body.args, subex...)
+            else
+                push!(body.args, subex)
+            end
             if subop.id == op.cond_var.id
                 exit_expr = :(if !$(make_name(op.cond_var.id, loop_prefix)) end)
                 exit_body = exit_expr.args[2]
@@ -64,10 +69,10 @@ function to_expr(op::Loop, prefix="")
                     if id > op.continue_vars[idx].id
                         # if condition is checked after this continue var is changed,
                         # use continue var
-                        push!(vars, op.continue_vars[i])
+                        push!(vars, op.continue_vars[idx])
                     else
                         # otherwise use input var
-                        push!(vars, inputs(op)[i])
+                        push!(vars, inputs(op.subtape)[idx])
                     end
                 end
                 names = [make_name(v.id, loop_prefix) for v in vars]

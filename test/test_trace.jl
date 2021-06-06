@@ -129,25 +129,31 @@ end
     @test findfirst(op -> op isa Loop, tape.ops) === nothing
     # same number of iteration
     @test play!(tape, loop1, 2.0, 3) == loop1(2.0, 3)
+    @test compile(tape)(loop1, 2.0, 3) == loop1(2.0, 3)
     # different number of iteration - with loop tracing off, should be incorrect
     @test play!(tape, loop1, 2.0, 4) != loop1(2.0, 4)
+    @test compile(tape)(loop1, 2.0, 4) != loop1(2.0, 4)
 
     should_trace_loops!(true)
 
     _, tape = trace(loop1, 1.0, 3)
     @test play!(tape, loop1, 2.0, 4) == loop1(2.0, 4)
+    @test compile(tape)(loop1, 2.0, 4) == loop1(2.0, 4)
     @test findfirst(op -> op isa Loop, tape.ops) !== nothing
 
     _, tape = trace(loop2, 1.0, 3)
     @test play!(tape, loop2, 2.0, 4) == loop2(2.0, 4)
+    @test compile(tape)(loop2, 2.0, 4) == loop2(2.0, 4)
     @test findfirst(op -> op isa Loop, tape.ops) !== nothing
 
     _, tape = trace(loop3, 1.0, 3)
     @test play!(tape, loop3, 2.0, 4) == loop3(2.0, 4)
+    @test compile(tape)(loop3, 2.0, 4) == loop3(2.0, 4)
     @test findfirst(op -> op isa Loop, tape.ops) !== nothing
 
     _, tape = trace(loop4, 1.0, 2, 3)
     @test play!(tape, loop4, 2.0, 3, 4) == loop4(2.0, 3, 4)
+    @test compile(tape)(loop4, 2.0, 3, 4) == loop4(2.0, 3, 4)
     loop_idx = findfirst(op -> op isa Loop, tape.ops)
     @test loop_idx !== nothing
     subtape = tape[V(loop_idx)].subtape
@@ -155,6 +161,7 @@ end
 
     _, tape = trace(loop5, 1.0, 3)
     @test play!(tape, loop5, 2.0, 4) == loop5(2.0, 4)
+    @test compile(tape)(loop5, 2.0, 4) == loop5(2.0, 4)
     loop_idx = findfirst(op -> op isa Loop, tape.ops)
     @test loop_idx !== nothing
     subtape = tape[V(loop_idx)].subtape
