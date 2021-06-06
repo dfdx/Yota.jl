@@ -23,7 +23,7 @@ if loop has zero iterations
 """
 function exit_to_init_var_names(op::Loop, init_var_names::Vector)
     exit_args = op.exit_var._op.args
-    init_idxs = findall(v -> v in exit_args, op.continue_vars)
+    init_idxs = findall(v -> v in exit_args, op.cont_vars)
     return init_var_names[init_idxs]
 end
 
@@ -58,18 +58,18 @@ function to_expr(op::Loop, prefix="")
             else
                 push!(body.args, subex)
             end
-            if subop.id == op.cond_var.id
-                exit_expr = :(if !$(make_name(op.cond_var.id, loop_prefix)) end)
+            if subop.id == op.condition.id
+                exit_expr = :(if !$(make_name(op.condition.id, loop_prefix)) end)
                 exit_body = exit_expr.args[2]
                 # update exit tuple
                 exit_args = op.exit_var._op.args
-                exit_idxs = findall(v -> v in exit_args, op.continue_vars)
+                exit_idxs = findall(v -> v in exit_args, op.cont_vars)
                 vars = Variable[]
                 for idx in exit_idxs
-                    if id > op.continue_vars[idx].id
+                    if id > op.cont_vars[idx].id
                         # if condition is checked after this continue var is changed,
                         # use continue var
-                        push!(vars, op.continue_vars[idx])
+                        push!(vars, op.cont_vars[idx])
                     else
                         # otherwise use input var
                         push!(vars, inputs(op.subtape)[idx])
@@ -83,7 +83,7 @@ function to_expr(op::Loop, prefix="")
         end
     end
     # map continue vars to inputs
-    for (inp, cont) in zip(inputs(op.subtape), op.continue_vars)
+    for (inp, cont) in zip(inputs(op.subtape), op.cont_vars)
         ex = Expr(:(=), make_name(inp.id, loop_prefix), make_name(cont.id, loop_prefix))
         push!(body.args, ex)
     end

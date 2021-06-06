@@ -391,10 +391,10 @@ function exit_loop!(t::IRTracer,
         # record the loop operation
         # global STATE = (t, input_ir_ids, exit_target_ir_ids)
         parent_input_vars = [parent_ir2tape[ir_id] for ir_id in input_ir_ids]
-        cond_var = subtape.meta[LOOP_COND_ID]
-        continue_vars = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
+        condition = subtape.meta[LOOP_COND_ID]
+        cont_vars = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
         loop_id = push!(t.tape, Loop(0, parent_input_vars,
-                          cond_var, continue_vars,
+                          condition, cont_vars,
                           exit_var, subtape, exit_val))
         # destructure loop return values to separate vars on the main tape
         # and map branch arguments to these vars

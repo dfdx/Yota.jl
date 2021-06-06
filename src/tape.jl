@@ -311,9 +311,9 @@ end
 mutable struct Loop <: AbstractOp
     id::Int
     parent_inputs::Vector{Variable}
-    cond_var::Variable
-    continue_vars::Vector{Variable}
-    exit_var::Variable
+    condition::Variable
+    cont_vars::Vector{Variable}
+    exit_vars::Vector{Variable}
     subtape::Tape
     val::Any
 end
@@ -404,7 +404,7 @@ function exec!(tape::Tape, op::Loop)
     # run the loop strictly while continue condition is true
     # note that subtape execution may finish before the full
     # iteration is done
-    cond_var = op.cond_var
+    cond_var = op.condition
     vi0 = length(op.parent_inputs) + 1
     vi = vi0
     while true
@@ -422,7 +422,7 @@ function exec!(tape::Tape, op::Loop)
         vi += 1
         if vi > length(subtape)
             vi = vi0
-            inputs!(subtape, [subtape[v].val for v in op.continue_vars]...)
+            inputs!(subtape, [subtape[v].val for v in op.cont_vars]...)
         end
     end
     # exit_var is special - it's a tuple combining all the exit variables
