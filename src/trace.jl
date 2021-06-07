@@ -383,11 +383,10 @@ function exit_loop!(t::IRTracer,
         subtape.ops = subtape.ops[1:first_loop_end-1]
         # record output tuple
         exit_tape_vars = subtape.meta[LOOP_EXIT_TAPE_IDS]
-        # exit_val = tuple([subtape[id].val for id in exit_tape_vars]...)
-        # exit_var = push!(subtape, Call, exit_val, tuple, exit_tape_ids)
-        exit_var = push!(subtape, mkcall(tuple, exit_tape_vars...))
-        exit_val = subtape[exit_var].val
-        subtape.result = exit_var
+        exit_val = tuple([subtape[id].val for id in exit_tape_vars]...)
+        # exit_var = push!(subtape, mkcall(tuple, exit_tape_vars...))
+        # exit_val = subtape[exit_var].val
+        subtape.result = bound(t.tape, V(length(t.tape)))   # dummy, not used in practice
         # record the loop operation
         # global STATE = (t, input_ir_ids, exit_target_ir_ids)
         parent_input_vars = [parent_ir2tape[ir_id] for ir_id in input_ir_ids]
@@ -395,7 +394,7 @@ function exit_loop!(t::IRTracer,
         cont_vars = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
         loop_id = push!(t.tape, Loop(0, parent_input_vars,
                           condition, cont_vars,
-                          exit_var, subtape, exit_val))
+                          exit_tape_vars, subtape, exit_val))
         # destructure loop return values to separate vars on the main tape
         # and map branch arguments to these vars
         for i=1:length(exit_val)

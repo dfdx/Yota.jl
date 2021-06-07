@@ -17,18 +17,14 @@ end
 to_expr(op::Constant, prefix="") = :($(make_name(op.id, prefix)) = $(op.val))
 
 
-"""
-Returns tuples of init variable names which will be used in the exit var
-if loop has zero iterations
-"""
-function exit_to_init_var_names(op::Loop, init_var_names::Vector)
-    exit_args = op.exit_var._op.args
-    init_idxs = findall(v -> v in exit_args, op.cont_vars)
-    return init_var_names[init_idxs]
+function loop_exit_tuple_expr_at_point(op::Loop, id::Int, prefix::String, loop_prefix::String)
+    exit_name = make_name(op.id, prefix)
+    arg_vars = loop_exit_vars_at_point(op, id)
+    arg_names = [make_name(v.id, loop_prefix) for v in arg_vars]
+    return Expr(:(=), exit_name, Expr(:call, tuple, arg_names...))
 end
 
 
-# somewhere inside this mess there's a beautiful version of this code
 function to_expr(op::Loop, prefix="")
     loop_prefix = "l$(next_unique_id())"
     exprs = []
@@ -41,13 +37,8 @@ function to_expr(op::Loop, prefix="")
         push!(exprs, ex)
     end
     # add exit tuple which will be used in case of zero trip count
-    exit_name = make_name(op.exit_var.id, loop_prefix)
-    init_exit_ex = Expr(
-        :(=),
-        exit_name,
-        Expr(:call, tuple, exit_to_init_var_names(op, init_var_names)...)
-    )
-    push!(exprs, init_exit_ex)
+    init_exit_tuple_ex = loop_exit_tuple_expr_at_point(op, 0, prefix, loop_prefix)
+    push!(exprs, init_exit_tuple_ex)
     loop_ex = :(while true end)
     body = loop_ex.args[2]
     for (id, subop) in enumerate(op.subtape)
@@ -58,25 +49,12 @@ function to_expr(op::Loop, prefix="")
             else
                 push!(body.args, subex)
             end
-            if subop.id == op.condition.id
+            if id == op.condition.id
                 exit_expr = :(if !$(make_name(op.condition.id, loop_prefix)) end)
                 exit_body = exit_expr.args[2]
                 # update exit tuple
-                exit_args = op.exit_var._op.args
-                exit_idxs = findall(v -> v in exit_args, op.cont_vars)
-                vars = Variable[]
-                for idx in exit_idxs
-                    if id > op.cont_vars[idx].id
-                        # if condition is checked after this continue var is changed,
-                        # use continue var
-                        push!(vars, op.cont_vars[idx])
-                    else
-                        # otherwise use input var
-                        push!(vars, inputs(op.subtape)[idx])
-                    end
-                end
-                names = [make_name(v.id, loop_prefix) for v in vars]
-                push!(exit_body.args, Expr(:(=), exit_name, Expr(:call, tuple, names...)))
+                exit_tuple_ex = loop_exit_tuple_expr_at_point(op, id, prefix, loop_prefix)
+                push!(exit_body.args, exit_tuple_ex)
                 push!(exit_body.args, Expr(:break))
                 push!(body.args, exit_expr)
             end
@@ -88,8 +66,6 @@ function to_expr(op::Loop, prefix="")
         push!(body.args, ex)
     end
     push!(exprs, loop_ex)
-    # destructure loop vars - map to parent inputs
-    push!(exprs, Expr(:(=), make_name(op.id, prefix), exit_name))
 end
 
 
@@ -117,20 +93,3 @@ end
 
 
 compile(tape::Tape) = Base.eval(@__MODULE__, to_expr(tape))
-
-
-###############################
-
-
-function loop_example()
-    x1 = 1
-    x2 = 2*x1
-    l9x1 = x2
-    l9x2 = x1
-    while true
-
-
-
-    end
-
-end
