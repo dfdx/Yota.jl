@@ -1,5 +1,6 @@
 import IRTools
 import IRTools: IR, @dynamo, self, insertafter!
+import UUIDs: UUID, uuid1
 
 
 function module_functions(modl)
@@ -64,6 +65,34 @@ end
 
 
 ################################################################################
+#                              Tracer Options                                  #
+################################################################################
+
+const TRACING_OPTIONS = Ref(Dict())
+
+"""
+    should_trace_loops!(val=false)
+
+Turn on/off loop tracing. Without parameters, resets the flag to the default value
+"""
+should_trace_loops!(val::Bool=false) = (TRACING_OPTIONS[][:trace_loops] = val)
+should_trace_loops() = get(TRACING_OPTIONS[], :trace_loops, false)
+
+
+"""
+Tracer options. Configured globally via the following methods:
+
+- should_trace_loops!()
+"""
+struct TracerOptions
+    trace_loops::Bool
+end
+
+
+TracerOptions() = TracerOptions(should_trace_loops())
+
+
+################################################################################
 #                        IRTracer (defs and utils)                             #
 ################################################################################
 
@@ -71,11 +100,12 @@ mutable struct IRTracer
     is_primitive::Function
     tape::Tape
     frames::Vector{Frame}
+    options::TracerOptions
 end
 
 function IRTracer(; ctx=Dict(), is_primitive=is_chainrules_primitive)
     tape = Tape(ctx)
-    return IRTracer(is_primitive, tape, [])
+    return IRTracer(is_primitive, tape, [], TracerOptions())
 end
 
 Base.show(io::IO, t::IRTracer) = print(io, "IRTracer($(length(t.tape)))")
@@ -142,9 +172,238 @@ end
 
 """Set return variable for the current frame"""
 function set_return!(t::IRTracer, arg_sid_ref)
+    @assert(arg_sid_ref[] !== nothing,
+    "Cannot set return value to nothing. Does this function actually return a value?")
     tape_var = get_tape_vars(t, [arg_sid_ref[]])[1]
     t.frames[end].result = tape_var
 end
+
+
+################################################################################
+#                                  Loop utils                                  #
+################################################################################
+
+
+function is_loop(block::IRTools.Block)
+    for br in IRTools.branches(block)
+        # if a branch refers to an earlier block and is not return
+        # then it must be a loop
+        if br.block <= block.id && br.block != 0
+            return true
+        end
+    end
+    return false
+end
+
+
+"""Get SSA IDs of a block's inputs"""
+function block_input_ir_ids(block::IRTools.Block)
+    result = []
+    for (stmt_id, (block_id, arg_id)) in enumerate(block.ir.defs)
+        if block_id == block.id && arg_id < 0
+            push!(result, stmt_id)
+        end
+    end
+    return result
+end
+
+
+"""
+Get SSA IDs of arguments which are not part of this block
+(e.g. come from outside of a loop)
+"""
+function block_outsider_ir_ids(block::IRTools.Block)
+    result = []
+    min_id = minimum(block_input_ir_ids(block))
+    for (_, stmt) in block
+        ex = stmt.expr
+        @assert Meta.isexpr(ex, :call)
+        for arg in ex.args[2:end]
+            if arg isa IRTools.Variable && arg.id < min_id
+                push!(result, arg.id)
+            end
+        end
+    end
+    return result
+end
+
+
+function loop_exit_branch(block::IRTools.Block)
+    branches = IRTools.branches(block)
+    target_branch_id = findfirst([br.block > block.id for br in branches])
+    return target_branch_id !== nothing ? branches[target_branch_id] : nothing
+end
+
+
+function loop_continue_branch(block::IRTools.Block)
+    branches = IRTools.branches(block)
+    target_branch_id = findfirst([br.block <= block.id for br in branches])
+    return return target_branch_id !== nothing ? branches[target_branch_id] : nothing
+end
+
+
+function loop_condition_ir_id(block::IRTools.Block)
+    br = loop_exit_branch(block)
+    return br !== nothing ? br.condition.id : nothing
+end
+
+
+"""Get SSA IDs of exit arguments of a loop block"""
+function loop_exit_ir_ids(block::IRTools.Block)
+    br = loop_exit_branch(block)
+    return br !== nothing ? [arg.id for arg in br.args] : nothing
+end
+
+
+function loop_continue_ir_ids(block::IRTools.Block)
+    br = loop_continue_branch(block)
+    return br !== nothing ? [arg.id for arg in br.args] : nothing
+end
+
+
+"""Pseudo op to designate loop end. Removed after Loop op is created"""
+mutable struct _LoopEnd <: AbstractOp
+    id::Int
+end
+_LoopEnd() = _LoopEnd(0)
+
+
+const LOOP_EXIT_TAPE_IDS = "loop_exit_tape_ids"
+const LOOP_COND_ID = "loop_cond_id"
+const LOOP_CONTINUE_TAPE_IDS = "loop_continue_tape_ids"
+
+
+is_loop_traced(t::IRTracer, loop_id::UUID) = haskey(t.tape.meta, "loop_already_traced_$loop_id")
+loop_traced!(t::IRTracer, loop_id::UUID) = (t.tape.meta["loop_already_traced_$loop_id"] = true)
+
+
+"""
+Trigger loop start operations.
+
+Arguments:
+----------
+
+ * t :: IRTracer
+    Current tracer
+ * loop_id :: Int
+    Unique ID of a loop being entered
+ * loop_input_ir_ids :: Vector{Int}
+    IR IDs of variables which will be used as loop inputs. Includes
+    loop block inputs and any outside IDs
+
+This function is added to the very beginning of the loop block(s).
+During the first iteration we initialize a subtape which will be used
+later to create the Loop operation on the parent tape. Since all iterations
+of the loop produce identical operations, we only need to trace it once.
+However, it turns out to be easier to record all iterations (seprated by
+a special _LoopEnd op) and then prune unused iterations.
+
+Another important detail is that Loop's subtape is a completely valid
+and independent tape with its own call frame and inputs which include
+all explicit and implicit inputs to the loop's block in the original IR.
+"""
+function enter_loop!(t::IRTracer, loop_id, loop_input_ir_ids::Vector)
+    t.options.trace_loops || return
+    # skip if it's not the first iteration
+    is_loop_traced(t, loop_id) && return
+    # create subtape, with the current tape as parent
+    C = typeof(t.tape.c)
+    subtape = Tape(C())
+    subtape.parent = t.tape
+    # create a new frame and push to the list
+    frame = Frame(Dict(), V(0), ())
+    push!(t.frames, frame)
+    # record inputs to the subtape & populate the new frame's ir2tape
+    for ir_id in loop_input_ir_ids
+        parent_tape_var = t.frames[end - 1].ir2tape[ir_id]
+        val = subtape.parent[parent_tape_var].val
+        tape_var = push!(subtape, Input(val))
+        t.frames[end].ir2tape[ir_id] = tape_var
+    end
+    # replace IRTracer.tape with subtape
+    t.tape = subtape
+end
+
+
+"""
+Set flags designating the end of the first run of the loop.
+"""
+function stop_loop_tracing!(t::IRTracer,
+                            loop_id::Any,
+                            input_ir_ids::Vector,
+                            cond_ir_id::Any,
+                            cont_ir_ids::Vector,
+                            exit_ir_ids::Vector,
+                            exit_target_ir_ids::Vector)
+    t.options.trace_loops || return
+    if !is_loop_traced(t, loop_id)
+        # record exit tape IDs as of first iteration
+        # we will use them later
+        t.tape.meta[LOOP_EXIT_TAPE_IDS] =
+            [t.frames[end].ir2tape[ir_id] for ir_id in exit_ir_ids]
+        t.tape.meta[LOOP_COND_ID] = t.frames[end].ir2tape[cond_ir_id]
+        t.tape.meta[LOOP_CONTINUE_TAPE_IDS] =
+            [t.frames[end].ir2tape[ir_id] for ir_id in cont_ir_ids]
+        # set flag to stop creatnig new subtapes
+        loop_traced!(t, loop_id)
+    end
+    # record a special op to designate the end of the loop code
+    # tracer will continue to record ops, but later we truncate
+    # the tape to get only ops before _LoopEnd
+    push!(t.tape, _LoopEnd())
+end
+
+
+"""
+Trigget loop end operations.
+
+This function is added just before the end of the loop block.
+Since we record all iterations of the loop, we must remember tape IDs
+of continuation condition and exit variables during the first run.
+"""
+function exit_loop!(t::IRTracer,
+                    input_ir_ids::Vector,
+                    cond_ir_id::Any,
+                    cont_ir_ids::Vector,
+                    exit_ir_ids::Vector,
+                    exit_target_ir_ids::Vector)
+    t.options.trace_loops || return
+    # loop subtape already contains a variable designating condition
+    # of loop continuation; if this condition is false,
+    # we are ready to exit the loop and record Loop operation
+    cond_op = t.tape[t.frames[end].ir2tape[cond_ir_id]]
+    if !cond_op.val
+        # swap active tape back
+        pop!(t.frames)
+        parent_ir2tape = t.frames[end].ir2tape
+        subtape = t.tape
+        t.tape = t.tape.parent
+        # remove repeating blocks
+        first_loop_end = findfirst(op -> isa(op, _LoopEnd), subtape.ops)
+        subtape.ops = subtape.ops[1:first_loop_end-1]
+        # record output tuple
+        exit_tape_vars = subtape.meta[LOOP_EXIT_TAPE_IDS]
+        exit_val = tuple([subtape[id].val for id in exit_tape_vars]...)
+        # exit_var = push!(subtape, mkcall(tuple, exit_tape_vars...))
+        # exit_val = subtape[exit_var].val
+        subtape.result = bound(t.tape, V(length(t.tape)))   # dummy, not used in practice
+        # record the loop operation
+        # global STATE = (t, input_ir_ids, exit_target_ir_ids)
+        parent_input_vars = [parent_ir2tape[ir_id] for ir_id in input_ir_ids]
+        condition = subtape.meta[LOOP_COND_ID]
+        cont_vars = subtape.meta[LOOP_CONTINUE_TAPE_IDS]
+        loop_id = push!(t.tape, Loop(0, parent_input_vars,
+                          condition, cont_vars,
+                          exit_tape_vars, subtape, exit_val))
+        # destructure loop return values to separate vars on the main tape
+        # and map branch arguments to these vars
+        for i=1:length(exit_val)
+            res_id = push!(t.tape, mkcall(getfield, loop_id, i))
+            parent_ir2tape[exit_target_ir_ids[i]] = res_id
+        end
+    end
+end
+
 
 
 ################################################################################
@@ -172,8 +431,6 @@ Params:
 """
 function record_or_recurse!(t::IRTracer, res_sid::Int, farg_irvars, fargs...)
     fn, args = fargs[1], fargs[2:end]
-    # global STATE = (t, res_sid, farg_irvars, fargs)
-    # fn == Core.kwfunc(sum) && error()
     if t.is_primitive(Tuple{map(typeof, fargs)...})
         tape_vars = get_tape_vars(t, farg_irvars)
         # record corresponding op to the tape
@@ -199,6 +456,28 @@ function record_const!(t::IRTracer, res_sid, val)
 end
 
 
+"""
+Get SSA IDs of the branch target parameters.
+For example, given code like this:
+
+
+  2: (%9, %10, %11)
+    ...
+    br 3 (%14, %15) unless %18
+    br 2 (%16, %14, %15)
+  3: (%19, %20)
+    ...
+
+This function will return:
+
+  branch_target_params(ir, <br 3>) ==> [19, 20]
+
+"""
+function branch_target_params(ir:: IR, branch::IRTools.Branch)
+    return [v.id for v in ir.blocks[branch.block].args]
+end
+
+
 function trace_branches!(ir::IR)
     # if a block ends with a branch, we map its parameters to tape IDs
     # which currently correspond to argument SSA IDs
@@ -217,10 +496,61 @@ function trace_branches!(ir::IR)
 end
 
 
+function loop_start_end_blocks(ir::IR, block::IRTools.Block)
+    start_block = IRTools.block(ir, loop_continue_branch(block).block)
+    exit_branch = loop_exit_branch(block)
+    # check if this block contains the exit branch
+    if exit_branch !== nothing && exit_branch.block > block.id
+        end_block = block
+    else
+        exit_branch = loop_exit_branch(start_block)
+        if exit_branch !== nothing && exit_branch.block > block.id
+            end_block = start_block
+        else
+            error("Cannot find end block of a loop")
+        end
+    end
+    return start_block, end_block
+end
+
+
+function trace_loops!(ir::IR)
+    for block in IRTools.blocks(ir)
+        if is_loop(block)
+            loop_id = uuid1()   # unique ID of this loop
+            start_block, end_block = loop_start_end_blocks(ir, block)
+            # loop start - the first block of the loop
+            loop_input_ir_ids = vcat(
+                block_input_ir_ids(start_block),
+                block_outsider_ir_ids(start_block),
+            )
+            pushfirst!(start_block, Expr(:call, enter_loop!, self, loop_id, loop_input_ir_ids))
+            # loop tracing border - at this point all operations of the loop
+            # have been executed at least once, even if continuation condition
+            # is in another block
+            push!(block, Expr(:call, stop_loop_tracing!, self,
+                              loop_id,
+                              loop_input_ir_ids,
+                              loop_condition_ir_id(end_block),
+                              loop_continue_ir_ids(block),
+                              loop_exit_ir_ids(end_block),
+                              branch_target_params(ir, loop_exit_branch(end_block))))
+            # loop end - continuation condition is checked here
+            push!(end_block, Expr(:call, exit_loop!, self,
+                              loop_input_ir_ids,
+                              loop_condition_ir_id(end_block),
+                              loop_continue_ir_ids(block),
+                              loop_exit_ir_ids(end_block),
+                              branch_target_params(ir, loop_exit_branch(end_block))))
+        end
+    end
+end
+
+
 @dynamo function (t::IRTracer)(fargs...)
     ir = IR(fargs...)
     ir === nothing && return   # intrinsic functions
-    # TODO (for loops): IRTools.expand!(ir)
+    IRTools.expand!(ir)
     rewrite_special_cases!(ir)
     for (v, st) in ir
         ex = st.expr
@@ -240,6 +570,7 @@ end
         end
     end
     trace_branches!(ir)
+    trace_loops!(ir)
     return ir
 end
 

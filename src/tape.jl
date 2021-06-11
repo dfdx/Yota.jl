@@ -173,15 +173,15 @@ mutable struct Tape{C}
     ops::Vector{<:AbstractOp}
     # result variable
     result::Variable
+    # for subtapes - parent tape
+    parent::Union{Tape,Nothing}
+    # tape metadata (depends on the context)
+    meta::Dict
     # application-specific context
-    c::C
-    # # derivs[var] == grad_var
-    # derivs::LittleDict{Variable, Variable}
-    # # pb_derivs[var] == pullback_var
-    # pullbacks::LittleDict{Variable, Variable}
+c::C
 end
 
-Tape(c::C) where C = Tape(AbstractOp[], Variable(0), c)
+Tape(c::C) where C = Tape(AbstractOp[], Variable(0), nothing, Dict(), c)
 # by default context is just a Dict{Any, Any}
 Tape() = Tape(Dict{Any,Any}())
 
@@ -205,9 +205,19 @@ end
 
 inputs(tape::Tape) = [V(op) for op in tape.ops if op isa Input]
 function inputs!(tape::Tape, vals...)
-    @assert length(tape) == 0 "Can only set inputs to an empty tape"
-    for val in vals
-        push!(tape, Input(val))
+    @assert(isempty(tape) || length(inputs(tape)) == length(vals),
+            "This tape contains $(length(inputs(tape))) inputs, but " *
+            "$(length(vals)) value(s) were provided")
+    if isempty(tape)
+        # initialize inputs
+        for val in vals
+            push!(tape, Input(val))
+        end
+    else
+        # rewrite input values
+        for (i, val) in enumerate(vals)
+            tape[V(i)].val = val
+        end
     end
     return [V(op) for op in tape.ops[1:length(vals)]]
 end
@@ -292,6 +302,27 @@ function Base.replace!(tape::Tape, idx_ops::Pair{<:Integer,<:Union{Tuple,Vector}
 end
 
 
+########################################################################
+#                       SPECIAL OPERATIONS                             #
+########################################################################
+
+## Loop
+
+mutable struct Loop <: AbstractOp
+    id::Int
+    parent_inputs::Vector{Variable}
+    condition::Variable
+    cont_vars::Vector{Variable}
+    exit_vars::Vector{Variable}
+    subtape::Tape
+    val::Any
+end
+
+function Base.show(io::IO, loop::Loop)
+    input_str = join(map(string, loop.parent_inputs), ", ")
+    print(io, "%$(loop.id) = Loop($input_str)")
+end
+
 ###############################################################################
 #                                 REBIND                                      #
 ###############################################################################
@@ -334,9 +365,9 @@ function rebind!(tape::Tape, op::Call, st::Dict)
     return op
 end
 
+
 """
     rebind_context!(tape::Tape, st::Dict)
-
 Rebind variables in the tape's context according to substitution table.
 By default does nothing, but can be overwitten for specific Tape{C}
 """
@@ -364,6 +395,64 @@ function exec!(tape::Tape, op::Call)
     fn = op.fn isa V ? tape[op.fn].val : op.fn
     arg_vals = map_vars(v -> tape[v].val, op.args)
     op.val = fn(arg_vals...)
+end
+
+
+"""
+Collect variables which will be used at loop exit if it happens
+at this point on tape.
+"""
+function loop_exit_vars_at_point(op::Loop, id::Int)
+    input_vars = inputs(op.subtape)
+    exit_idxs = findall(v -> v in op.exit_vars, op.cont_vars)
+    vars = Vector{Variable}(undef, length(exit_idxs))
+    for (i, idx) in enumerate(exit_idxs)
+        if id > op.cont_vars[idx].id
+            # if condition is checked after this continue var is changed,
+            # use continue var
+            vars[i] = op.cont_vars[idx]
+        else
+            # otherwise use input var
+            vars[i] = input_vars[idx]
+        end
+    end
+    return vars
+end
+
+
+function exec!(tape::Tape, op::Loop)
+    subtape = op.subtape
+    # initialize inputs
+    inputs!(subtape, [tape[v].val for v in op.parent_inputs]...)
+    # run the loop strictly while continue condition is true
+    # note that subtape execution may finish before the full
+    # iteration is done
+    cond_var = op.condition
+    vi0 = length(op.parent_inputs) + 1
+    vi = vi0
+    while true
+        # @show vi
+        # @show subtape[V(1)].val
+        # @show subtape[V(2)].val
+        # @show subtape[V(7)].val
+        # sleep(1)
+        exec!(subtape, subtape[V(vi)])
+        if vi == cond_var.id && subtape[V(vi)].val == false
+            actual_exit_vars = loop_exit_vars_at_point(op, vi)
+            op.val = ([v._op.val for v in actual_exit_vars]...,)
+            break
+        end
+        vi += 1
+        if vi > length(subtape)
+            vi = vi0
+            inputs!(subtape, [subtape[v].val for v in op.cont_vars]...)
+        end
+    end
+    # # exit_var is special - it's a tuple combining all the exit variables
+    # # since it doesn't exist in the original code, it may be not executed
+    # # by loop logic at the last iteration; hence, we execute it manually
+    # exec!(subtape, subtape[op.exit_var])
+    # op.val = subtape[op.exit_var].val
 end
 
 

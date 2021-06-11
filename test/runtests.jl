@@ -1,6 +1,7 @@
 using Test
 using Yota
 using Yota: gradtape, gradcheck, update_chainrules_primitives!, compile
+using Yota: Loop, should_trace_loops, should_trace_loops!
 using CUDA
 import ChainRulesCore: Tangent, ZeroTangent
 

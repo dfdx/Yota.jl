@@ -6,3 +6,4 @@ _*
 Manifest.toml
 benchmark/*.json
 benchmark/Manifest.toml
+.vscode/
