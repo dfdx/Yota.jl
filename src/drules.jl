@@ -1,3 +1,6 @@
+import Ghost: FunctionResolver, __new__
+
+
 const DRULES = Ref(FunctionResolver{Function}())
 
 

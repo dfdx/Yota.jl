@@ -1,1 +1,0 @@
-This directory contains a subset of files from https://github.com/yuehhua/ScatterNNlib.jl , so all credits go to its author. We could simply import the library, but its dependence on Zygote makes it heavy and somewhat a moving target. Thus we incorporate part of its code as is, which is a quick and dirty solution.

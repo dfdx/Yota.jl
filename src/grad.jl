@@ -1,10 +1,14 @@
+function is_primitive(sig)
+    return (Ghost.is_primitive(sig) ||
+            is_yota_primitive(sig) ||
+            is_chainrules_primitive(sig))
+end
+
+
 ########################################################################
 #                            GRAD CONTEXT                              #
 ########################################################################
 
-# TODO: use it in tape instead of hardcoded fields
-# the issue is with rebind_fields!() which must know context details
-# perhaps introduce rebind_context!() wich is no-op by default?
 struct GradCtx
     # map from primal var to its pullback var
     # note: LittleDict is required because vars are mutable
@@ -200,7 +204,7 @@ end
 
 
 function gradtape(f::Union{Function,DataType}, args...)
-    _, tape = trace(f, args...; ctx=GradCtx())
+    _, tape = trace(f, args...; is_primitive=is_primitive, ctx=GradCtx())
     tape = gradtape!(tape)
     return tape
 end
