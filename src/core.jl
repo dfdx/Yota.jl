@@ -1,7 +1,6 @@
 import Statistics
 using OrderedCollections
 using ChainRules
-using CUDA
 using Ghost
 using Ghost: Tape, Variable, V, Call, mkcall, Constant, inputs
 using Ghost: bound, _getfield, compile, play!, isstruct, ungetfield, ungetindex, uncat
