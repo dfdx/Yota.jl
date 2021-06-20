@@ -1,5 +1,6 @@
 import Statistics
 using OrderedCollections
+using ChainRulesCore
 using ChainRules
 using Ghost
 using Ghost: Tape, Variable, V, Call, mkcall, Constant, inputs

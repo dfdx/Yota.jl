@@ -44,7 +44,7 @@ function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
     ys, pbs = unzip(rrule.(f, args...))
     function pullback(Δ)
         dxs = map((pb, Δ) -> pb(Δ), pbs, Δ)
-        return NO_FIELDS, unzip(dxs)...
+        return NoTangent(), unzip(dxs)...
     end
     return ys, pullback
 end
