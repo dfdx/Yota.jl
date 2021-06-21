@@ -4,6 +4,15 @@
 
 Reverse-mode automatic differentiation for static and dynamic graphs.
 
+## Migration to Yota v0.5
+
+If you have previously used Yota < v0.5, pay attention to the following changes:
+
+* `grad()` now returns `(value, (fn-grad, arg-grads...))`, where `fn-grad` is the gradient w.r.t. the function object fields (if any). Previous versions of Yota only returned gradients w.r.t. function arguments, which are now shifted by one. That is, must use `g[i + 1]` to refer to the gradient w.r.t. to the `ith` argument.
+* Struct gradients are now represented by [`ChainRulesCore.Tangent`](https://juliadiff.org/ChainRulesCore.jl/stable/api.html#ChainRulesCore.Tangent) type.
+* Function tracing has been reworked and moved to [Ghost.jl](https://github.com/dfdx/Ghost.jl).
+
+
 ## Usage
 
 ```julia
@@ -22,162 +31,33 @@ X = rand(4,5)
 val, g = grad(loss, m, X)
 ```
 
-`g` is an object of type `GradientResult` holding gradients w.r.t. input variables. For scalars
-and tensors it returns gradient value, for structs it returns dictionary of
-(field path → gradient) pairs:
+`g` is a tuple of gradients of the loss function w.r.t. to the function object itself and its 2 arguments.
 
-```julia
-julia> g[1]
-Dict{Tuple{Symbol},Array{Float64,2}} with 1 entry:
-  (:W,) => [3.38128 2.97142 2.39706 1.55525; 3.38128 2.97142 2.39706 1.55525; 3.38128 2.97142 2.39706 1.55525]   # gradient w.r.t. m.W
-
-julia> g[2]  # gradient w.r.t. X
-4×5 Array{Float64,2}:
- 0.910691  0.910691  0.910691  0.910691  0.910691
- 1.64994   1.64994   1.64994   1.64994   1.64994
- 1.81215   1.81215   1.81215   1.81215   1.81215
- 2.31594   2.31594   2.31594   2.31594   2.31594
-```
-
-`GradientResult` can be used in conjunction with `update!()` function to modify tensors and fields of (mutable) structs. To continue out previous example:
+These gradients can then be used in the `update!()` function to modify tensors and fields of (mutable) structs:
 
 ```julia
 for i=1:100
     val, g = grad(loss, m, X)
     println("Loss value in $(i)th epoch: $val")
-    update!(m, g[1], (x, gx) -> x .- 0.01gx)
+    update!(m, g[2], (x, gx) -> x .- 0.01gx)
 end
 ```
 
-(Note that our simplified loss function doesn't actually represent an error to be minimized, so loss value quickly goes below zero. For more realistic and much more complex examples see [vae.jl](https://github.com/dfdx/Yota.jl/blob/master/examples/vae.jl).)
 
-## Custom derivatives
+## ChainRules
 
-You can add custom derivatives using `@diffrule` macro (see list of allowed variable names below).
+The primary method for extending the set of supported derivatives is using [ChainRules.jl](https://github.com/JuliaDiff/ChainRules.jl).
 
-```julia
-logistic(x) = 1 / (1 + exp(-x))
-# for an expression like `y = logistic(x)` where x is a Number
-# gradient w.r.t. x
-# is `(logistic(x) * (1 - logistic(x)) * dy)` where "dy" stands for derivative "dL/dy"
-@diffrule logistic(x::Number) x (logistic(x) * (1 - logistic(x)) * dy)
-
-L(x) = sum(logistic.(x))
-val, g = grad(L, rand(5))
-```
-
-For functions accepting keyword arguments use `@diffrule_kw` instead:
-
-```julia
-import NNlib: conv, ∇conv_data, ∇conv_filter
-
-@diffrule_kw conv(x, w) x ∇conv_data(dy, w)
-@diffrule_kw conv(x, w) w ∇conv_filter(dy, x)
-```
-
-During reverse pass Yota will generate call to derivative function with the same keyword arguments that were
-passed to the original one. For example, if you have:
-
-```julia
-conv(A, W; pad=1)
-```
-
-corresponding derivative will be:
-
-```julia
-∇conv_data(dy, w; pad=1)
-```
-
-There's also `@nodiff(call_pattern, variable)` macro which stops Yota from backpropagating through that variable.
-
-### Allowed variable names
-
-To distinguish between variable names that can be matched to (a.k.a. placeholders) and fixed symbols (e.g. function names), `@diffrule` uses several rules:
-
-* `y` means return value of a primal expression, e.g. `y = f(x)`
-* `dy` means derivative of a loss function w.r.t. to `y`
-* `t`, `u`, `v`, `w`, `x`, as well as `i`, `j`, `k` (all listed in `Yota.DIFF_PHS`) are "placeholders" and can be used as names of variables, e.g. `@diffrule foo(u, v) u ∇foo(dy, u, v)`
-* anything starting with `_` is also considered a placeholder, e.g. `@diffrule bar(u, _state) _state ∇bar(dy, u, _state)`
-
-## Tracer and the Tape
-
-Being a reverse-mode AD package, Yota works in 2 steps:
-
-1. Record all primitive operations onto a "tape".
-2. Go back trough the tape, recording derivatives for each operation.
-
-"Tape" here is simply a list of operations. You can get the tape as a `.tape` field of `GradientResult` or construct it directly using `trace` function:
-
-```julia
-import Yota: trace
-
-val, tape = trace(L, rand(5))
-print(tape)
-
-# Tape
-#   inp %1::Array{Float64,1}
-#   const %2 = logistic::typeof(logistic)
-#   %3 = broadcast(%2, %1)::Array{Float64,1}
-#   %4 = sum(%3)::Float64
-```
-`trace` uses [IRTools.jl](https://github.com/FluxML/IRTools.jl) to collect function calls during execution. Functions are divided into 2 groups:
-
- * primitive, which are recorded to the tape;
- * non-primitive, which are traced-through down to primitive ones.
-
-By default, set of primitive functions is defined in `Yota.PRIMITIVES` and includes such beasts as `*`, `broadcast`, `getproperty` as well as all functions for which `@diffrule` is defined. You can also specify custom primitives using `primitive=Set([...])` keyword to `trace()`.
-
-Also note that `broadcast`'s first argument is always considered a primitive and recorded to the tape as is, so backpropagation will only work if there's a `@diffrule` for it.
-
-Tape can also be executed and compiled:
-
-```julia
-using BenchmarkTools
-import Yota: play!, compile!
-
-x = rand(5)
-
-@btime play!(tape, x)
-# 3.526 μs (13 allocations: 640 bytes)
-
-compile!(tape)
-@btime play!(tape, x)
-# 492.063 ns (2 allocations: 144 bytes)
-```
-
-## CUDA support
-
-`CuArray` is fully supported. If you encounter an issue with CUDA arrays which you don't have with ordinary arrays, please file a bug.
-
-## Static vs. dynamic (experimental)
-
-Tracer records operations as they are executed the first time with given arguments. For example, for a loop like this:
-
-```julia
-function iterative(x, n)
-    for i=1:n
-        x = 2 .* x
-    end
-    return sum(x)
-end
-```
-exactly `n` iterations will be recorded to the tape and replaying tape with any other values of `n` will make no effect. This also applies to a standard `grad()`:
-
-```julia
-x = rand(4)
-_, g = grad(iterative, x, 1)   # g[1] == [2.0, 2.0, 2.0, 2.0]
-_, g = grad(iterative, x, 2)   # g[1] == [2.0, 2.0, 2.0, 2.0]
-_, g = grad(iterative, x, 3)   # g[1] == [2.0, 2.0, 2.0, 2.0]
-```
-
-Nevertheless, Yota provides pseudo-dynamic capabilities by caching gradient results for all ever generated tapes. This doesn't eliminate cost of re-tracing, but avoids repeated backpropagation and tape optimization. You can tell `grad()` to use dynamic caching using `dynamic=true` keyword argument:
+Some functions are handled by Yota's own rules ("d-rules") instead, but at the moment this mechanism is purely internal and should not be used outside of the package.
 
 
-```julia
-x = rand(4)
-_, g = grad(iterative, x, 1; dynamic=true)   # g[1] == [2.0, 2.0, 2.0, 2.0]
-_, g = grad(iterative, x, 2; dynamic=true)   # g[1] == [4.0, 4.0, 4.0, 4.0]
-_, g = grad(iterative, x, 3; dynamic=true)   # g[1] == [8.0, 8.0, 8.0, 8.0]
-```
+## How it works
 
-Note that this feature is experimental and may be removed in future versions.
+Yota is built on top of the code tracer in [**Ghost.jl**](https://github.com/dfdx/Ghost.jl). Essentially, differentiation boils down to the following steps:
+
+1. Trace function execution using [`Ghost.trace()`](https://dfdx.github.io/Ghost.jl/dev/reference/#Ghost.trace) producing a computational graph as a [`Tape`](https://dfdx.github.io/Ghost.jl/dev/reference/#Ghost.Tape).
+2. Run `Yota.gradtape!()` to add derivative operations to that tape.
+3. Compile the tape back to a Julia function.
+
+One function useful for debugging is `Yota.gradtape(f, args...)` (without exclamation sign) which skips the compilation and instead returns the computed tape.
+
