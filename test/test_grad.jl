@@ -1,5 +1,5 @@
 import Statistics
-import ChainRules: rrule, NO_FIELDS
+import ChainRules: rrule, Tangent, ZeroTangent
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)
@@ -7,7 +7,7 @@ loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 
 
 function rrule(::typeof(Broadcast.broadcasted), ::typeof(sin), x)
-    sin_pullback(dy) = (NO_FIELDS, NO_FIELDS, cos.(x) .* dy)
+    sin_pullback(dy) = (ZeroTangent(), ZeroTangent(), cos.(x) .* dy)
     return sin.(x), sin_pullback
 end
 
