@@ -174,10 +174,7 @@ function add_points(x)
     return 2*l.p1.x + 5*l.p2.y
 end
 
-# TODO: make a better test for constructors, not related to find_field_source_var
-
 @testset "grad: structs/new" begin
-    # find_field_source_var
     _, tape = trace(add_points, rand())
 
     @test grad(add_points, rand())[2][2] == 7
@@ -195,6 +192,13 @@ end
 @testset "grad: tuple unpack" begin
     _, g = grad(make_t_loss, 3.0)
     @test g[2] == 2.0
+end
+
+
+@testset "grad: seed" begin
+    val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=ones(3))
+    @test val == [2.0, 4.0, 6.0]
+    @test g == (ZeroTangent(), [2.0, 2.0, 2.0])
 end
 
 
