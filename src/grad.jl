@@ -149,15 +149,18 @@ const BACKPROP_STATE = Ref{Tuple}()
 """
 Backpropagate through the tape, record derivatives as new operations.
 """
-function back!(tape::Tape)
+function back!(tape::Tape; seed=1)
     # z - final variable (usually a loss)
     # y - resulting variable of current op
     # x - dependencies of y
     # dy - derivative of z w.r.t. y
     z = tape.result
-    # using one() of type of the result for seed to keep type stability
-    @assert ndims(tape[z].val) == 0 "Function must return scalar!"
-    dy = push!(tape, Constant(one(tape[z].val)))
+    if (seed == 1) && (ndims(tape[z].val) > 0)
+        error("Gradient of a vector-valued function requires a seed")
+    end
+    dy = push!(tape, Constant(seed))
+    # save seed var to use in compilation later
+    tape.meta[:seed] = dy
     # set initial derivative value
     tape.c.derivs[z] = dy
     # queue of variables to calculate derivatives for
@@ -182,17 +185,17 @@ end
 
 
 """
-    gradtape(f::Union{Function, DataType}, args...)
-    gradtape!(tape::Tape)
+    gradtape(f::Union{Function, DataType}, args...; seed=1)
+    gradtape!(tape::Tape; seed=1)
 
 Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes.
 See grad() for more high-level API.
 """
-function gradtape!(tape::Tape)
+function gradtape!(tape::Tape; seed=1)
     # apply transformations needed for ChainRules
     chainrules_transform!(tape)
     # backpropagate gradients
-    back!(tape)
+    back!(tape; seed=seed)
     # add a tuple of (val, (gradients...))
     deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
@@ -203,10 +206,28 @@ function gradtape!(tape::Tape)
 end
 
 
-function gradtape(f::Union{Function,DataType}, args...)
+function gradtape(f::Union{Function,DataType}, args...; seed=1)
     _, tape = trace(f, args...; is_primitive=is_primitive, ctx=GradCtx())
-    tape = gradtape!(tape)
+    tape = gradtape!(tape; seed=seed)
     return tape
+end
+
+
+"Like Ghost.compile, but adds Yota specific ops"
+function grad_compile(tape::Tape)
+    ex = Ghost.to_expr(tape)
+    seed_var = tape.meta[:seed]
+    seed_default_val = tape[seed_var].val
+    insert!(ex.args[1].args, 2, Expr(:parameters, Expr(:kw, :seed, seed_default_val)))
+    seed_var_name = Ghost.make_name(seed_var.id)
+    op_exprs = ex.args[2].args
+    for op_ex in op_exprs
+        if op_ex.args[1] == seed_var_name
+            op_ex.args[2] = :seed
+            break
+        end
+    end
+    return Base.eval(@__MODULE__, ex)
 end
 
 
@@ -214,30 +235,44 @@ const GRAD_CACHE = Dict{Any,Any}()
 
 
 """
-    grad(f, args...)
+    grad(f, args...; seed=1)
 
-Find gradient of `f` w.r.t. its arguments.
-Example:
+Find gradient of a callable `f` w.r.t. its arguments.
 
-    val, g = grad(sum, rand(3))
+`grad()` returns two things: value of `f(args...)` and a tuple of
+grafients w.r.t. to its inputs (including the callable itself).
 
-where:
-  - val is the value of `f` at this point
-  - g is a tuple of gradients
+```jldoctest
+val, g = grad(x -> sum(x .+ 1), [1.0, 2.0, 3.0])
+
+# output
+(9.0, (ZeroTangent(), [1.0, 1.0, 1.0]))
+```
+
+By default, `grad()` expects the callable to return a scalar.
+Vector-valued functions can be differentiated if a seed (starting value)
+is provided. Seed is equivalent to the vector in VJP notation.
+
+```jldoctest
+val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=ones(3))
+
+# output
+([2.0, 4.0, 6.0], (ZeroTangent(), [2.0, 2.0, 2.0]))
+```
 
 All gradients can be applied to original variables using `update!()` function.
 
-See also: gradtape
+See also: [gradtape](@ref)
 """
-function grad(f::Union{Function,DataType}, args...)
+function grad(f::Union{Function,DataType}, args...; seed=1)
     # key consists of function type and type of argument (for structs) or its size
     cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
     if haskey(GRAD_CACHE, cache_key)
         gf = GRAD_CACHE[cache_key]
-        return gf(f, args...)
+        return gf(f, args...; seed=seed)
     else
-        tape = gradtape(f, args...)
-        gf = compile(tape)
+        tape = gradtape(f, args...; seed=seed)
+        gf = grad_compile(tape)
         GRAD_CACHE[cache_key] = gf
         return tape.retval
     end
