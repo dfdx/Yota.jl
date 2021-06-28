@@ -126,8 +126,9 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
         rr = tape[y].args[1]
         y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[3:end] : tape[rr].args
     else
-        error("Neither ChainRules pullback, nor native Yota " *
-              "derivative found for op $(tape[y])")
+        sig_str = join(["::$T" for T in Ghost.call_signature(tape, tape[y]).parameters], ", ")
+        error("No deriative rule found for op $(tape[y]), " *
+              "try defining it using ChainRules.rrule($sig_str) = ...")
     end
     for (i, x) in enumerate(y_fargs)
         if x isa V

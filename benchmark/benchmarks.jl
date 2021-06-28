@@ -24,20 +24,20 @@ end
 
 ################################### HELPERS ###################################
 
-SUITE["helpers"] = BenchmarkGroup()
+# SUITE["helpers"] = BenchmarkGroup()
 
-x = rand(4, 5)
-dx = zero(x)
-dy = ones(4, 3)
+# x = rand(4, 5)
+# dx = zero(x)
+# dy = ones(4, 3)
 
-SUITE["helpers"]["ungetindex!"] = @benchmarkable Yota.ungetindex!($dx, $x, $dy, :, $[1, 3, 1])
-SUITE["helpers"]["ungetindex"] = @benchmarkable Yota.ungetindex($x, $dy, :, $[1, 3, 1])
+# SUITE["helpers"]["ungetindex!"] = @benchmarkable Yota.ungetindex!($dx, $x, $dy, :, $[1, 3, 1])
+# SUITE["helpers"]["ungetindex"] = @benchmarkable Yota.ungetindex($x, $dy, :, $[1, 3, 1])
 
-if CUDA.functional()
-    x = rand(4, 5) |> cu
-    dx = zero(x) |> cu
-    dy = ones(4, 3) |> cu
+# if CUDA.functional()
+#     x = rand(4, 5) |> cu
+#     dx = zero(x) |> cu
+#     dy = ones(4, 3) |> cu
 
-    SUITE["helpers"]["cu:ungetindex!"] = @benchmarkable Yota.ungetindex!($dx, $x, $dy, :, $(cu([1, 3, 1])))
-    SUITE["helpers"]["cu:ungetindex"] = @benchmarkable Yota.ungetindex($x, $dy, :, $(cu([1, 3, 1])))
-end
+#     SUITE["helpers"]["cu:ungetindex!"] = @benchmarkable Yota.ungetindex!($dx, $x, $dy, :, $(cu([1, 3, 1])))
+#     SUITE["helpers"]["cu:ungetindex"] = @benchmarkable Yota.ungetindex($x, $dy, :, $(cu([1, 3, 1])))
+# end

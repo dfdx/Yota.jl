@@ -46,7 +46,8 @@ end
 
 ## ChainRules
 
-The primary method for extending the set of supported derivatives is using [ChainRules.jl](https://github.com/JuliaDiff/ChainRules.jl).
+The primary method for extending the set of supported derivatives is by adding methods to `rrule()` function from [ChainRules.jl](https://github.com/JuliaDiff/ChainRules.jl). Note that Yota reads the list of available `rrule`s during initialization, if you define new `rrules` _after_
+Yota is loaded, you need to explicitely call `Yota.update_chainrules_primitives!()`.
 
 Some functions are handled by Yota's own rules ("d-rules") instead, but at the moment this mechanism is purely internal and should not be used outside of the package.
 
