@@ -43,6 +43,13 @@ for i=1:100
 end
 ```
 
+Note that Yota caches gradients and may not see changes to functions
+if you redefine them (e.g. in REPL). To reset the cache, invoke:
+
+```julia
+Yota.reset!()
+```
+
 
 ## ChainRules
 

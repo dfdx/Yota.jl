@@ -92,15 +92,16 @@ end
 
 # some special broadcasting rules
 
-function ∇broadcasted(dy, ::typeof(Broadcast.broadcasted), f::typeof(+), args...)
-    return NoTangent(), NoTangent(), [dy for a in args]...
-end
-@drule Broadcast.broadcasted(f::typeof(+), args::Vararg) ∇broadcasted
+# are these rules just incorrect versions of the `∇broadcasted_special` below?
+# function ∇broadcasted(dy, ::typeof(Broadcast.broadcasted), f::typeof(+), args...)
+#     return NoTangent(), NoTangent(), [dy for a in args]...
+# end
+# @drule Broadcast.broadcasted(f::typeof(+), args::Vararg) ∇broadcasted
 
-function ∇broadcasted(dy, ::typeof(Broadcast.broadcasted), f::typeof(*), args...)
-    return NoTangent(), NoTangent(), [dy .* a for a in args]...
-end
-@drule Broadcast.broadcasted(f::typeof(*), args::Vararg) ∇broadcasted
+# function ∇broadcasted(dy, ::typeof(Broadcast.broadcasted), f::typeof(*), args...)
+#     return NoTangent(), NoTangent(), [dy .* a for a in args]...
+# end
+# @drule Broadcast.broadcasted(f::typeof(*), args::Vararg) ∇broadcasted
 
 # @diffrule getindex(u::AbstractArray, i)         u    ungetindex(u, dy, i)
 

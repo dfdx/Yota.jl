@@ -107,8 +107,6 @@ end
 Make a single step of backpropagation.
 """
 function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
-    # TODO: here's the problem with the constructor_loss test:
-    # we reach y = __new__(...) twice and update all its fields twice
     @debug "step_back!() for $(tape[y])"
     df = get_deriv_function(call_signature(tape, tape[y]))
     dy = tape.c.derivs[y]
@@ -233,6 +231,8 @@ end
 
 
 const GRAD_CACHE = Dict{Any,Any}()
+
+reset!() = empty!(GRAD_CACHE)
 
 
 """
