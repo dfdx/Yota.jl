@@ -126,7 +126,7 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
     else
         sig_str = join(["::$T" for T in Ghost.call_signature(tape, tape[y]).parameters], ", ")
         error("No deriative rule found for op $(tape[y]), " *
-              "try defining it using ChainRules.rrule($sig_str) = ...")
+              "try defining it using ChainRulesCore.rrule($sig_str) = ...")
     end
     for (i, x) in enumerate(y_fargs)
         if x isa V

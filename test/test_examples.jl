@@ -1,5 +1,40 @@
 using Statistics
 using Random
+import ChainRulesCore: rrule, NoTangent
+
+
+################################################################
+
+# TODO: migrate to a common broadcasting rrule
+
+# from Zygote:
+# https://github.com/FluxML/Zygote.jl/blob/d5be4d5ca80e79278d714eaac15ca71904a262e3/src/lib/array.jl#L177-L185
+struct StaticGetter{i} end
+(::StaticGetter{i})(v) where {i} = v[i]
+
+@generated function _unzip(tuples, ::Val{N}) where {N}
+  Expr(:tuple, (:(map($(StaticGetter{i}()), tuples)) for i ∈ 1:N)...)
+end
+
+function unzip(tuples)
+  N = length(first(tuples))
+  _unzip(tuples, Val(N))
+end
+
+
+function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
+    ys, pbs = unzip(rrule.(f, args...))
+    function pullback(Δ)
+        dxs = map((pb, Δ) -> pb(Δ), pbs, Δ)
+        return NoTangent(), unzip(dxs)...
+    end
+    return ys, pullback
+end
+
+Yota.update_chainrules_primitives!()
+
+################################################################
+
 
 
 obj(Y, X, b) = mean((Y .- X * b) .^ 2.0) # objective to minimize
