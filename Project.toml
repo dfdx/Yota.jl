@@ -1,7 +1,7 @@
 name = "Yota"
 uuid = "cd998857-8626-517d-b929-70ad188a48f0"
 authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
-version = "0.5.0"
+version = "0.6.0"
 
 [deps]
 ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
@@ -9,6 +9,7 @@ ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"
 Ghost = "4f8f7498-1303-42e1-920c-5033445536df"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -16,9 +17,9 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
-ChainRulesCore = "0.10"
 ChainRules = "0.8"
+ChainRulesCore = "0.10"
 FiniteDifferences = "0.12"
+Ghost = "0.2"
 OrderedCollections = "1.4"
-Ghost = "0.1"
 julia = "1.6"
