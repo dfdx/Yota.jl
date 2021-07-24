@@ -25,9 +25,7 @@ function update_chainrules_primitives!(;force=false)
             [sig => true for sig in function_signatures(rrule)];
             [sig => false for sig in function_signatures(no_rrule)]  # override rrule(sig...)
             ]
-        @warn "Updating chainrules"
         P = FunctionResolver{Bool}(sigs_flags)
-        delete!(P.signatures, Symbol(Any))
         CHAINRULES_PRIMITIVES[] = P
         NUM_CHAINRULES_METHODS[] = num_methods
     end

@@ -33,8 +33,8 @@ update_chainrules_primitives!()
 
 
 @testset "grad: no_rrule" begin
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Real}) == false
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), ComplexF64}) == true  # should hit ::Number
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float32}) == false    # should hit ::Real
     @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
 end
 
