@@ -11,6 +11,14 @@ function rrule(::typeof(Broadcast.broadcasted), ::typeof(sin), x)
     return sin.(x), sin_pullback
 end
 
+
+chain_foo(x::Number) = :ok
+
+rrule(::typeof(chain_foo), ::Number) = ZeroTangent(), dy -> ZeroTangent()
+rrule(::typeof(chain_foo), ::Real) = ZeroTangent(), dy -> ZeroTangent()
+rrule(::typeof(chain_foo), ::Float64) = ZeroTangent(), dy -> ZeroTangent()
+@opt_out rrule(::typeof(chain_foo), ::Real)
+
 update_chainrules_primitives!()
 
 
@@ -23,6 +31,12 @@ update_chainrules_primitives!()
 #     @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
 # end
 
+
+@testset "grad: no_rrule" begin
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Real}) == false
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
+end
 
 @testset "grad: kw" begin
     args = (rand(3, 4), rand(3), rand(4))

@@ -128,7 +128,7 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
     else
         sig_str = join(["::$T" for T in Ghost.call_signature(tape, tape[y]).parameters], ", ")
         error("No deriative rule found for op $(tape[y]), " *
-              "try defining it using ChainRulesCore.rrule($sig_str) = ...")
+              "try defining it using \n\n\tChainRulesCore.rrule($sig_str) = ...\n")
     end
     for (i, x) in enumerate(y_fargs)
         if x isa V
@@ -193,6 +193,8 @@ Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Inpu
 See grad() for more high-level API.
 """
 function gradtape!(tape::Tape; seed=1)
+    # update chainrules if number of rrule or no_rrule methods has changed
+    update_chainrules_primitives!(force=false)
     # apply transformations needed for ChainRules
     chainrules_transform!(tape)
     # backpropagate gradients
