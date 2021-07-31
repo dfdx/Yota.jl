@@ -90,6 +90,7 @@ function chainrules_transform!(tape::Tape)
             rr_op = (is_kwfunc(op.fn) ?
                     mkcall(Core.kwfunc(rrule), op.args[1], rrule, op.args[2:end]...) :
                     mkcall(rrule, op.fn, op.args...))
+            @assert rr_op.val !== nothing "rrule($(op.fn), ...) returned nothing"
             val_op = mkcall(_getfield, V(rr_op), 1)
             pb_op = mkcall(_getfield, V(rr_op), 2)
             tape.c.pullbacks[V(val_op)] = V(pb_op)
