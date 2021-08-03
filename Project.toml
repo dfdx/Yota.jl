@@ -17,8 +17,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
-ChainRules = "0.8"
-ChainRulesCore = "0.10"
 FiniteDifferences = "0.12"
 Ghost = "0.2"
 NNlib = "0.7"

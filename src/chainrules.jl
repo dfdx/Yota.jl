@@ -1,4 +1,5 @@
 import ChainRulesCore: rrule, rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
+import Ghost: make_name, Input, to_expr
 
 ###############################################################################
 #                              Primitives                                     #
@@ -33,20 +34,82 @@ is_chainrules_primitive(sig) = sig in CHAIN_RULE_PRIMITIVES[]
 struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode, HasReverseMode}} end
 
 
-function value_and_pullback(f, args...)
-    # TODO: make back!() accept seed=:auto, translated into
-    # ones(size(tape[tape.result].val))
-    tape = gradtape(f, args...)
-    val = tape[tape.result].val
-    grad_fn = grad_compile(tape)
-    function generic_yota_pullback(dy)
-        return grad_fn(f, args...; seed=dy)[2]
+function to_rrule_expr(tape::Tape)
+    fn_name = gensym("rrule_$(tape[V(1)].val)")
+    header = Expr(:call, fn_name)
+    for v in inputs(tape)
+        op = tape[v]
+        push!(header.args, Expr(:(::), make_name(op), op.typ))
     end
-    return val, generic_yota_pullback
+    body = Expr(:block)
+    # generate transformed forward pass
+    seed_id = tape.meta[:seed].id
+    for op in tape.ops[1:seed_id - 1]
+        op isa Input && continue
+        ex = to_expr(op)
+        if ex isa Vector
+            push!(body.args, ex...)
+        else
+            push!(body.args, ex)
+        end
+    end
+    # generate pullback
+    pb_name = gensym("pullback_$(tape[V(1)].val)")
+    pb_ex = :(function $pb_name(dy) end)
+    pb_body = pb_ex.args[2]
+    empty!(pb_body.args)  # clean from useless linenumber nodes
+    push!(pb_body.args, Expr(:(=), make_name(tape.meta[:seed].id), :dy))
+    for op in tape.ops[seed_id + 1:length(tape) - 2]
+        op isa Input && continue
+        ex = to_expr(op)
+        if ex isa Vector
+            push!(pb_body.args, ex...)
+        else
+            push!(pb_body.args, ex)
+        end
+    end
+    push!(body.args, pb_ex)
+    # generate return
+    result_name = make_name(tape[tape.result].args[1].id)
+    push!(body.args, Expr(:tuple, result_name, pb_name))
+    fn_ex = Expr(:function, header, body)
+    return fn_ex
 end
 
+
+"""
+    make_rrule(tape::Tape)
+    make_rrule(f, args...)
+
+Generate a function equivalent to (but not extending) ChainRulesCore.rrule(),
+i.e. returning the primal value and the pullback.
+
+
+### Examples:
+
+```
+foo(x) = 2x + 1
+rr = make_rrule(foo, 2.0)
+val, pb = rr(foo, 3.0)
+pb(1.0)
+```
+"""
+make_rrule(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
+make_rrule(f, args...) = make_rrule(gradtape(f, args...))
+
+
+const GENERATED_RRULE_CACHE = Dict()
+
 function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
-    return value_and_pullback(f, args...)
+    sig = call_signature(f, args...)
+    if haskey(GENERATED_RRULE_CACHE, sig)
+        rr = GENERATED_RRULE_CACHE[sig]
+        return Base.invokelatest(rr, f, args...)
+    else
+        rr = make_rrule(f, args...)
+        GENERATED_RRULE_CACHE[sig] = rr
+        return Base.invokelatest(rr, f, args...)
+    end
 end
 
 ###############################################################################
