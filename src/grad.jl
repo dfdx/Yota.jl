@@ -79,6 +79,7 @@ with the following chain or calls:
 where `val = fn(args...)` and `pb` is the pullback function.
 """
 function chainrules_transform!(tape::Tape)
+    config = YotaRuleConfig()
     i = 1
     while i <= length(tape)
         op = tape[V(i)]
@@ -89,7 +90,7 @@ function chainrules_transform!(tape::Tape)
             # if op.fn is a kw function, use kw version of rrule
             rr_op = (is_kwfunc(op.fn) ?
                     mkcall(Core.kwfunc(rrule), op.args[1], rrule, op.args[2:end]...) :
-                    mkcall(rrule, op.fn, op.args...))
+                    mkcall(rrule, config, op.fn, op.args...))
             @assert rr_op.val !== nothing "rrule($(op.fn), ...) returned nothing"
             val_op = mkcall(_getfield, V(rr_op), 1)
             pb_op = mkcall(_getfield, V(rr_op), 2)
@@ -123,7 +124,7 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
         dxs = push!(tape, mkcall(pb, dy))
         # propage derivs to rrule variable
         rr = tape[y].args[1]
-        y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[3:end] : tape[rr].args
+        y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[3:end] : tape[rr].args[2:end]
     else
         sig_str = join(["::$T" for T in Ghost.call_signature(tape, tape[y]).parameters], ", ")
         error("No deriative rule found for op $(tape[y]), " *
