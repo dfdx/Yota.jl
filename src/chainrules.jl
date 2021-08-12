@@ -1,12 +1,13 @@
-import ChainRulesCore: rrule, rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
+import ChainRulesCore: rrule, no_rrule
+import ChainRulesCore: rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
 import Ghost: make_name, Input, to_expr
 
 ###############################################################################
 #                              Primitives                                     #
 ###############################################################################
 
-function chainrules_supported_signatures()
-    rrule_methods = methods(rrule).ms
+function function_signatures(fn)
+    rrule_methods = methods(fn).ms
     sigs = [remove_first_parameter(rr.sig) for rr in rrule_methods]
     # add keyword version of these functions as well
     kw_sigs = [kwsig for kwsig in map(kwfunc_signature, sigs) if kwsig !== Tuple{}]
@@ -14,17 +15,25 @@ function chainrules_supported_signatures()
 end
 
 
-const CHAIN_RULE_PRIMITIVES = Ref(FunctionResolver{Bool}())
+const CHAINRULES_PRIMITIVES = Ref(FunctionResolver{Bool}())
+const NUM_CHAINRULES_METHODS = Ref{Int}(0)
 
 
-function update_chainrules_primitives!()
-    P = FunctionResolver{Bool}([sig => true for sig in chainrules_supported_signatures()])
-    delete!(P.signatures, Symbol(Any))
-    CHAIN_RULE_PRIMITIVES[] = P
+function update_chainrules_primitives!(;force=false)
+    num_methods = length(methods(rrule)) + length(methods(no_rrule))
+    if force || num_methods != NUM_CHAINRULES_METHODS[]
+        sigs_flags = [
+            [sig => true for sig in function_signatures(rrule)];
+            [sig => false for sig in function_signatures(no_rrule)]  # override rrule(sig...)
+            ]
+        P = FunctionResolver{Bool}(sigs_flags)
+        CHAINRULES_PRIMITIVES[] = P
+        NUM_CHAINRULES_METHODS[] = num_methods
+    end
 end
 
 
-is_chainrules_primitive(sig) = sig in CHAIN_RULE_PRIMITIVES[]
+is_chainrules_primitive(sig) = CHAINRULES_PRIMITIVES[][sig] == true
 
 
 ###############################################################################

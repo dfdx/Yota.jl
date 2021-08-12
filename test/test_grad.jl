@@ -1,5 +1,7 @@
 import Statistics
-import ChainRules: rrule, Tangent, ZeroTangent
+import ChainRulesCore
+import ChainRulesCore: rrule, Tangent, ZeroTangent, @opt_out
+import Yota: is_chainrules_primitive
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)
@@ -10,6 +12,14 @@ function rrule(::typeof(Broadcast.broadcasted), ::typeof(sin), x)
     sin_pullback(dy) = (ZeroTangent(), ZeroTangent(), cos.(x) .* dy)
     return sin.(x), sin_pullback
 end
+
+
+chain_foo(x::Number) = :ok
+
+rrule(::typeof(chain_foo), ::Number) = ZeroTangent(), dy -> ZeroTangent()
+rrule(::typeof(chain_foo), ::Real) = ZeroTangent(), dy -> ZeroTangent()
+rrule(::typeof(chain_foo), ::Float64) = ZeroTangent(), dy -> ZeroTangent()
+@opt_out rrule(::typeof(chain_foo), ::Real)
 
 update_chainrules_primitives!()
 
@@ -23,6 +33,12 @@ update_chainrules_primitives!()
 #     @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
 # end
 
+
+@testset "grad: no_rrule" begin
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), ComplexF64}) == true  # should hit ::Number
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float32}) == false    # should hit ::Real
+    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
+end
 
 @testset "grad: kw" begin
     args = (rand(3, 4), rand(3), rand(4))
