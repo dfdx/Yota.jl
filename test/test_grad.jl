@@ -1,5 +1,7 @@
 import Statistics
-import ChainRules: rrule, Tangent, ZeroTangent
+import ChainRulesCore
+import ChainRulesCore: rrule, Tangent, ZeroTangent, @opt_out
+import Yota: is_chainrules_primitive
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)

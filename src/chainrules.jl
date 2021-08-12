@@ -1,4 +1,5 @@
-import ChainRulesCore: rrule, rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
+import ChainRulesCore: rrule, no_rrule
+import ChainRulesCore: rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
 import Ghost: make_name, Input, to_expr
 
 ###############################################################################
@@ -32,7 +33,7 @@ function update_chainrules_primitives!(;force=false)
 end
 
 
-is_chainrules_primitive(sig) = sig in CHAIN_RULE_PRIMITIVES[]
+is_chainrules_primitive(sig) = CHAINRULES_PRIMITIVES[][sig] == true
 
 
 ###############################################################################
