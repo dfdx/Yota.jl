@@ -31,7 +31,7 @@ function parse_commandline()
             default = "HEAD"
         "--baseline"
             help = "the branch/commit/tag to use as baseline"
-            default = "master"
+            default = "main"
         "--retune"
             help = "force re-tuning (ignore existing tuning data)"
             action = :store_true

@@ -10,8 +10,8 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1.6'
-      - run: git fetch origin '+refs/heads/master:refs/remotes/origin/master'
-      - run: git branch master origin/master
+      - run: git fetch origin '+refs/heads/main:refs/remotes/origin/main'
+      - run: git branch main origin/main
       - run: |
           julia --project=benchmark -e '
             using Pkg

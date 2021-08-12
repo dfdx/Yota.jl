@@ -171,7 +171,12 @@ end
 
 
 function ∇__new__(dy, ::typeof(__new__), T, args...)
-    return NoTangent(), NoTangent(), [getproperty(dy, fld) for fld in fieldnames(T)]...
+    if dy isa NoTangent || dy isa ZeroTangent
+        fld_derivs = [dy for fld in fieldnames(T)]
+    else
+        fld_derivs = [getproperty(dy, fld) for fld in fieldnames(T)]
+    end
+    return NoTangent(), NoTangent(), fld_derivs...
 end
 @drule __new__(T::Any, args::Vararg) ∇__new__
 

@@ -9,17 +9,17 @@ const SUITE = BenchmarkGroup()
 SUITE["trace"] = BenchmarkGroup()
 
 
-x = rand(8, 8)
+# x = rand(8, 8)
 
-const TRACE_FUNCTIONS = [
-    "simple" => x -> sum(x),
-    "loop" => x -> (for _=1:100 x = x'x end; x),
-]
+# const TRACE_FUNCTIONS = [
+#     "simple" => x -> sum(x),
+#     "loop" => x -> (for _=1:100 x = x'x end; x),
+# ]
 
 
-for (name, f) in TRACE_FUNCTIONS
-    SUITE["trace"][name] = @benchmarkable Yota.trace($f, $x) samples=10 seconds=60
-end
+# for (name, f) in TRACE_FUNCTIONS
+#     SUITE["trace"][name] = @benchmarkable Yota.trace($f, $x) samples=10 seconds=60
+# end
 
 
 ################################### HELPERS ###################################
