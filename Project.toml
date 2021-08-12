@@ -1,7 +1,7 @@
 name = "Yota"
 uuid = "cd998857-8626-517d-b929-70ad188a48f0"
 authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
-version = "0.6.0"
+version = "0.6.1"
 
 [deps]
 ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
@@ -17,6 +17,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
+ChainRules = "1"
+ChainRulesCore = "1"
 FiniteDifferences = "0.12"
 Ghost = "0.2"
 NNlib = "0.7"
