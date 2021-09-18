@@ -40,7 +40,7 @@ is_chainrules_primitive(sig) = CHAINRULES_PRIMITIVES[][sig] == true
 #                              RuleConfig                                     #
 ###############################################################################
 
-struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode, HasReverseMode}} end
+struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
 
 
 function to_rrule_expr(tape::Tape)
@@ -110,6 +110,8 @@ make_rrule(f, args...) = make_rrule(gradtape(f, args...))
 const GENERATED_RRULE_CACHE = Dict()
 
 function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
+    res = rrule(f, args...)
+    !isnothing(res) && return res
     sig = call_signature(f, args...)
     if haskey(GENERATED_RRULE_CACHE, sig)
         rr = GENERATED_RRULE_CACHE[sig]
@@ -134,18 +136,46 @@ end
 
 
 function ChainRulesCore.rrule(
-    ::typeof(Core._apply_iterate), ::typeof(iterate), f::F, args...) where F
+        ::YotaRuleConfig, ::typeof(Core._apply_iterate), ::typeof(iterate),
+        f::F, args...
+    ) where F
+    # flatten nested arguments
     flat = []
     for a in args
         push!(flat, a...)
     end
-    return rrule(f, flat...)
+    # apply rrule of the function on the flat arguments
+    y, pb = rrule_via_ad(YotaRuleConfig(), f, flat...)
+    sizes = map(length, args)
+    function _apply_iterate_pullback(dy)
+        if dy isa NoTangent
+            return ntuple(_-> NoTangent(), length(args) + 3)
+        end
+        flat_dargs = pb(dy)
+        df = flat_dargs[1]
+        # group derivatives to tuples of the same sizes as arguments
+        dargs = []
+        j = 2
+        for i = 1:length(args)
+            darg_val = flat_dargs[j:j + sizes[i] - 1]
+            if length(darg_val) == 1 && darg_val[1] isa NoTangent
+                push!(dargs, darg_val[1])
+            else
+                darg = Tangent{typeof(darg_val)}(darg_val...)
+                push!(dargs, darg)
+            end
+            j = j + sizes[i]
+        end
+        return NoTangent(), NoTangent(), df, dargs...
+    end
+    return y, _apply_iterate_pullback
 end
 
 
-function ChainRules.rrule(::typeof(tuple), args...)
+function ChainRulesCore.rrule(::typeof(tuple), args...)
     y = tuple(args...)
-    return y, dy -> (NoTangent(), dy...)
+    return y, dy -> (NoTangent(), collect(dy...)...)
 end
 
-# test_rrule(tuple, 1, 2, 3)
+# test_rrule(tuple, 1, 2, 3; output_tangent=Tangent{Tuple}((1, 2, 3)), check_inferred=false)
+

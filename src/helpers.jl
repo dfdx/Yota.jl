@@ -38,28 +38,6 @@ during backpropagation.
 """
 _getfield(value, fld) = getfield(value, fld)
 
-# function ∇sum(x::AbstractArray, dy)
-#     dx = similar(x)
-#     dx .= dy
-#     return dx
-# end
-
-
-# function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
-#     dx = similar(x)
-#     dx .= dy ./ prod(size(x, d) for d in dims)
-#     return dx
-# end
-
-
-# function sum_dropdims(x::AbstractArray, dims)
-#     return dropdims(sum(x; dims=dims); dims=dims)
-# end
-
-
-# unbroadcast from Flux
-# in in-place version we can consider sum!(similar(x), ds),
-# but we need to carefully measure performance in each case
 
 # reshape Δ to be consistent with x
 trim(x, Δ) = reshape(Δ, ntuple(i -> size(Δ, i), Val(ndims(x))))
@@ -103,22 +81,6 @@ untranspose_vec(ds::Adjoint{T, <:AbstractVector{T}}) where T = adjoint(ds)
 untranspose_vec(ds::AbstractMatrix) = dropdims(transpose(ds); dims=2)
 
 
-# function unvcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-#     a = arrs[n]
-#     from = n == 1 ? 1 : sum(size(arr, 1) for arr in arrs[1:n-1]) + 1
-#     to = from + size(a, 1) - 1
-#     return dy[from:to, [(:) for i=1:length(size(dy)) - 1]...]
-# end
-
-
-# function unhcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-#     a = arrs[n]
-#     from = n == 1 ? 1 : sum(size(arr, 2) for arr in arrs[1:n-1]) + 1
-#     to = from + size(a, 2) - 1
-#     return dy[:, from:to, [(:) for i=1:length(size(dy)) - 2]...]
-# end
-
-
 function uncat(dy::AbstractArray, n::Int, arrs::AbstractArray...; dims)
     @assert(dims isa Integer, "Can only undo cat() over a single dimension, " *
             "but dimensions $dims were provided")
@@ -128,6 +90,7 @@ function uncat(dy::AbstractArray, n::Int, arrs::AbstractArray...; dims)
     to = from + size(a, dim) - 1
     return dy[[(:) for i=1:dim - 1]..., from:to, [(:) for i=1:length(size(dy)) - dim]...]
 end
+uncat(dy::ZeroTangent, n::Int, arrs::AbstractArray...; dims) = dy
 
 
 namedtuple(names, values) = NamedTuple{names}(values)
