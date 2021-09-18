@@ -6,9 +6,16 @@ import Ghost: make_name, Input, to_expr
 #                              Primitives                                     #
 ###############################################################################
 
-function function_signatures(fn)
+function function_signatures(fn=rrule)
     rrule_methods = methods(fn).ms
-    sigs = [remove_first_parameter(rr.sig) for rr in rrule_methods]
+    sigs = [rr.sig for rr in rrule_methods]
+    # remove `rrule` parameter
+    sigs = [remove_first_parameter(sig) for sig in sigs]
+    # remove YotaRuleConfig parameter if any
+    sigs = [Ghost.get_type_parameters(sig)[1] <: YotaRuleConfig ?
+            remove_first_parameter(sig) :
+            sig
+            for sig in sigs]
     # add keyword version of these functions as well
     kw_sigs = [kwsig for kwsig in map(kwfunc_signature, sigs) if kwsig !== Tuple{}]
     return [sigs; kw_sigs]
