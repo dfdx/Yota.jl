@@ -5,6 +5,7 @@ import Yota: is_chainrules_primitive
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)
+loss_double_broadcast2(b, x) = sum(x .* x .+ b)
 loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 
 
@@ -47,6 +48,7 @@ end
     args = (rand(3, 4), rand(3), rand(4))
     @test gradcheck(loss_simple, args...)
     @test gradcheck(loss_double_broadcast, args...)
+    @test gradcheck(loss_double_broadcast2, rand(3), rand(3))
 
     val, g = grad(loss_kw_mean, args...)
     @test val == loss_kw_mean(args...)

@@ -132,12 +132,12 @@ end
 function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(+), x, y)
     return NoTangent(), NoTangent(), unbroadcast(x, dy), unbroadcast(y, dy)
 end
-@drule broadcasted(::typeof(+), x::AbstractArray, y::AbstractArray) ∇broadcasted_special
+@drule broadcasted(::typeof(+), x::Any, y::Any) ∇broadcasted_special
 
 function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(*), x, y)
     return NoTangent(), NoTangent(), unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
 end
-@drule broadcasted(::typeof(*), x::AbstractArray, y::AbstractArray) ∇broadcasted_special
+@drule broadcasted(::typeof(*), x::Any, y::Any) ∇broadcasted_special
 
 function ∇broadcasted(dy, ::typeof(broadcasted), ::typeof(Base.literal_pow),
     ::typeof(^), x::Any, ::Val{p}) where p
