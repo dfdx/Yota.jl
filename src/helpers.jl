@@ -45,7 +45,7 @@ trim(x, Δ) = reshape(Δ, ntuple(i -> size(Δ, i), Val(ndims(x))))
 const ArrayOrBroadcasted = Union{AbstractArray, Broadcast.Broadcasted}
 
 function unbroadcast(x::ArrayOrBroadcasted, Δ)
-    if size(x) == size(Δ)
+    if Δ isa ZeroTangent || Δ isa NoTangent || size(x) == size(Δ)
         return Δ
     elseif length(x) == length(Δ)
         return trim(x, Δ)
@@ -58,7 +58,9 @@ end
 unbroadcast(::Number, Δ) = sum(Δ)
 
 function unbroadcast_prod_x(x::ArrayOrBroadcasted, y::ArrayOrBroadcasted, Δ)
-    if size(x) == size(Δ)
+    if Δ isa ZeroTangent || Δ isa NoTangent
+        return Δ
+    elseif size(x) == size(Δ)
         return Δ .* y
     elseif length(x) == length(Δ)
         return trim(x, Δ .* y)
