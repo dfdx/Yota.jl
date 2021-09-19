@@ -24,14 +24,13 @@ rrule(::typeof(chain_foo), ::Float64) = ZeroTangent(), dy -> ZeroTangent()
 update_chainrules_primitives!()
 
 
-# TODO: uncomment when we have a general rrule() or @drule for primitive broadcasting
-# @testset "grad: simple" begin
-#     args3 = (rand(4, 3), rand(4), rand(3))
-#     args4 = (rand(4, 3), rand(4), rand(3), rand(4))
-#     @test gradcheck((W, b, x) -> sum(W * x .+ b), args3...)
-#     @test gradcheck((W, b, x) -> sum(tanh.(W * x .+ b)), args3...)
-#     @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
-# end
+@testset "grad: simple" begin
+    args3 = (rand(4, 3), rand(4), rand(3))
+    args4 = (rand(4, 3), rand(4), rand(3), rand(4))
+    @test gradcheck((W, b, x) -> sum(W * x .+ b), args3...)
+    # @test gradcheck((W, b, x) -> sum(tanh.(W * x .+ b)), args3...)
+    # @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
+end
 
 
 @testset "grad: no_rrule" begin
