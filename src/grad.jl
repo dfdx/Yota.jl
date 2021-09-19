@@ -111,6 +111,7 @@ Make a single step of backpropagation.
 function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
     @debug "step_back!() for $(tape[y])"
     df = get_deriv_function(call_signature(tape, tape[y]))
+    df isa NoTangent && return  # don't propagate deriative
     dy = tape.c.derivs[y]
     if df !== nothing
         # Yota rules

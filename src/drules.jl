@@ -1,7 +1,7 @@
 import Ghost: FunctionResolver, __new__
 
 
-const DRULES = Ref(FunctionResolver{Function}())
+const DRULES = Ref(FunctionResolver{Any}())
 
 
 function expr2signature(modl::Module, ex::Expr)
@@ -256,3 +256,7 @@ function ∇hcat(dy, ::typeof(hcat), arrs...)
     return NoTangent(), [uncat(dy, i, arrs...; dims=2) for i=1:length(arrs)]...
 end
 @drule hcat(arrs::Vararg) ∇hcat
+
+## Colon
+
+@drule Colon()(a::Int, b::Int) NoTangent()

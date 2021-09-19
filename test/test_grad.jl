@@ -40,6 +40,10 @@ update_chainrules_primitives!()
     @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
 end
 
+@testset "grad: notangent" begin
+    @test Yota.get_deriv_function(Yota.call_signature(Colon(), 1, 2)) isa ChainRulesCore.NoTangent
+end
+
 @testset "grad: kw" begin
     args = (rand(3, 4), rand(3), rand(4))
     @test gradcheck(loss_simple, args...)
