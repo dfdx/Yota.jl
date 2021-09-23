@@ -165,6 +165,8 @@ end
 
 function ∇getfield(dy, ::typeof(getfield), s::Tuple, f::Int)
     T = typeof(s)
+    # deriv of a tuple is a Tangent{Tuple}(...) with all elements set to ZeroTangent()
+    # except for the one at index f which is set to dy
     return NoTangent(), Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), ZeroTangent()
 end
 @drule getfield(s::Tuple, f::Union{Symbol, Int}) ∇getfield
@@ -216,12 +218,14 @@ end
 ## tuple unpacking
 
 function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int)
-    return NoTangent(), ungetfield(dy[1], t, i), ZeroTangent()
+    d_val, d_state = dy
+    return NoTangent(), ungetfield(d_val, t, i), ZeroTangent()
 end
 @drule Base.indexed_iterate(t::Tuple, i::Int) ∇indexed_iterate
 
 function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int, state::Int)
-    return NoTangent(), ungetfield(dy[1], t, i), ZeroTangent(), ZeroTangent()
+    d_val, d_state = dy
+    return NoTangent(), ungetfield(d_val, t, i), ZeroTangent(), ZeroTangent()
 end
 @drule Base.indexed_iterate(t::Tuple, i::Int, state::Int) ∇indexed_iterate
 
