@@ -50,7 +50,7 @@ function show_compact(tape::Tape)
             if destructured
                 out_vars_str = join(out_vars, ", ")
                 arg_str = join(op.args, ", ")
-                println("  $out_vars_str = $(op.fn)($arg_str)")
+                println("  $out_vars_str = [%$(op.id)] = $(op.fn)($arg_str)")
             else
                 println("  $op")
             end

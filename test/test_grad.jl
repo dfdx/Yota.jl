@@ -44,6 +44,27 @@ end
     @test Yota.get_deriv_function(Yota.call_signature(Colon(), 1, 2)) isa ChainRulesCore.NoTangent
 end
 
+
+# originally a simplified version of lstm_forward
+function multipath(y, c)
+    f = tanh.(y[1:5, :])
+    c_ = f .* c
+    h_ = tanh.(c_)
+    return h_, c_
+end
+
+@testset "grad: multipath" begin
+    y = rand(20, 4)
+    c = rand(5, 4)
+    loss = (y, c) -> begin
+            h, c = lstm_forward(y, c)
+            sum(h)
+            end
+    args = (y, c)
+    @test gradcheck(loss, args...)
+end
+
+
 @testset "grad: kw" begin
     args = (rand(3, 4), rand(3), rand(4))
     @test gradcheck(loss_simple, args...)
