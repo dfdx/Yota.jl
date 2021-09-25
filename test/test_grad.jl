@@ -1,6 +1,6 @@
 import Statistics
 import ChainRulesCore
-import ChainRulesCore: rrule, Tangent, ZeroTangent, @opt_out
+import ChainRulesCore: rrule, Tangent, ZeroTangent, NoTangent, @opt_out
 import Yota: is_chainrules_primitive
 
 loss_simple(W, b, x) = sum(W * x .+ b)
@@ -12,6 +12,16 @@ loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 function rrule(::typeof(Broadcast.broadcasted), ::typeof(sin), x)
     sin_pullback(dy) = (ZeroTangent(), ZeroTangent(), cos.(x) .* dy)
     return sin.(x), sin_pullback
+end
+
+
+function rrule(::typeof(Broadcast.broadcasted), ::typeof(tanh), x)
+    y = tanh.(x)
+    function bcast_tanh_pullback(dy)
+      dx = @. (1 - y ^ 2) * dy
+      return NoTangent(), NoTangent(), dx
+    end
+    return y, bcast_tanh_pullback
 end
 
 
@@ -57,7 +67,7 @@ end
     y = rand(20, 4)
     c = rand(5, 4)
     loss = (y, c) -> begin
-            h, c = lstm_forward(y, c)
+            h, c = multipath(y, c)
             sum(h)
             end
     args = (y, c)
