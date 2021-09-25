@@ -135,7 +135,14 @@ Make a single step of backpropagation.
 function step_back!(tape::Tape, y::Variable)
     @debug "step_back!() for $(tape[y])"
     df = get_deriv_function(call_signature(tape, tape[y]))
-    df isa NoTangent && return  # don't propagate deriative
+    if df isa NoTangent
+        @debug "Yota derivative is NoTagnent, stop propagating the gradient in this path"
+        return
+    end
+    if !hasderiv(tape, y)
+        @debug "No derivative found for y = $y, stop propagating the gradient in this path"
+        return
+    end
     dy = tape.c.derivs[y]
     if df !== nothing
         # Yota rules
