@@ -1,6 +1,6 @@
 # Yötä
 
-![Status](https://github.com/github/docs/actions/workflows/main.yml/badge.svg?branch=main)
+![Status](https://github.com/dfdx/Yota.jl/actions/workflows/test.yml/badge.svg?branch=main)
 
 Reverse-mode automatic differentiation for static and dynamic graphs.
 
