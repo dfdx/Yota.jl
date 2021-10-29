@@ -1,6 +1,6 @@
 # Yötä
 
-[![Build Status](https://travis-ci.org/dfdx/Yota.jl.svg?branch=main)](https://travis-ci.org/dfdx/Yota.jl)
+![Status](https://github.com/github/docs/actions/workflows/main.yml/badge.svg?branch=main)
 
 Reverse-mode automatic differentiation for static and dynamic graphs.
 
