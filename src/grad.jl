@@ -106,11 +106,43 @@ end
 
 
 """
+Collect variables that we need to step through during the reverse pass.
+The returned vector is already deduplicated and reverse-sorted
+"""
+function todo_list(tape::Tape{GradCtx}, y=tape.result)
+    y_orig = y
+    y_fargs = [tape[y].fn; tape[y].args...]
+    is_rrule_based = haskey(tape.c.pullbacks, y)
+    if is_rrule_based
+        # use rrule instead
+        y = tape[y].args[1]
+        y_fargs = is_kwfunc(y._op.fn) ? tape[y].args[3:end] : tape[y].args[2:end]
+    end
+    y_todo = [x for x in y_fargs if x isa V && tape[x] isa Call]
+    x_todos = [todo_list(tape, x) for x in y_todo]
+    # include y itself (original), its parents and their parents recursively
+    todo = [[y_orig]; y_todo; vcat(x_todos...)]
+    # deduplicate
+    todo = collect(Set([bound(tape, v) for v in todo]))
+    todo = sort(todo, by=v->v.id, rev=true)
+    return todo
+end
+
+
+"""
 Make a single step of backpropagation.
 """
-function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
+function step_back!(tape::Tape, y::Variable)
     @debug "step_back!() for $(tape[y])"
     df = get_deriv_function(call_signature(tape, tape[y]))
+    if df isa NoTangent
+        @debug "Yota derivative is NoTagnent, stop propagating the gradient in this path"
+        return
+    end
+    if !hasderiv(tape, y)
+        @debug "No derivative found for y = $y, stop propagating the gradient in this path"
+        return
+    end
     dy = tape.c.derivs[y]
     if df !== nothing
         # Yota rules
@@ -135,10 +167,10 @@ function step_back!(tape::Tape, y::Variable, deriv_todo::Vector{Variable})
             dx = push!(tape, mkcall(getfield, dxs, i))
             @debug "Updating derivative: $x -> $dx"
             set_or_add_deriv!(tape, x, dx)
-            if tape[x] isa Call
-                push!(deriv_todo, x)
-            end
-            @debug "deriv_todo = $(join(deriv_todo, ", "))"
+            # if tape[x] isa Call
+            #     push!(deriv_todo, x)
+            # end
+            # @debug "deriv_todo = $(join(deriv_todo, ", "))"
         end
     end
 end
@@ -165,22 +197,14 @@ function back!(tape::Tape; seed=1)
     # set initial derivative value
     tape.c.derivs[z] = dy
     # queue of variables to calculate derivatives for
-    deriv_todo = V[z]
-    deriv_processed = Set{V}()
-    while !isempty(deriv_todo)
-        y = popfirst!(deriv_todo)
-        ## skip double calculation for the same var in multupath graphs
-        if y in deriv_processed
-            @debug "Already processed $y, skipping it"
-            continue
-        end
+    deriv_todo = todo_list(tape)
+    for y in deriv_todo
         try
-            step_back!(tape, y, deriv_todo)
+            step_back!(tape, y)
         catch e
             BACKPROP_STATE[] = (tape, y, deriv_todo)
             rethrow(e)
         end
-        push!(deriv_processed, y)
     end
 end
 

@@ -38,34 +38,14 @@ during backpropagation.
 """
 _getfield(value, fld) = getfield(value, fld)
 
-# function ∇sum(x::AbstractArray, dy)
-#     dx = similar(x)
-#     dx .= dy
-#     return dx
-# end
-
-
-# function ∇mean(x::AbstractArray, dy, dims=1:ndims(x))
-#     dx = similar(x)
-#     dx .= dy ./ prod(size(x, d) for d in dims)
-#     return dx
-# end
-
-
-# function sum_dropdims(x::AbstractArray, dims)
-#     return dropdims(sum(x; dims=dims); dims=dims)
-# end
-
-
-# unbroadcast from Flux
-# in in-place version we can consider sum!(similar(x), ds),
-# but we need to carefully measure performance in each case
 
 # reshape Δ to be consistent with x
 trim(x, Δ) = reshape(Δ, ntuple(i -> size(Δ, i), Val(ndims(x))))
 
-function unbroadcast(x::AbstractArray, Δ)
-    if size(x) == size(Δ)
+const ArrayOrBroadcasted = Union{AbstractArray, Broadcast.Broadcasted}
+
+function unbroadcast(x::ArrayOrBroadcasted, Δ)
+    if Δ isa ZeroTangent || Δ isa NoTangent || size(x) == size(Δ)
         return Δ
     elseif length(x) == length(Δ)
         return trim(x, Δ)
@@ -77,8 +57,10 @@ end
 
 unbroadcast(::Number, Δ) = sum(Δ)
 
-function unbroadcast_prod_x(x::AbstractArray, y::AbstractArray, Δ)
-    if size(x) == size(Δ)
+function unbroadcast_prod_x(x::ArrayOrBroadcasted, y::ArrayOrBroadcasted, Δ)
+    if Δ isa ZeroTangent || Δ isa NoTangent
+        return Δ
+    elseif size(x) == size(Δ)
         return Δ .* y
     elseif length(x) == length(Δ)
         return trim(x, Δ .* y)
@@ -87,36 +69,20 @@ function unbroadcast_prod_x(x::AbstractArray, y::AbstractArray, Δ)
         return trim(x, sum(Δ.* y, dims=sum_dims))
     end
 end
-unbroadcast_prod_y(x::AbstractArray, y::AbstractArray, Δ) = unbroadcast_prod_x(y, x, Δ)
+unbroadcast_prod_y(x::ArrayOrBroadcasted, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_x(y, x, Δ)
 
 # device_like(example, a) = (device = guess_device([example]); device(a))
 
 # unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(device_like(y, [x]), y, Δ)[1]
-unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(to_same_device([x], y), y, Δ)[1]
-unbroadcast_prod_x(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_x(x, to_same_device([y], x), Δ)
-unbroadcast_prod_y(x::AbstractArray, y::Number, Δ) = unbroadcast_prod_y(x, to_same_device([y], x), Δ)[1]
-unbroadcast_prod_y(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_y(to_same_device([x], y), y, Δ)
+unbroadcast_prod_x(x::Number, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_x(to_same_device([x], y), y, Δ)[1]
+unbroadcast_prod_x(x::ArrayOrBroadcasted, y::Number, Δ) = unbroadcast_prod_x(x, to_same_device([y], x), Δ)
+unbroadcast_prod_y(x::ArrayOrBroadcasted, y::Number, Δ) = unbroadcast_prod_y(x, to_same_device([y], x), Δ)[1]
+unbroadcast_prod_y(x::Number, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_y(to_same_device([x], y), y, Δ)
 
 
 untranspose_vec(ds::Transpose{T, <:AbstractVector{T}}) where T = transpose(ds)
 untranspose_vec(ds::Adjoint{T, <:AbstractVector{T}}) where T = adjoint(ds)
 untranspose_vec(ds::AbstractMatrix) = dropdims(transpose(ds); dims=2)
-
-
-# function unvcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-#     a = arrs[n]
-#     from = n == 1 ? 1 : sum(size(arr, 1) for arr in arrs[1:n-1]) + 1
-#     to = from + size(a, 1) - 1
-#     return dy[from:to, [(:) for i=1:length(size(dy)) - 1]...]
-# end
-
-
-# function unhcat(dy::AbstractArray, n::Int, arrs::AbstractArray...)
-#     a = arrs[n]
-#     from = n == 1 ? 1 : sum(size(arr, 2) for arr in arrs[1:n-1]) + 1
-#     to = from + size(a, 2) - 1
-#     return dy[:, from:to, [(:) for i=1:length(size(dy)) - 2]...]
-# end
 
 
 function uncat(dy::AbstractArray, n::Int, arrs::AbstractArray...; dims)
@@ -128,6 +94,7 @@ function uncat(dy::AbstractArray, n::Int, arrs::AbstractArray...; dims)
     to = from + size(a, dim) - 1
     return dy[[(:) for i=1:dim - 1]..., from:to, [(:) for i=1:length(size(dy)) - dim]...]
 end
+uncat(dy::ZeroTangent, n::Int, arrs::AbstractArray...; dims) = dy
 
 
 namedtuple(names, values) = NamedTuple{names}(values)

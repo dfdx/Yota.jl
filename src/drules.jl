@@ -1,7 +1,7 @@
 import Ghost: FunctionResolver, __new__
 
 
-const DRULES = Ref(FunctionResolver{Function}())
+const DRULES = Ref(FunctionResolver{Any}())
 
 
 function expr2signature(modl::Module, ex::Expr)
@@ -132,12 +132,12 @@ end
 function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(+), x, y)
     return NoTangent(), NoTangent(), unbroadcast(x, dy), unbroadcast(y, dy)
 end
-@drule broadcasted(::typeof(+), x::AbstractArray, y::AbstractArray) ∇broadcasted_special
+@drule broadcasted(::typeof(+), x::Any, y::Any) ∇broadcasted_special
 
 function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(*), x, y)
     return NoTangent(), NoTangent(), unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
 end
-@drule broadcasted(::typeof(*), x::AbstractArray, y::AbstractArray) ∇broadcasted_special
+@drule broadcasted(::typeof(*), x::Any, y::Any) ∇broadcasted_special
 
 function ∇broadcasted(dy, ::typeof(broadcasted), ::typeof(Base.literal_pow),
     ::typeof(^), x::Any, ::Val{p}) where p
@@ -165,6 +165,8 @@ end
 
 function ∇getfield(dy, ::typeof(getfield), s::Tuple, f::Int)
     T = typeof(s)
+    # deriv of a tuple is a Tangent{Tuple}(...) with all elements set to ZeroTangent()
+    # except for the one at index f which is set to dy
     return NoTangent(), Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), ZeroTangent()
 end
 @drule getfield(s::Tuple, f::Union{Symbol, Int}) ∇getfield
@@ -216,12 +218,14 @@ end
 ## tuple unpacking
 
 function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int)
-    return NoTangent(), ungetfield(dy[1], t, i), ZeroTangent()
+    d_val, d_state = dy
+    return NoTangent(), ungetfield(d_val, t, i), ZeroTangent()
 end
 @drule Base.indexed_iterate(t::Tuple, i::Int) ∇indexed_iterate
 
 function ∇indexed_iterate(dy, ::typeof(Base.indexed_iterate), t::Tuple, i::Int, state::Int)
-    return NoTangent(), ungetfield(dy[1], t, i), ZeroTangent(), ZeroTangent()
+    d_val, d_state = dy
+    return NoTangent(), ungetfield(d_val, t, i), ZeroTangent(), ZeroTangent()
 end
 @drule Base.indexed_iterate(t::Tuple, i::Int, state::Int) ∇indexed_iterate
 
@@ -256,3 +260,7 @@ function ∇hcat(dy, ::typeof(hcat), arrs...)
     return NoTangent(), [uncat(dy, i, arrs...; dims=2) for i=1:length(arrs)]...
 end
 @drule hcat(arrs::Vararg) ∇hcat
+
+## Colon
+
+@drule Colon()(a::Int, b::Int) NoTangent()

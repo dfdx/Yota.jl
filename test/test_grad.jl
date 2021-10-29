@@ -1,16 +1,27 @@
 import Statistics
 import ChainRulesCore
-import ChainRulesCore: rrule, Tangent, ZeroTangent, @opt_out
+import ChainRulesCore: rrule, Tangent, ZeroTangent, NoTangent, @opt_out
 import Yota: is_chainrules_primitive
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)
+loss_double_broadcast2(b, x) = sum(x .* x .+ b)
 loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 
 
 function rrule(::typeof(Broadcast.broadcasted), ::typeof(sin), x)
     sin_pullback(dy) = (ZeroTangent(), ZeroTangent(), cos.(x) .* dy)
     return sin.(x), sin_pullback
+end
+
+
+function rrule(::typeof(Broadcast.broadcasted), ::typeof(tanh), x)
+    y = tanh.(x)
+    function bcast_tanh_pullback(dy)
+      dx = @. (1 - y ^ 2) * dy
+      return NoTangent(), NoTangent(), dx
+    end
+    return y, bcast_tanh_pullback
 end
 
 
@@ -24,14 +35,13 @@ rrule(::typeof(chain_foo), ::Float64) = ZeroTangent(), dy -> ZeroTangent()
 update_chainrules_primitives!()
 
 
-# TODO: uncomment when we have a general rrule() or @drule for primitive broadcasting
-# @testset "grad: simple" begin
-#     args3 = (rand(4, 3), rand(4), rand(3))
-#     args4 = (rand(4, 3), rand(4), rand(3), rand(4))
-#     @test gradcheck((W, b, x) -> sum(W * x .+ b), args3...)
-#     @test gradcheck((W, b, x) -> sum(tanh.(W * x .+ b)), args3...)
-#     @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
-# end
+@testset "grad: simple" begin
+    args3 = (rand(4, 3), rand(4), rand(3))
+    args4 = (rand(4, 3), rand(4), rand(3), rand(4))
+    @test gradcheck((W, b, x) -> sum(W * x .+ b), args3...)
+    # @test gradcheck((W, b, x) -> sum(tanh.(W * x .+ b)), args3...)
+    # @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
+end
 
 
 @testset "grad: no_rrule" begin
@@ -40,10 +50,36 @@ update_chainrules_primitives!()
     @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
 end
 
+@testset "grad: notangent" begin
+    @test Yota.get_deriv_function(Yota.call_signature(Colon(), 1, 2)) isa ChainRulesCore.NoTangent
+end
+
+
+# originally a simplified version of lstm_forward
+function multipath(y, c)
+    f = tanh.(y[1:5, :])
+    c_ = f .* c
+    h_ = tanh.(c_)
+    return h_, c_
+end
+
+@testset "grad: multipath" begin
+    y = rand(20, 4)
+    c = rand(5, 4)
+    loss = (y, c) -> begin
+            h, c = multipath(y, c)
+            sum(h)
+            end
+    args = (y, c)
+    @test gradcheck(loss, args...)
+end
+
+
 @testset "grad: kw" begin
     args = (rand(3, 4), rand(3), rand(4))
     @test gradcheck(loss_simple, args...)
     @test gradcheck(loss_double_broadcast, args...)
+    @test gradcheck(loss_double_broadcast2, rand(3), rand(3))
 
     val, g = grad(loss_kw_mean, args...)
     @test val == loss_kw_mean(args...)
