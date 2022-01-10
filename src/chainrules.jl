@@ -135,11 +135,15 @@ function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
     sig = call_signature(f, args...)
     if haskey(GENERATED_RRULE_CACHE, sig)
         rr = GENERATED_RRULE_CACHE[sig]
-        return Base.invokelatest(rr, f, args...)
+        # return Base.invokelatest(rr, f, args...)
+        val, pb = Base.invokelatest(rr, f, args...)
+        return val, dy -> Base.invokelatest(pb, dy)
     else
         rr = make_rrule(f, args...)
         GENERATED_RRULE_CACHE[sig] = rr
-        return Base.invokelatest(rr, f, args...)
+        # return Base.invokelatest(rr, f, args...)
+        val, pb = Base.invokelatest(rr, f, args...)
+        return val, dy -> Base.invokelatest(pb, dy)
     end
 end
 
@@ -194,7 +198,7 @@ end
 
 function ChainRulesCore.rrule(::typeof(tuple), args...)
     y = tuple(args...)
-    return y, dy -> (NoTangent(), collect(dy...)...)
+    return y, dy -> (NoTangent(), collect(dy)...)
 end
 
 # test_rrule(tuple, 1, 2, 3; output_tangent=Tangent{Tuple}((1, 2, 3)), check_inferred=false)
