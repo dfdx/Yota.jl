@@ -295,7 +295,8 @@ See also: [gradtape](@ref)
 """
 function grad(f::Union{Function,DataType}, args...; seed=1)
     # key consists of function type and type of argument (for structs) or its size
-    cache_key = (f, ([isstruct(arg) ? typeof(arg) : size(arg) for arg in args]...,))
+    # cache_key = (f, ([(isstruct(arg) || args isa Function) ? typeof(arg) : size(arg) for arg in args]...,))
+    cache_key = map(typeof, (f, args...))
     if haskey(GRAD_CACHE, cache_key)
         gf = GRAD_CACHE[cache_key]
         return gf(f, args...; seed=seed)
