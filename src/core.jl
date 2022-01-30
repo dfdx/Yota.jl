@@ -4,10 +4,14 @@ using OrderedCollections
 using ChainRulesCore
 using ChainRules
 using NNlib
-using Ghost
-using Ghost: Tape, Variable, V, Call, mkcall, Constant, inputs
-using Ghost: bound, compile, play!, isstruct
+using Umlaut
+using Umlaut: Tape, Variable, V, Call, mkcall, Constant
+using Ghost: inputs, bound, compile, play!, isstruct
 using Ghost: remove_first_parameter, kwfunc_signature, call_signature
+import Ghost
+
+# import Umlaut
+# trace = Umlaut.trace
 
 
 include("helpers.jl")

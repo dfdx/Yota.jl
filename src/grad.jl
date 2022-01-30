@@ -1,5 +1,5 @@
 function is_primitive(sig)
-    return (Ghost.is_primitive(sig) ||
+    return (Umlaut.is_primitive(sig) ||
             is_yota_primitive(sig) ||
             is_chainrules_primitive(sig))
 end
