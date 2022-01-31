@@ -1,7 +1,7 @@
-function is_primitive(sig)
-    return (Umlaut.is_primitive(sig) ||
-            is_yota_primitive(sig) ||
-            is_chainrules_primitive(sig))
+function isprimitive(f, args...)
+    return (Umlaut.isprimitive(f, args...) ||
+            is_yota_primitive(Tuple{typeof(f), map(typeof, args)...}) ||
+            is_chainrules_primitive(f, args...))
 end
 
 
@@ -50,13 +50,8 @@ function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
     else
         old_dx = getderiv(tape, x)
         if tape[dx].val isa Tangent || tape[old_dx].val isa Tangent
-            # val = tape[dx].val + tape[old_dx].val
-            # new_dx_id = push!(tape, Call, val, (+), [dx.id, old_dx.id])
             new_dx = push!(tape, mkcall(+, dx, old_dx))
         else
-            # val = dx.val .+ old_dx.val
-            # dot_add_id = record!(tape, Constant, +)
-            # new_dx_id = record!(tape, Call, val, broadcast, [dot_add_id, dx.id, old_dx.id])
             new_dx = push!(tape, mkcall(broadcast, +, dx, old_dx))
         end
         setderiv!(tape, x, new_dx)
@@ -64,9 +59,10 @@ function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
 end
 
 
-# there's also Core.var"#isa##kw", but I don't understand its semantics
-is_kwfunc(f) = endswith(string(f), "##kw")
+# not the most robust function, but works in practise
+is_kwfunc(f) = (name = string(f); endswith(name, "##kw") || endswith(name, "##kw\""))
 is_kwfunc(v::Variable) = is_kwfunc(v._op.val)
+
 
 """
 Transofrm the tape replacing calls `fn(args...)` for which `ChainRule.rrule` is defined
@@ -82,6 +78,7 @@ function chainrules_transform!(tape::Tape)
     config = YotaRuleConfig()
     i = 1
     while i <= length(tape)
+        @show i
         op = tape[V(i)]
         if (op isa Call
                 && is_chainrules_primitive(call_signature(tape, op))
@@ -95,7 +92,7 @@ function chainrules_transform!(tape::Tape)
             val_op = mkcall(_getfield, V(rr_op), 1)
             pb_op = mkcall(_getfield, V(rr_op), 2)
             tape.c.pullbacks[V(val_op)] = V(pb_op)
-            replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
+            Ghost.replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
             i += 3  # rrule + 2 _getfield ops
         else
             i += 1
@@ -218,7 +215,7 @@ See grad() for more high-level API.
 """
 function gradtape!(tape::Tape; seed=1)
     # update chainrules if number of rrule or no_rrule methods has changed
-    update_chainrules_primitives!(force=false)
+    # update_chainrules_primitives!(force=false)
     # apply transformations needed for ChainRules
     chainrules_transform!(tape)
     # backpropagate gradients
@@ -234,7 +231,7 @@ end
 
 
 function gradtape(f::Union{Function,DataType}, args...; seed=1)
-    _, tape = trace(f, args...; is_primitive=is_primitive, ctx=GradCtx())
+    _, tape = trace(f, args...; isprimitive=isprimitive, ctx=GradCtx())
     tape = gradtape!(tape; seed=seed)
     return tape
 end

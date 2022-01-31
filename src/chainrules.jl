@@ -6,61 +6,71 @@ import Ghost: make_name, Input, to_expr
 #                              Primitives                                     #
 ###############################################################################
 
-"""
-Collect list of function signatures for which rrule() or no_rrule() is defined
-"""
-function rrule_covered_signatures(fn=rrule)
-    rrule_methods = methods(fn).ms
-    rrule_sigs = [rr.sig for rr in rrule_methods]
-    primal_sigs = []
-    for rr_sig in rrule_sigs
-        # remove `rrule` parameter
-        sig = remove_first_parameter(rr_sig)
-        Ts = collect(Ghost.get_type_parameters(sig))
-        # skip rules with config with features that we don't support
-        if Ts[1] <: RuleConfig && !(Ts[1] <: RuleConfig{>:HasReverseMode})
-            continue
-        end
-        # remove RuleConfig parameter
-        if Ts[1] <: RuleConfig{>:HasReverseMode}
-            sig = remove_first_parameter(sig)
-        end
-        # now sig looks like the signature of the primal function
-        push!(primal_sigs, sig)
-    end
-    # add keyword version of these functions as well
-    kw_sigs = [kwsig for kwsig in map(kwfunc_signature, primal_sigs) if kwsig !== Tuple{}]
-    return [primal_sigs; kw_sigs]
-end
+# """
+# Collect list of function signatures for which rrule() or no_rrule() is defined
+# """
+# function rrule_covered_signatures(fn=rrule)
+#     rrule_methods = methods(fn).ms
+#     rrule_sigs = [rr.sig for rr in rrule_methods]
+#     primal_sigs = []
+#     for rr_sig in rrule_sigs
+#         # remove `rrule` parameter
+#         sig = remove_first_parameter(rr_sig)
+#         Ts = collect(Ghost.get_type_parameters(sig))
+#         # skip rules with config with features that we don't support
+#         if Ts[1] <: RuleConfig && !(Ts[1] <: RuleConfig{>:HasReverseMode})
+#             continue
+#         end
+#         # remove RuleConfig parameter
+#         if Ts[1] <: RuleConfig{>:HasReverseMode}
+#             sig = remove_first_parameter(sig)
+#         end
+#         # now sig looks like the signature of the primal function
+#         push!(primal_sigs, sig)
+#     end
+#     # add keyword version of these functions as well
+#     kw_sigs = [kwsig for kwsig in map(kwfunc_signature, primal_sigs) if kwsig !== Tuple{}]
+#     return [primal_sigs; kw_sigs]
+# end
 
 
 
-const CHAINRULES_PRIMITIVES = Ref(FunctionResolver{Bool}())
-const NUM_CHAINRULES_METHODS = Ref{Int}(0)
+# const CHAINRULES_PRIMITIVES = Ref(FunctionResolver{Bool}())
+# const NUM_CHAINRULES_METHODS = Ref{Int}(0)
 
 
 function update_chainrules_primitives!(;force=false)
-    num_methods = length(methods(rrule)) + length(methods(no_rrule))
-    if force || num_methods != NUM_CHAINRULES_METHODS[]
-        sigs_flags = [
-            [sig => true for sig in rrule_covered_signatures(rrule)];
-            [sig => false for sig in rrule_covered_signatures(no_rrule)]  # override rrule(sig...)
-            ]
-        P = FunctionResolver{Bool}(sigs_flags)
-        CHAINRULES_PRIMITIVES[] = P
-        NUM_CHAINRULES_METHODS[] = num_methods
-    end
+    @info "update_chainrules_primitives!() is deprecated, you can safely remove this call"
+    # num_methods = length(methods(rrule)) + length(methods(no_rrule))
+    # if force || num_methods != NUM_CHAINRULES_METHODS[]
+    #     sigs_flags = [
+    #         [sig => true for sig in rrule_covered_signatures(rrule)];
+    #         [sig => false for sig in rrule_covered_signatures(no_rrule)]  # override rrule(sig...)
+    #         ]
+    #     P = FunctionResolver{Bool}(sigs_flags)
+    #     CHAINRULES_PRIMITIVES[] = P
+    #     NUM_CHAINRULES_METHODS[] = num_methods
+    # end
 end
 
 
-is_chainrules_primitive(sig) = CHAINRULES_PRIMITIVES[][sig] == true
+# is_chainrules_primitive(sig) = CHAINRULES_PRIMITIVES[][sig] == true
+function is_chainrules_primitive(f, args...)
+    Ts = [a isa DataType ? Type{a} : typeof(a) for a in (f, args...)]
+    Core.Compiler.return_type(rrule, Ts) !== Nothing && return true
+    if is_kwfunc(Ts[1])
+        Ts_kwrrule = Tuple{Any, typeof(Core.kwfunc(rrule)), Ts[2:end]...}
+        Core.Compiler.return_type(Core.kwfunc(rrule), Ts_kwrrule) !== Nothing && return true
+    end
+    return false
+end
 
 
 ###############################################################################
 #                              RuleConfig                                     #
 ###############################################################################
 
-struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
+struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
 
 
 function to_rrule_expr(tape::Tape)
@@ -202,4 +212,32 @@ function ChainRulesCore.rrule(::typeof(tuple), args...)
 end
 
 # test_rrule(tuple, 1, 2, 3; output_tangent=Tangent{Tuple}((1, 2, 3)), check_inferred=false)
+
+# function ChainRules.rrule(::YotaRuleConfig, nt::UnionAll, t::Tuple)
+#     @assert(nt <: NamedTuple, "The only supported rrule(::UnionAll, ...) is defined " *
+#             "for NamedTuple{...}, but got $nt instead")
+#     val = nt(t)
+#     function namedtuple_pullback(dy)
+#         return NoTangent(), dy
+#     end
+#     return val, namedtuple_pullback
+# end
+
+
+function ChainRulesCore.rrule(nt::Type{NamedTuple{names}}, t::Tuple) where {names}
+    val = nt(t)
+    function namedtuple_pullback(dy)
+        return NoTangent(), dy
+    end
+    return val, namedtuple_pullback
+end
+
+
+# test_rrule(YotaRuleConfig(), NamedTuple{(:dims,)}, (1,))
+
+
+ChainRulesCore.rrule(::Type{Val{V}}) where V = Val{V}(), dy -> (NoTangent(),)
+
+# @non_differentiable Type{Val{V}}() where V
+
 
