@@ -15,11 +15,3 @@ double_inc(x) = 2x + 1
     @test val == 7
     @test pb(1.0) == (ZeroTangent(), 2.0)
 end
-
-@testset "rulesets" begin
-
-    f = reshape
-    args = [(rand(3, 4),), (12,)]
-    test_rrule(YotaRuleConfig(), Core._apply_iterate, iterate, f, args...; check_inferred=false)
-
-end

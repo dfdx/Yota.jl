@@ -1,23 +1,15 @@
-function isprimitive(f, args...)
-    return (Umlaut.isprimitive(f, args...) ||
-            is_yota_primitive(Tuple{typeof(f), map(typeof, args)...}) ||
-            is_chainrules_primitive(f, args...))
-end
-
-
-########################################################################
-#                            GRAD CONTEXT                              #
-########################################################################
+###############################################################################
+#                                  GRAD CONTEXT                               #
+###############################################################################
 
 struct GradCtx
     # map from primal var to its pullback var
-    # note: LittleDict is required because vars are mutable
-    pullbacks::LittleDict{Variable,Variable}
+    pullbacks::Dict{Variable,Variable}
     # map from primal var to its derivative var
-    derivs::LittleDict{Variable,Variable}
+    derivs::Dict{Variable,Variable}
 end
 
-GradCtx() = GradCtx(LittleDict(), LittleDict())
+GradCtx() = GradCtx(Dict(), Dict())
 
 function rebind_context!(tape::Tape{GradCtx}, st::Dict)
     for (v, dv) in tape.c.derivs
@@ -30,12 +22,48 @@ function rebind_context!(tape::Tape{GradCtx}, st::Dict)
     end
 end
 
-########################################################################
-#                              GRAD                                    #
-########################################################################
 
-const DEBUG_STATE = Ref{Any}()
+const BASE_CTX = BaseCtx()
+const CR_CTX = ChainRulesCtx()
+const YOTA_RULE_CONFIG = YotaRuleConfig()
 
+
+function isprimitive(::GradCtx, f, args...)
+    return (isprimitive(BASE_CTX, f, args...) || isprimitive(CR_CTX, f, args...))
+end
+
+
+"""
+    record_primitive!(tape::Tape{GradCtx}, v_fargs...)
+
+Replace ChainRules primitives `f(args...)` with a sequence:
+
+    rr = push!(tape, mkcall(rrule, f, args...))   # i.e. rrule(f, args...)
+    val = push!(tape, mkcall(getfield, rr, 1)     # extract value
+    pb = push!(tape, mkcall(getfield, rr, 2)      # extract pullback
+"""
+function record_primitive!(tape::Tape{GradCtx}, v_fargs...)
+    v_f, v_args... = v_fargs
+    f, args... = [v isa V ? tape[v].val : v for v in v_fargs]
+    if isprimitive(CR_CTX, f, args...)
+        rr_op = (is_kwfunc(f) ?
+                    mkcall(Core.kwfunc(rrule), v_args[1], rrule, YOTA_RULE_CONFIG, v_args[2:end]...) :
+                    mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...))
+        @assert rr_op.val !== nothing "rrule($(op.fn), ...) returned nothing"
+        v_rr = push!(tape, rr_op)
+        v_val = push!(tape, mkcall(_getfield, v_rr, 1))
+        v_pb = push!(tape, mkcall(_getfield, v_rr, 2))
+        tape.c.pullbacks[v_val] = v_pb
+        return v_val
+    else
+        return push!(tape, mkcall(v_fargs...))
+    end
+end
+
+
+#################################################################################
+#                                   GRAD                                        #
+#################################################################################
 
 getderiv(tape::Tape, v::Variable) = get(tape.c.derivs, bound(tape, v), nothing)
 setderiv!(tape::Tape, x::Variable, dx::Variable) = (
@@ -56,49 +84,6 @@ function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
         end
         setderiv!(tape, x, new_dx)
     end
-end
-
-
-# not the most robust function, but works in practise
-is_kwfunc(f) = (name = string(f); endswith(name, "##kw") || endswith(name, "##kw\""))
-is_kwfunc(v::Variable) = is_kwfunc(v._op.val)
-
-
-"""
-Transofrm the tape replacing calls `fn(args...)` for which `ChainRule.rrule` is defined
-with the following chain or calls:
-
-    * t = rrule(fn, args...)
-    * val = _getfield(t, 1)
-    * pb = _getfield(t, 2)
-
-where `val = fn(args...)` and `pb` is the pullback function.
-"""
-function chainrules_transform!(tape::Tape)
-    config = YotaRuleConfig()
-    i = 1
-    while i <= length(tape)
-        @show i
-        op = tape[V(i)]
-        if (op isa Call
-                && is_chainrules_primitive(call_signature(tape, op))
-                && !is_yota_primitive(call_signature(tape, op)))
-            # replace f(args...) with rrule(f, args...)
-            # if op.fn is a kw function, use kw version of rrule
-            rr_op = (is_kwfunc(op.fn) ?
-                    mkcall(Core.kwfunc(rrule), op.args[1], rrule, op.args[2:end]...) :
-                    mkcall(rrule, config, op.fn, op.args...))
-            @assert rr_op.val !== nothing "rrule($(op.fn), ...) returned nothing"
-            val_op = mkcall(_getfield, V(rr_op), 1)
-            pb_op = mkcall(_getfield, V(rr_op), 2)
-            tape.c.pullbacks[V(val_op)] = V(pb_op)
-            Ghost.replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
-            i += 3  # rrule + 2 _getfield ops
-        else
-            i += 1
-        end
-    end
-    return tape
 end
 
 
@@ -131,22 +116,12 @@ Make a single step of backpropagation.
 """
 function step_back!(tape::Tape, y::Variable)
     @debug "step_back!() for $(tape[y])"
-    df = get_deriv_function(call_signature(tape, tape[y]))
-    if df isa NoTangent
-        @debug "Yota derivative is NoTagnent, stop propagating the gradient in this path"
-        return
-    end
     if !hasderiv(tape, y)
         @debug "No derivative found for y = $y, stop propagating the gradient in this path"
         return
     end
     dy = tape.c.derivs[y]
-    if df !== nothing
-        # Yota rules
-        @debug "Found Yota derivative: $df"
-        y_fargs = [tape[y].fn; tape[y].args...]
-        dxs = push!(tape, mkcall(df, dy, y_fargs...))
-    elseif haskey(tape.c.pullbacks, y)
+    if haskey(tape.c.pullbacks, y)
         # ChainRules
         pb = tape.c.pullbacks[y]
         @debug "Found pullback: $pb"
@@ -164,10 +139,6 @@ function step_back!(tape::Tape, y::Variable)
             dx = push!(tape, mkcall(getfield, dxs, i))
             @debug "Updating derivative: $x -> $dx"
             set_or_add_deriv!(tape, x, dx)
-            # if tape[x] isa Call
-            #     push!(deriv_todo, x)
-            # end
-            # @debug "deriv_todo = $(join(deriv_todo, ", "))"
         end
     end
 end
@@ -214,10 +185,6 @@ Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Inpu
 See grad() for more high-level API.
 """
 function gradtape!(tape::Tape; seed=1)
-    # update chainrules if number of rrule or no_rrule methods has changed
-    # update_chainrules_primitives!(force=false)
-    # apply transformations needed for ChainRules
-    chainrules_transform!(tape)
     # backpropagate gradients
     back!(tape; seed=seed)
     # add a tuple of (val, (gradients...))
@@ -231,7 +198,7 @@ end
 
 
 function gradtape(f::Union{Function,DataType}, args...; seed=1)
-    _, tape = trace(f, args...; isprimitive=isprimitive, ctx=GradCtx())
+    _, tape = trace(f, args...; ctx=GradCtx())
     tape = gradtape!(tape; seed=seed)
     return tape
 end

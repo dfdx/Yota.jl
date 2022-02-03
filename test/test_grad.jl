@@ -1,7 +1,7 @@
 import Statistics
 import ChainRulesCore
 import ChainRulesCore: rrule, Tangent, ZeroTangent, NoTangent, @opt_out
-import Yota: is_chainrules_primitive
+import Yota: _primitive
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)
@@ -42,15 +42,15 @@ rrule(::typeof(chain_foo), ::Float64) = ZeroTangent(), dy -> ZeroTangent()
 end
 
 
-@testset "grad: no_rrule" begin
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), ComplexF64}) == true  # should hit ::Number
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float32}) == false    # should hit ::Real
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
-end
+# @testset "grad: no_rrule" begin
+#     @test is_chainrules_primitive(Tuple{typeof(chain_foo), ComplexF64}) == true  # should hit ::Number
+#     @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float32}) == false    # should hit ::Real
+#     @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
+# end
 
-@testset "grad: notangent" begin
-    @test Yota.get_deriv_function(Yota.call_signature(Colon(), 1, 2)) isa ChainRulesCore.NoTangent
-end
+# @testset "grad: notangent" begin
+#     @test Yota.get_deriv_function(Yota.call_signature(Colon(), 1, 2)) isa ChainRulesCore.NoTangent
+# end
 
 
 # originally a simplified version of lstm_forward
