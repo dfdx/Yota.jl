@@ -1,7 +1,6 @@
 import Statistics
 import ChainRulesCore
 import ChainRulesCore: rrule, Tangent, ZeroTangent, NoTangent, @opt_out
-import Yota: is_chainrules_primitive
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)
@@ -9,20 +8,20 @@ loss_double_broadcast2(b, x) = sum(x .* x .+ b)
 loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 
 
-function rrule(::typeof(Broadcast.broadcasted), ::typeof(sin), x)
-    sin_pullback(dy) = (ZeroTangent(), ZeroTangent(), cos.(x) .* dy)
-    return sin.(x), sin_pullback
-end
+# function rrule(::typeof(Broadcast.broadcasted), ::typeof(sin), x)
+#     sin_pullback(dy) = (ZeroTangent(), ZeroTangent(), cos.(x) .* dy)
+#     return sin.(x), sin_pullback
+# end
 
 
-function rrule(::typeof(Broadcast.broadcasted), ::typeof(tanh), x)
-    y = tanh.(x)
-    function bcast_tanh_pullback(dy)
-      dx = @. (1 - y ^ 2) * dy
-      return NoTangent(), NoTangent(), dx
-    end
-    return y, bcast_tanh_pullback
-end
+# function rrule(::typeof(Broadcast.broadcasted), ::typeof(tanh), x)
+#     y = tanh.(x)
+#     function bcast_tanh_pullback(dy)
+#       dx = @. (1 - y ^ 2) * dy
+#       return NoTangent(), NoTangent(), dx
+#     end
+#     return y, bcast_tanh_pullback
+# end
 
 
 chain_foo(x::Number) = :ok
@@ -32,26 +31,13 @@ rrule(::typeof(chain_foo), ::Real) = ZeroTangent(), dy -> ZeroTangent()
 rrule(::typeof(chain_foo), ::Float64) = ZeroTangent(), dy -> ZeroTangent()
 @opt_out rrule(::typeof(chain_foo), ::Real)
 
-update_chainrules_primitives!()
-
 
 @testset "grad: simple" begin
     args3 = (rand(4, 3), rand(4), rand(3))
     args4 = (rand(4, 3), rand(4), rand(3), rand(4))
     @test gradcheck((W, b, x) -> sum(W * x .+ b), args3...)
-    # @test gradcheck((W, b, x) -> sum(tanh.(W * x .+ b)), args3...)
-    # @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
-end
-
-
-@testset "grad: no_rrule" begin
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), ComplexF64}) == true  # should hit ::Number
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float32}) == false    # should hit ::Real
-    @test is_chainrules_primitive(Tuple{typeof(chain_foo), Float64}) == true
-end
-
-@testset "grad: notangent" begin
-    @test Yota.get_deriv_function(Yota.call_signature(Colon(), 1, 2)) isa ChainRulesCore.NoTangent
+    @test gradcheck((W, b, x) -> sum(tanh.(W * x .+ b)), args3...)
+    @test gradcheck((W, b, x, y) -> sum(abs2.(tanh.(W * x .+ b) .- y)), args4...)
 end
 
 
@@ -124,7 +110,7 @@ end
     # @test grad(x -> iterate(x, 2)[1], x)[2][1] == [0, 1, 0]
     # @test grad(x -> iterate(x, 3)[1], x)[2][1] == [0, 0, 1.0]
 
-    x = (1:3)
+    x = (1:3)
     @test grad(x -> iterate(x)[1], x)[2][2] == ZeroTangent()
     @test grad(x -> iterate(x, 1)[1], x)[2][2] == ZeroTangent()
 
@@ -207,7 +193,7 @@ constructor_loss(a) = (p = Point(a, a); p.x + p.y)
 
     @test tape[tape.result].val[1] == loss(args...)
 
-    play!(tape)
+    play!(tape, loss, args...)
     @test tape[tape.result].val[1] == loss(args...)
 
     val, g = grad(loss, args...)

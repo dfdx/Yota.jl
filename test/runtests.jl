@@ -11,6 +11,7 @@ using CUDA
 
 include("test_helpers.jl")
 include("test_chainrules.jl")
+include("test_rulesets.jl")
 include("test_grad.jl")
 include("test_update.jl")
 include("test_examples.jl")
