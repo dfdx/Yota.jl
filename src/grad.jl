@@ -128,7 +128,7 @@ function step_back!(tape::Tape, y::Variable)
         dxs = push!(tape, mkcall(pb, dy))
         # propage derivs to rrule variable
         rr = tape[y].args[1]
-        y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[3:end] : tape[rr].args[2:end]
+        y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[4:end] : tape[rr].args[2:end]
     else
         sig_str = join(["::$T" for T in Ghost.call_signature(tape, tape[y]).parameters], ", ")
         error("No deriative rule found for op $(tape[y]), " *

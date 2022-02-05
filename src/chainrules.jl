@@ -12,9 +12,9 @@ struct ChainRulesCtx end
 
 function isprimitive(::ChainRulesCtx, f, args...)
     Ts = [a isa DataType ? Type{a} : typeof(a) for a in (f, args...)]
-    Core.Compiler.return_type(rrule, Ts) !== Nothing && return true
+    Core.Compiler.return_type(rrule, (YotaRuleConfig, Ts...,)) !== Nothing && return true
     if is_kwfunc(Ts[1])
-        Ts_kwrrule = Tuple{Any, typeof(Core.kwfunc(rrule)), Ts[2:end]...}
+        Ts_kwrrule = (Any, typeof(Core.kwfunc(f)), YotaRuleConfig, Ts[2:end]...,)
         Core.Compiler.return_type(Core.kwfunc(rrule), Ts_kwrrule) !== Nothing && return true
     end
     return false

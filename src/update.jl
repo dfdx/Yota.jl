@@ -1,5 +1,10 @@
 ## update inputs vars using calculated gradients
 
+"Check if an object is of a struct type, i.e. not a number or array"
+isstruct(::Type{T}) where T = !isempty(fieldnames(T))
+isstruct(obj) = isstruct(typeof(obj))
+
+
 function path_value_pairs(gx::Tangent; current_path=[])
     result = []
     ks = collect(keys(gx))

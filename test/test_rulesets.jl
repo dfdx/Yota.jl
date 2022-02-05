@@ -1,4 +1,5 @@
 import ChainRulesCore.rrule
+import Yota.YotaRuleConfig
 
 
 @testset "rulesets" begin
@@ -21,7 +22,7 @@ end
     dxs = [pbs[1](1.0)[2], pbs[2](1.0)[2]]
 
     # use rrule for broadcasted
-    _, bcast_pb = rrule(Broadcast.broadcasted, f, xs)
+    _, bcast_pb = rrule(YotaRuleConfig(), Broadcast.broadcasted, f, xs)
     dxs_bcast = bcast_pb(ones(2))[end]
 
     @test all(dxs .== dxs_bcast)

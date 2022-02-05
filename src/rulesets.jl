@@ -1,4 +1,5 @@
 import ChainRulesCore: rrule
+import Umlaut: __new__
 
 ###############################################################################
 #                                 Rules                                       #
@@ -51,7 +52,7 @@ function rrule(::YotaRuleConfig, ::typeof(Core._apply_iterate),
 end
 
 
-function ChainRulesCore.rrule(::typeof(tuple), args...)
+function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(tuple), args...)
     y = tuple(args...)
     return y, dy -> (NoTangent(), collect(dy)...)
 end
@@ -59,7 +60,7 @@ end
 # test_rrule(tuple, 1, 2, 3; output_tangent=Tangent{Tuple}((1, 2, 3)), check_inferred=false)
 
 
-function rrule(nt::Type{NamedTuple{names}}, t::Tuple) where {names}
+function rrule(::YotaRuleConfig, nt::Type{NamedTuple{names}}, t::Tuple) where {names}
     val = nt(t)
     function namedtuple_pullback(dy)
         return NoTangent(), dy
@@ -93,7 +94,7 @@ function unzip(tuples)
 end
 
 
-function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
+function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), f::F, args...) where F
     ys, pbs = unzip(rrule_via_ad.(YOTA_RULE_CONFIG, f, args...))
     function pullback(Δ)
         Δ = unthunk(Δ)
@@ -105,34 +106,228 @@ function rrule(::typeof(Broadcast.broadcasted), f::F, args...) where F
 end
 
 
-function rrule(::typeof(Broadcast.materialize), x)
+function rrule(::YotaRuleConfig, ::typeof(Broadcast.materialize), x)
     return Broadcast.materialize(x), dy -> (NoTangent(), dy)
 end
 
 # test_rrule(Broadcast.materialize, Broadcast.broadcasted(sin, rand(3)); output_tangent=ones(3))
 
 
-# TODO: turn into rrules
+function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(+), x, y)
+    function plus_bcast_pullback(dy)
+        # println("dy- $dy")
+        dy = unthunk(dy)
+        # println("dy+ $dy")
+        return NoTangent(), NoTangent(), unbroadcast(x, dy), unbroadcast(y, dy)
+    end
+    return x .+ y, plus_bcast_pullback
+end
 
 
-# function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(+), x, y)
-#     return NoTangent(), NoTangent(), unbroadcast(x, dy), unbroadcast(y, dy)
+function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(*), x, y)
+    function mul_bcast_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), NoTangent(), unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
+    end
+    return x .* y, mul_bcast_pullback
+end
+
+
+function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(Base.literal_pow),
+        ::typeof(^), x, ::Val{p}) where p
+    y = Broadcast.broadcasted(Base.literal_pow, ^, x, Val(p))
+    function literal_pow_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
+    end
+    return y, literal_pow_pullback
+end
+
+
+function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(^), x, p::Real)
+    y = x .^ p
+    function pow_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
+    end
+    return y, pow_pullback
+end
+
+
+###############################################################################
+#                        getindex, getfield, __new__                          #
+###############################################################################
+
+function rrule(::YotaRuleConfig, ::typeof(getindex), x, I...)
+    y = getindex(x, I...)
+    function getindex_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), ungetindex(x, dy, I...), [ZeroTangent() for i in I]...
+    end
+    return y, getindex_pullback
+
+end
+
+
+function rrule(::YotaRuleConfig, ::typeof(getproperty), s, f::Symbol)
+    y = getproperty(s, f)
+    function getproperty_pullback(dy)
+        dy = unthunk(dy)
+        T = typeof(s)
+        nt = NamedTuple{(f,)}((dy,))
+        return NoTangent(), Tangent{T}(; nt...), ZeroTangent()
+    end
+    return y, getproperty_pullback
+end
+
+
+function rrule(::YotaRuleConfig, ::typeof(getfield), s::Tuple, f::Int)
+    y = getfield(s, f)
+    function tuple_getfield_pullback(dy)
+        dy = unthunk(dy)
+        T = typeof(s)
+        # deriv of a tuple is a Tangent{Tuple}(...) with all elements set to ZeroTangent()
+        # except for the one at index f which is set to dy
+        return NoTangent(), Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), ZeroTangent()
+    end
+    return y, tuple_getfield_pullback
+end
+
+
+function rrule(::YotaRuleConfig, ::typeof(__new__), T, args...)
+    y = __new__(T, args...)
+    function __new__pullback(dy)
+        dy = unthunk(dy)
+        if dy isa NoTangent || dy isa ZeroTangent
+            fld_derivs = [dy for fld in fieldnames(T)]
+        else
+            fld_derivs = [getproperty(dy, fld) for fld in fieldnames(T)]
+        end
+        return NoTangent(), NoTangent(), fld_derivs...
+    end
+    return y, __new__pullback
+end
+
+
+###############################################################################
+#                                   iterate                                   #
+###############################################################################
+
+function rrule(::YotaRuleConfig, ::typeof(iterate), x::AbstractArray)
+    y = iterate(x)
+    function iterate_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), ungetindex(x, dy, 1)
+    end
+    return y, iterate_pullback
+end
+
+function rrule(::YotaRuleConfig, ::typeof(iterate), x::AbstractArray, i::Integer)
+    y = iterate(x, i)
+    function iterate_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), ungetindex(x, dy, i), ZeroTangent()
+    end
+    return y, iterate_pullback
+end
+
+function rrule(::YotaRuleConfig, ::typeof(iterate), t::Tuple)
+    y = iterate(t)
+    function iterate_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), ungetfield(dy[1], t, 1)
+    end
+    return y, iterate_pullback
+end
+
+function rrule(::YotaRuleConfig, ::typeof(iterate), t::Tuple, i::Integer)
+    y = iterate(t, i)
+    function iterate_pullback(dy)
+        dy = unthunk(dy)
+        return NoTangent(), ungetfield(dy[1], t, i), ZeroTangent()
+    end
+    return y, iterate_pullback
+end
+
+
+# here we explicitely stop propagation in iteration
+# over ranges (e.g for i=1:3 ... end)
+function rrule(::YotaRuleConfig, ::typeof(iterate), x::UnitRange)
+    y = iterate(x)
+    function iterate_pullback(dy)
+        return NoTangent(), ZeroTangent()
+    end
+    return y, iterate_pullback
+end
+function rrule(::YotaRuleConfig, ::typeof(iterate), x::UnitRange, i::Integer)
+    y = iterate(x, i)
+    function iterate_pullback(dy)
+        return NoTangent(), ZeroTangent(), ZeroTangent()
+    end
+    return y, iterate_pullback
+end
+
+
+## tuple unpacking
+
+function rrule(::YotaRuleConfig, ::typeof(Base.indexed_iterate), t::Tuple, i::Int)
+    y = Base.indexed_iterate(t, i)
+    function indexed_iterate_pullback(dy)
+        d_val, d_state = dy
+        return NoTangent(), ungetfield(d_val, t, i), ZeroTangent()
+    end
+    return y, indexed_iterate_pullback
+end
+
+function rrule(::YotaRuleConfig, ::typeof(Base.indexed_iterate), t::Tuple, i::Int, state::Int)
+    y = Base.indexed_iterate(t, i, state)
+    function indexed_iterate_pullback(dy)
+        d_val, d_state = dy
+        return NoTangent(), ungetfield(d_val, t, i), ZeroTangent(), ZeroTangent()
+    end
+    return y, indexed_iterate_pullback
+end
+
+
+# ## tuple construction
+
+# ∇tuple(dy, ::typeof(tuple), args...) = (NoTangent(), [dy[i] for i=1:length(args)]...)
+# #@drule tuple(args::Vararg) ∇tuple
+
+# ## some no diff functions
+
+# #@drule Core.kwfunc(f::Any) (dy, _, f) -> NoTangent()
+
+# ## cat & co.
+
+# function ∇cat_kw(dy, ::typeof(Core.kwfunc(cat)), kw::Any, ::typeof(cat), arrs...)
+#     return (
+#         NoTangent(),
+#         NoTangent(),
+#         NoTangent(),
+#         [uncat(dy, i, arrs...; dims=kw.dims) for i=1:length(arrs)]...
+#     )
 # end
-# @drule broadcasted(::typeof(+), x::Any, y::Any) ∇broadcasted_special
+# #@drule Core.kwfunc(cat)(kw::Any, _::typeof(cat), arrs::Vararg) ∇cat_kw
 
-# function ∇broadcasted_special(dy, ::typeof(broadcasted), ::typeof(*), x, y)
-#     return NoTangent(), NoTangent(), unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
+# function ∇vcat(dy, ::typeof(vcat), arrs...)
+#     return NoTangent(), [uncat(dy, i, arrs...; dims=1) for i=1:length(arrs)]...
 # end
-# @drule broadcasted(::typeof(*), x::Any, y::Any) ∇broadcasted_special
+# #@drule vcat(arrs::Vararg) ∇vcat
 
-# function ∇broadcasted(dy, ::typeof(broadcasted), ::typeof(Base.literal_pow),
-#     ::typeof(^), x::Any, ::Val{p}) where p
-#     return NoTangent(), NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
+# function ∇hcat(dy, ::typeof(hcat), arrs...)
+#     return NoTangent(), [uncat(dy, i, arrs...; dims=2) for i=1:length(arrs)]...
 # end
-# @drule broadcasted(::typeof(Base.literal_pow), ::typeof(^), x::Any, ::Val) ∇broadcasted
+# #@drule hcat(arrs::Vararg) ∇hcat
 
-# function ∇broadcasted(dy, ::typeof(broadcasted),
-#     ::typeof(^), x::Any, p::Real)
-#     return NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
-# end
-# @drule broadcasted(::typeof(^), x::Any, ::Real) ∇broadcasted
+## Colon
+
+#@drule Colon()(a::Int, b::Int) NoTangent()
+
+function rrule(::YotaRuleConfig, ::Colon, a::Int, b::Int)
+    y = a:b
+    function colon_pullback(dy)
+        return NoTangent(), NoTangent(), NoTangent()
+    end
+    return y, colon_pullback
+end
