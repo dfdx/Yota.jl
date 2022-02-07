@@ -4,18 +4,14 @@ using ChainRulesCore
 using ChainRules
 using NNlib
 using Umlaut
-# TODO: make these objects exported by default?
-import Umlaut: Tape, Variable, V, Call, mkcall, Constant
 import Umlaut: record_primitive!, isprimitive, BaseCtx
-import Umlaut: play!, compile
-import Ghost
-import Ghost: bound, inputs
+
+const V = Umlaut.Variable
 
 
 include("helpers.jl")
 include("utils.jl")
 include("deprecated.jl")
-# include("drules.jl")
 include("chainrules.jl")
 include("rulesets.jl")
 include("grad.jl")
@@ -23,7 +19,6 @@ include("update.jl")
 include("gradcheck.jl")
 
 
-# TODO: move to Ghost
 function show_compact(tape::Tape)
     println(typeof(tape))
     dont_show = Set([])
@@ -59,6 +54,5 @@ function show_compact(tape::Tape)
         end
     end
 end
-
 
 Base.show(io::IO, tape::Tape{GradCtx}) = show_compact(tape)

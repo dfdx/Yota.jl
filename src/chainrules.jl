@@ -1,6 +1,6 @@
 import ChainRulesCore: rrule, no_rrule
 import ChainRulesCore: rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
-import Ghost: make_name, Input, to_expr
+import Umlaut: make_name, Input, to_expr
 
 
 ###############################################################################
