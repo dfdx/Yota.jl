@@ -1,20 +1,48 @@
-# Yota.jl
+# Yota
 
-Umlaut.jl is a code tracer for the Julia programming language. It lets you trace the function execution, recording all primitive operations onto a linearized tape. Here's a quick example:
+## Basic usage
 
+The most important function is [`grad()`](@ref), which has the form
+`grad(f, args...) -> (output, gradients)`, e.g.:
 
 ```@example
-using Umlaut     # hide
-inc(x) = x + 1
-mul(x, y) = x * y
-inc_double(x) = mul(inc(x), inc(x))
+using Yota
 
-val, tape = trace(inc_double, 2.0)
+f(x) = 5x + 3
+
+val, g = grad(f, 10)
 ```
-The tape can then be analyzed, modified and even compiled back to a normal function. See the following sections for details.
 
-!!! note
+Here `val` is the result of `f(10)` and `g` is a tuple of gradients w.r.t. to the inputs
+including the function itself (which is [`ZeroTangent()`](https://juliadiff.org/ChainRulesCore.jl/dev/api.html#ChainRulesCore.ZeroTangent) in this case).
 
-    Umlaut.jl was started as a fork of Ghost.jl trying to overcome some of its
-    limitations, but eventually the codebase has diverged so much that the new package was born. Although the two have pretty similar API, there are several notable differences.
-    See [Migration from Ghost](@ref) for details.
+
+A bit more complex example from the ML domain:
+
+```@example
+using Yota
+
+mutable struct Linear{T}
+    W::AbstractArray{T,2}
+    b::AbstractArray{T}
+end
+
+(m::Linear)(X) = m.W * X
+
+loss(m::Linear, X) = sum(m(X))
+
+m = Linear(rand(3,4), rand(3))
+X = rand(4,5)
+
+val, g = grad(loss, m, X)
+```
+
+The computed gradients can then be used in the `update!()` function to modify tensors and fields of (mutable) structs:
+
+```julia
+for i=1:100
+    val, g = grad(loss, m, X)
+    println("Loss value in $(i)th epoch: $val")
+    update!(m, g[2], (x, gx) -> x .- 0.01gx)
+end
+```
