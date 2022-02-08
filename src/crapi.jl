@@ -1,6 +1,6 @@
 import ChainRulesCore: rrule, no_rrule
 import ChainRulesCore: rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
-import Ghost: make_name, Input, to_expr
+import Umlaut: make_name, Input, to_expr
 
 
 ###############################################################################
@@ -89,7 +89,7 @@ Examples:
 
 """
 make_rrule(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
-make_rrule(f, args...) = make_rrule(gradtape(f, args...))
+make_rrule(f, args...) = make_rrule(gradtape(f, args...; seed=:auto))
 
 
 const GENERATED_RRULE_CACHE = Dict()

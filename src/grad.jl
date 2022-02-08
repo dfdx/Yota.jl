@@ -130,7 +130,7 @@ function step_back!(tape::Tape, y::Variable)
         rr = tape[y].args[1]
         y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[4:end] : tape[rr].args[2:end]
     else
-        sig_str = join(["::$T" for T in Ghost.call_signature(tape, tape[y]).parameters], ", ")
+        sig_str = join(["::$T" for T in Umlaut.call_signature(tape, tape[y]).parameters], ", ")
         error("No deriative rule found for op $(tape[y]), " *
               "try defining it using \n\n\tChainRulesCore.rrule($sig_str) = ...\n")
     end
@@ -158,6 +158,10 @@ function back!(tape::Tape; seed=1)
     z = tape.result
     if (seed == 1) && (ndims(tape[z].val) > 0)
         error("Gradient of a vector-valued function requires a seed")
+    elseif seed == :auto
+        zval = tape[z].val
+        @assert zval isa Number || zval isa AbstractArray
+        seed = zval isa Number ? one(zval) : ones(eltype(zval), size(zval))
     end
     dy = push!(tape, Constant(seed))
     # save seed var to use in compilation later
@@ -204,13 +208,13 @@ function gradtape(f::Union{Function,DataType}, args...; seed=1)
 end
 
 
-"Like Ghost.compile, but adds Yota specific ops"
+"Like Umlaut.compile, but adds Yota specific ops"
 function grad_compile(tape::Tape)
-    ex = Ghost.to_expr(tape)
+    ex = Umlaut.to_expr(tape)
     seed_var = tape.meta[:seed]
     seed_default_val = tape[seed_var].val
     insert!(ex.args[1].args, 2, Expr(:parameters, Expr(:kw, :seed, seed_default_val)))
-    seed_var_name = Ghost.make_name(seed_var.id)
+    seed_var_name = Umlaut.make_name(seed_var.id)
     op_exprs = ex.args[2].args
     for op_ex in op_exprs
         if op_ex.args[1] == seed_var_name
