@@ -158,6 +158,10 @@ function back!(tape::Tape; seed=1)
     z = tape.result
     if (seed == 1) && (ndims(tape[z].val) > 0)
         error("Gradient of a vector-valued function requires a seed")
+    elseif seed == :auto
+        zval = tape[z].val
+        @assert zval isa Number || zval isa AbstractArray
+        seed = zval isa Number ? one(zval) : ones(eltype(zval), size(zval))
     end
     dy = push!(tape, Constant(seed))
     # save seed var to use in compilation later

@@ -2,7 +2,7 @@
 
 ![Status](https://github.com/dfdx/Yota.jl/actions/workflows/test.yml/badge.svg?branch=main)
 
-Reverse-mode automatic differentiation for static and dynamic graphs.
+Reverse-mode automatic differentiation
 
 ## Migration to Yota v0.5
 

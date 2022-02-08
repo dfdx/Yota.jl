@@ -12,7 +12,7 @@ const V = Umlaut.Variable
 include("helpers.jl")
 include("utils.jl")
 include("deprecated.jl")
-include("chainrules.jl")
+include("crapi.jl")
 include("rulesets.jl")
 include("grad.jl")
 include("update.jl")

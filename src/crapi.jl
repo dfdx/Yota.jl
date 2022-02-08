@@ -89,7 +89,7 @@ Examples:
 
 """
 make_rrule(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
-make_rrule(f, args...) = make_rrule(gradtape(f, args...))
+make_rrule(f, args...) = make_rrule(gradtape(f, args...; seed=:auto))
 
 
 const GENERATED_RRULE_CACHE = Dict()
