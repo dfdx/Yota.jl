@@ -181,13 +181,6 @@ function back!(tape::Tape; seed=1)
 end
 
 
-"""
-    gradtape(f::Union{Function, DataType}, args...; seed=1)
-    gradtape!(tape::Tape; seed=1)
-
-Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes.
-See grad() for more high-level API.
-"""
 function gradtape!(tape::Tape; seed=1)
     # backpropagate gradients
     back!(tape; seed=seed)
@@ -201,6 +194,13 @@ function gradtape!(tape::Tape; seed=1)
 end
 
 
+"""
+    gradtape(f::Union{Function, DataType}, args...; seed=1)
+    gradtape!(tape::Tape; seed=1)
+
+Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes.
+See grad() for more high-level API.
+"""
 function gradtape(f::Union{Function,DataType}, args...; seed=1)
     _, tape = trace(f, args...; ctx=GradCtx())
     tape = gradtape!(tape; seed=seed)
@@ -240,10 +240,12 @@ Find gradient of a callable `f` w.r.t. its arguments.
 grafients w.r.t. to its inputs (including the callable itself).
 
 ```jldoctest
+using Yota   # hide
+
 val, g = grad(x -> sum(x .+ 1), [1.0, 2.0, 3.0])
 
 # output
-(9.0, (ZeroTangent(), [1.0, 1.0, 1.0]))
+(9.0, (ChainRulesCore.ZeroTangent(), [1.0, 1.0, 1.0]))
 ```
 
 By default, `grad()` expects the callable to return a scalar.
@@ -251,10 +253,12 @@ Vector-valued functions can be differentiated if a seed (starting value)
 is provided. Seed is equivalent to the vector in VJP notation.
 
 ```jldoctest
+using Yota   # hide
+
 val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=ones(3))
 
 # output
-([2.0, 4.0, 6.0], (ZeroTangent(), [2.0, 2.0, 2.0]))
+([2.0, 4.0, 6.0], (ChainRulesCore.ZeroTangent(), [2.0, 2.0, 2.0]))
 ```
 
 All gradients can be applied to original variables using `update!()` function.

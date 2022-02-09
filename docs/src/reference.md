@@ -6,9 +6,22 @@ CurrentModule = Yota
 
 ```@docs
 grad
-gradtape
+Yota.gradtape
 YotaRuleConfig
 rrule_via_ad
+```
+
+## Internals
+
+```@docs
+record_primitive!
+back!
+step_back!
+todo_list
+grad_compile
+make_rrule
+_getfield
+isstruct
 ```
 
 

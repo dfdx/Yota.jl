@@ -27,14 +27,18 @@ mutable struct Linear{T}
     b::AbstractArray{T}
 end
 
-(m::Linear)(X) = m.W * X
+(m::Linear)(X) = m.W * X .+ m.b
 
+# not very useful, but simple example of a loss function
 loss(m::Linear, X) = sum(m(X))
 
 m = Linear(rand(3,4), rand(3))
 X = rand(4,5)
 
 val, g = grad(loss, m, X)
+
+@show g[2].W
+@show g[2].b
 ```
 
 The computed gradients can then be used in the `update!()` function to modify tensors and fields of (mutable) structs:

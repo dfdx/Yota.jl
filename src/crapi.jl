@@ -25,6 +25,12 @@ end
 #                              RuleConfig                                     #
 ###############################################################################
 
+"""
+    YotaRuleConfig()
+
+ChainRules.RuleConfig passed to all `rrule`s in Yota.
+Extends RuleConfig{Union{NoForwardsMode,HasReverseMode}}.
+"""
 struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
 
 
@@ -94,6 +100,12 @@ make_rrule(f, args...) = make_rrule(gradtape(f, args...; seed=:auto))
 
 const GENERATED_RRULE_CACHE = Dict()
 
+
+"""
+    rrule_via_ad(::YotaRuleConfig, f, args...)
+
+Generate `rrule` using Yota.
+"""
 function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
     res = rrule(f, args...)
     !isnothing(res) && return res
