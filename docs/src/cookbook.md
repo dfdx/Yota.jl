@@ -1,6 +1,6 @@
 # Cookbook
 
-Value and gradient:
+**Value and gradient:**
 
 ```@example
 using Yota      # hide
@@ -10,7 +10,7 @@ val, g = grad(f, 2.0, 3.0)
 _, dx, dy = g
 ```
 
-Gradient tape (useful for further processing):
+**Gradient tape (useful for further processing):**
 
 ```@example
 using Yota                # hide
@@ -19,7 +19,7 @@ f(x, y) = x^2 + sqrt(y)   # hide
 tape = gradtape(f, 2.0, 3.0)
 ```
 
-VJP, value and gradient:
+**VJP, value and gradient:**
 
 ```@example
 using Yota                # hide
@@ -30,7 +30,7 @@ w, b, x = rand(3, 4), rand(3), rand(4, 5)
 val, g = grad(h, w, b, x; seed=ones(3, 5))
 ```
 
-VJP, value and pullback:
+**VJP, value and pullback:**
 
 ```@example
 using Yota                # hide
@@ -43,7 +43,7 @@ val, pb = rrule_via_ad(YotaRuleConfig(), h, w, b, x)
 pb(ones(3, 5))
 ```
 
-Reset gradient cache:
+**Reset gradient cache:**
 
 ```@example
 import Yota    # hide

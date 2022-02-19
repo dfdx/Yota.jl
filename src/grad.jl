@@ -98,7 +98,7 @@ function todo_list(tape::Tape{GradCtx}, y=tape.result)
     if is_rrule_based
         # use rrule instead
         y = tape[y].args[1]
-        y_fargs = is_kwfunc(y._op.fn) ? tape[y].args[3:end] : tape[y].args[2:end]
+        y_fargs = is_kwfunc(y._op.fn) ? tape[y].args[3:end] : tape[y].args
     end
     y_todo = [x for x in y_fargs if x isa V && tape[x] isa Call]
     x_todos = [todo_list(tape, x) for x in y_todo]
@@ -187,8 +187,10 @@ function gradtape!(tape::Tape; seed=1)
     # add a tuple of (val, (gradients...))
     deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
+    # unthunk results
     deriv_tuple_unthunked = push!(tape, mkcall(map, ChainRules.unthunk, deriv_tuple))
     new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple_unthunked))
+    # set result
     tape.result = new_result
     return tape
 end
