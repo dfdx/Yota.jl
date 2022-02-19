@@ -4,56 +4,26 @@ CurrentModule = Yota
 
 ## Public API
 
-### Tracing
+```@docs
+grad
+Yota.gradtape
+YotaRuleConfig
+rrule_via_ad
+```
+
+## Internals
 
 ```@docs
-trace
-isprimitive
 record_primitive!
-BaseCtx
-__new__
+back!
+step_back!
+todo_list
+grad_compile
+make_rrule
+_getfield
+isstruct
 ```
 
-### Variables
-
-```@docs
-Variable
-bound
-rebind!
-rebind_context!
-```
-
-### Tape structure
-
-```@docs
-Tape
-AbstractOp
-Input
-Constant
-Call
-Loop
-inputs
-inputs!
-mkcall
-```
-
-### Tape transformations
-
-```@docs
-push!
-insert!
-replace!
-deleteat!
-primitivize!
-```
-
-## Tape execution
-
-```@docs
-play!
-compile
-to_expr
-```
 
 ## Index
 

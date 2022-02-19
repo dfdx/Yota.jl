@@ -7,6 +7,8 @@ makedocs(
     modules = [Yota],
     pages = [
         "Main" => "index.md",
+        "Cookbook" => "cookbook.md",
+        "Build your own AD" => "design.md",
         "Reference" => "reference.md",
     ],
 )

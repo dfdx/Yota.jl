@@ -10,7 +10,7 @@ using CUDA
 
 
 include("test_helpers.jl")
-include("test_crapi.jl")
+include("test_cr_api.jl")
 include("test_rulesets.jl")
 include("test_grad.jl")
 include("test_update.jl")
