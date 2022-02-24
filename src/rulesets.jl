@@ -6,17 +6,6 @@ import Umlaut: __new__
 ###############################################################################
 
 
-# TODO: figure out failing test_rrules, move to actual tests
-
-
-# function rrule(::typeof(Broadcast.broadcasted), ::typeof(identity), x)
-#     identity_pullback(dy) = (NoTangent(), NoTangent(), dy)
-#     return x, identity_pullback
-# end
-
-# test_rrule(broadcasted, identity, [1.0, 2.0]) -- fails at the moment
-
-
 function rrule(::YotaRuleConfig, ::typeof(Core._apply_iterate),
         ::typeof(iterate), f::F, args...) where F
     # flatten nested arguments
@@ -154,6 +143,13 @@ function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(^), x
 end
 
 
+# note: broadcast, not broadcastED
+function ChainRulesCore.rrule(config::YotaRuleConfig, ::typeof(Broadcast.broadcast),
+        f::F, args...) where F
+    return rrule(config, Broadcast.broadcasted, f, args...)
+end
+
+
 ###############################################################################
 #                        getindex, getfield, __new__                          #
 ###############################################################################
@@ -162,7 +158,7 @@ function rrule(::YotaRuleConfig, ::typeof(getindex), x, I...)
     y = getindex(x, I...)
     function getindex_pullback(dy)
         dy = unthunk(dy)
-        return NoTangent(), ungetindex(x, dy, I...), [ZeroTangent() for i in I]...
+        return NoTangent(), ungetindex(x, dy, I...), [NoTangent() for i in I]...
     end
     return y, getindex_pullback
 
@@ -175,7 +171,7 @@ function rrule(::YotaRuleConfig, ::typeof(getproperty), s, f::Symbol)
         dy = unthunk(dy)
         T = typeof(s)
         nt = NamedTuple{(f,)}((dy,))
-        return NoTangent(), Tangent{T}(; nt...), ZeroTangent()
+        return NoTangent(), Tangent{T}(; nt...), NoTangent()
     end
     return y, getproperty_pullback
 end
@@ -186,9 +182,9 @@ function rrule(::YotaRuleConfig, ::typeof(getfield), s::Tuple, f::Int)
     function tuple_getfield_pullback(dy)
         dy = unthunk(dy)
         T = typeof(s)
-        # deriv of a tuple is a Tangent{Tuple}(...) with all elements set to ZeroTangent()
+        # deriv of a tuple is a Tangent{Tuple}(...) with all elements set to NoTangent()
         # except for the one at index f which is set to dy
-        return NoTangent(), Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), ZeroTangent()
+        return NoTangent(), Tangent{T}([i == f ? dy : NoTangent() for i=1:length(s)]...), NoTangent()
     end
     return y, tuple_getfield_pullback
 end
@@ -226,7 +222,7 @@ function rrule(::YotaRuleConfig, ::typeof(iterate), x::AbstractArray, i::Integer
     y = iterate(x, i)
     function iterate_pullback(dy)
         dy = unthunk(dy)
-        return NoTangent(), ungetindex(x, dy, i), ZeroTangent()
+        return NoTangent(), ungetindex(x, dy, i), NoTangent()
     end
     return y, iterate_pullback
 end
@@ -244,7 +240,7 @@ function rrule(::YotaRuleConfig, ::typeof(iterate), t::Tuple, i::Integer)
     y = iterate(t, i)
     function iterate_pullback(dy)
         dy = unthunk(dy)
-        return NoTangent(), ungetfield(dy[1], t, i), ZeroTangent()
+        return NoTangent(), ungetfield(dy[1], t, i), NoTangent()
     end
     return y, iterate_pullback
 end
@@ -255,14 +251,14 @@ end
 function rrule(::YotaRuleConfig, ::typeof(iterate), x::UnitRange)
     y = iterate(x)
     function iterate_pullback(dy)
-        return NoTangent(), ZeroTangent()
+        return NoTangent(), NoTangent()
     end
     return y, iterate_pullback
 end
 function rrule(::YotaRuleConfig, ::typeof(iterate), x::UnitRange, i::Integer)
     y = iterate(x, i)
     function iterate_pullback(dy)
-        return NoTangent(), ZeroTangent(), ZeroTangent()
+        return NoTangent(), NoTangent(), NoTangent()
     end
     return y, iterate_pullback
 end
@@ -274,7 +270,7 @@ function rrule(::YotaRuleConfig, ::typeof(Base.indexed_iterate), t::Tuple, i::In
     y = Base.indexed_iterate(t, i)
     function indexed_iterate_pullback(dy)
         d_val, d_state = dy
-        return NoTangent(), ungetfield(d_val, t, i), ZeroTangent()
+        return NoTangent(), ungetfield(d_val, t, i), NoTangent()
     end
     return y, indexed_iterate_pullback
 end
@@ -283,46 +279,11 @@ function rrule(::YotaRuleConfig, ::typeof(Base.indexed_iterate), t::Tuple, i::In
     y = Base.indexed_iterate(t, i, state)
     function indexed_iterate_pullback(dy)
         d_val, d_state = dy
-        return NoTangent(), ungetfield(d_val, t, i), ZeroTangent(), ZeroTangent()
+        return NoTangent(), ungetfield(d_val, t, i), NoTangent(), NoTangent()
     end
     return y, indexed_iterate_pullback
 end
 
-
-# ## tuple construction
-
-# ∇tuple(dy, ::typeof(tuple), args...) = (NoTangent(), [dy[i] for i=1:length(args)]...)
-# #@drule tuple(args::Vararg) ∇tuple
-
-# ## some no diff functions
-
-# #@drule Core.kwfunc(f::Any) (dy, _, f) -> NoTangent()
-
-# ## cat & co.
-
-# function ∇cat_kw(dy, ::typeof(Core.kwfunc(cat)), kw::Any, ::typeof(cat), arrs...)
-#     return (
-#         NoTangent(),
-#         NoTangent(),
-#         NoTangent(),
-#         [uncat(dy, i, arrs...; dims=kw.dims) for i=1:length(arrs)]...
-#     )
-# end
-# #@drule Core.kwfunc(cat)(kw::Any, _::typeof(cat), arrs::Vararg) ∇cat_kw
-
-# function ∇vcat(dy, ::typeof(vcat), arrs...)
-#     return NoTangent(), [uncat(dy, i, arrs...; dims=1) for i=1:length(arrs)]...
-# end
-# #@drule vcat(arrs::Vararg) ∇vcat
-
-# function ∇hcat(dy, ::typeof(hcat), arrs...)
-#     return NoTangent(), [uncat(dy, i, arrs...; dims=2) for i=1:length(arrs)]...
-# end
-# #@drule hcat(arrs::Vararg) ∇hcat
-
-## Colon
-
-#@drule Colon()(a::Int, b::Int) NoTangent()
 
 function rrule(::YotaRuleConfig, ::Colon, a::Int, b::Int)
     y = a:b

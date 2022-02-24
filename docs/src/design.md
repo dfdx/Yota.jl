@@ -334,14 +334,14 @@ tape[dx2].val
 Finally, let's add a bit of post-processing and wrap it up into a single convenient function:
 
 ```julia
-import ChainRules: ZeroTangent, unthunk
+import ChainRules: NoTangent, unthunk
 
 
 function grad(f, args...)
     _, tape = trace(f, args...; ctx=GradCtx())
     back!(tape)
     # add a tuple of (val, (gradients...))
-    deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
+    deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : NoTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
     # unthunk results
     deriv_tuple_unthunked = push!(tape, mkcall(map, unthunk, deriv_tuple))
@@ -351,7 +351,7 @@ function grad(f, args...)
     return tape[tape.result].val
 end
 
-grad(f, 2.0, 3.0)   # (6.909297426825682, (ZeroTangent(), 2.5838531634528574, 2.0))
+grad(f, 2.0, 3.0)   # (6.909297426825682, (NoTangent(), 2.5838531634528574, 2.0))
 
 # verify using numerical differentiation
 import Yota.ngradient

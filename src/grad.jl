@@ -185,7 +185,7 @@ function gradtape!(tape::Tape; seed=1)
     # backpropagate gradients
     back!(tape; seed=seed)
     # add a tuple of (val, (gradients...))
-    deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
+    deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : NoTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
     # unthunk results
     deriv_tuple_unthunked = push!(tape, mkcall(map, ChainRules.unthunk, deriv_tuple))
@@ -247,7 +247,7 @@ using Yota   # hide
 val, g = grad(x -> sum(x .+ 1), [1.0, 2.0, 3.0])
 
 # output
-(9.0, (ChainRulesCore.ZeroTangent(), [1.0, 1.0, 1.0]))
+(9.0, (ChainRulesCore.NoTangent(), [1.0, 1.0, 1.0]))
 ```
 
 By default, `grad()` expects the callable to return a scalar.
@@ -260,7 +260,7 @@ using Yota   # hide
 val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=ones(3))
 
 # output
-([2.0, 4.0, 6.0], (ChainRulesCore.ZeroTangent(), [2.0, 2.0, 2.0]))
+([2.0, 4.0, 6.0], (ChainRulesCore.NoTangent(), [2.0, 2.0, 2.0]))
 ```
 
 All gradients can be applied to original variables using `update!()` function.

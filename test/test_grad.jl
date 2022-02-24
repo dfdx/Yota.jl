@@ -10,9 +10,9 @@ loss_kw_mean(W, b, x) = Statistics.mean(W * x .+ b; dims=1)[1]
 
 chain_foo(x::Number) = :ok
 
-rrule(::typeof(chain_foo), ::Number) = ZeroTangent(), dy -> ZeroTangent()
-rrule(::typeof(chain_foo), ::Real) = ZeroTangent(), dy -> ZeroTangent()
-rrule(::typeof(chain_foo), ::Float64) = ZeroTangent(), dy -> ZeroTangent()
+rrule(::typeof(chain_foo), ::Number) = NoTangent(), dy -> NoTangent()
+rrule(::typeof(chain_foo), ::Real) = NoTangent(), dy -> NoTangent()
+rrule(::typeof(chain_foo), ::Float64) = NoTangent(), dy -> NoTangent()
 @opt_out rrule(::typeof(chain_foo), ::Real)
 
 
@@ -95,8 +95,8 @@ end
     # @test grad(x -> iterate(x, 3)[1], x)[2][1] == [0, 0, 1.0]
 
     x = (1:3)
-    @test grad(x -> iterate(x)[1], x)[2][2] == ZeroTangent()
-    @test grad(x -> iterate(x, 1)[1], x)[2][2] == ZeroTangent()
+    @test grad(x -> iterate(x)[1], x)[2][2] == NoTangent()
+    @test grad(x -> iterate(x, 1)[1], x)[2][2] == NoTangent()
 
 end
 
@@ -220,7 +220,7 @@ end
 @testset "grad: seed" begin
     val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=ones(3))
     @test val == [2.0, 4.0, 6.0]
-    @test g == (ZeroTangent(), [2.0, 2.0, 2.0])
+    @test g == (NoTangent(), [2.0, 2.0, 2.0])
 end
 
 
