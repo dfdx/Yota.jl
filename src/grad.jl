@@ -61,9 +61,40 @@ function record_primitive!(tape::Tape{GradCtx}, v_fargs...)
 end
 
 
-#################################################################################
-#                                   GRAD                                        #
-#################################################################################
+###############################################################################
+#                            BCAST GRAD CONTEXT                               #
+###############################################################################
+
+struct BcastGradCtx
+    inner
+end
+
+
+function record_or_recurse!(t::Tracer{BcastGradCtx}, v_fargs...)
+    fargs = [v isa V ? t.tape[v].val : v for v in v_fargs]
+    # global STATE = (t, v_fargs)
+    v_f, v_args... = v_fargs
+    f, args... = [v isa V ? t.tape[v].val : v for v in v_fargs]
+    return if isprimitive(t.tape.c.inner, fargs...)
+        # push!(t.tape, mkcall(broadcasted, vs...))
+        rr_op = (is_kwfunc(f) ?
+                    mkcall(Core.kwfunc(bcast_rrule), v_args[1], bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_args[2:end]...) :
+                    mkcall(bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_f, v_args...))
+        v_rr = push!(t.tape, rr_op)
+        v_val = push!(t.tape, mkcall(_getfield, v_rr, 1))
+        v_pb = push!(t.tape, mkcall(_getfield, v_rr, 2))
+        t.tape.c.inner.pullbacks[v_val] = v_pb
+        return v_val
+    else
+        types = map(eltype, fargs[2:end])
+        trace!(t, code_info_of(fargs[1], types...), v_fargs...)
+    end
+end
+
+
+###############################################################################
+#                                   GRAD                                      #
+###############################################################################
 
 getderiv(tape::Tape, v::Variable) = get(tape.c.derivs, bound(tape, v), nothing)
 setderiv!(tape::Tape, x::Variable, dx::Variable) = (
@@ -197,14 +228,14 @@ end
 
 
 """
-    gradtape(f::Union{Function, DataType}, args...; seed=1)
+    gradtape(f::Union{Function, DataType}, args...; ctx=GradCtx(), seed=1)
     gradtape!(tape::Tape; seed=1)
 
 Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes.
 See grad() for more high-level API.
 """
-function gradtape(f::Union{Function,DataType}, args...; seed=1)
-    _, tape = trace(f, args...; ctx=GradCtx())
+function gradtape(f::Union{Function,DataType}, args...; ctx=GradCtx(), seed=1)
+    _, tape = trace(f, args...; ctx=ctx)
     tape = gradtape!(tape; seed=seed)
     return tape
 end

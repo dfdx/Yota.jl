@@ -95,6 +95,7 @@ end
 
 
 function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), f::F, args...) where F
+    # TODO: use bcast_rrule instead
     ys, pbs = unzip(rrule_via_ad.(YOTA_RULE_CONFIG, f, args...))
     function pullback(Δ)
         Δ = unthunk(Δ)

@@ -1,6 +1,6 @@
 import ChainRulesCore: rrule, no_rrule
 import ChainRulesCore: rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
-import Umlaut: make_name, Input, to_expr
+import Umlaut: make_name, Input, to_expr, BcastCtx
 
 
 ###############################################################################
@@ -34,7 +34,33 @@ Extends RuleConfig{Union{NoForwardsMode,HasReverseMode}}.
 struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
 
 
+###############################################################################
+#                              rrule_via_ad                                   #
+###############################################################################
+
+"""
+    bcast_rrule(::YotaRuleConfig, ::typeof(broadcasted), f, args...; kw...)
+
+Similar to rrule(config, broadcasted, f, args...), but works on for ChainRule-primitive
+functions. For a more flexible handling of broadcasting use rrule(...) directly.
+"""
+function bcast_rrule(::YotaRuleConfig, ::typeof(broadcasted), f::F, args...; kw...) where F
+    ys, pbs = unzip(rrule.(YOTA_RULE_CONFIG, f, args...; kw...))
+    function pullback(Δ)
+        if Δ isa NoTangent || Δ isa ZeroTangent
+            return (NoTangent(), [Δ for _=1:length(pbs) + 1]...,)
+        end
+        Δ = unthunk(Δ)
+        dxs = map((pb, Δ) -> pb(Δ), pbs, Δ) |> unzip
+        dxs = [all(dx .== NoTangent()) ? NoTangent() : dx for dx in dxs]
+        return (NoTangent(), dxs...,)
+    end
+    return ys, pullback
+end
+
+
 function to_rrule_expr(tape::Tape)
+    # TODO (maybe): add YotaRuleConfig() as the first argument for consistency
     fn_name = gensym("rrule_$(tape[V(1)].val)")
     header = Expr(:call, fn_name)
     for v in inputs(tape)
@@ -95,7 +121,28 @@ Examples:
 
 """
 make_rrule(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
-make_rrule(f, args...) = make_rrule(gradtape(f, args...; seed=:auto))
+
+function make_rrule(f, args...)
+    return make_rrule(gradtape(f, args...; seed=:auto, ctx=GradCtx()))
+end
+
+function make_rrule(::typeof(broadcasted), f, args...)
+    # note: we create rrule as for broadcasted(f, args...)
+    ctx = BcastGradCtx(GradCtx())
+    val, tape = trace(f, args...; ctx=ctx)
+    tape = Tape(tape; ctx=ctx.inner)
+    gradtape!(tape, seed=:auto)
+    # insert imaginary broadcasted to the list of inputs
+    insert!(tape, 1, Umlaut.Input(broadcasted))
+    # insert ZeroTangent to the result to account for the additional argument
+    grad_tuple_op = tape[V(tape.result.id - 2)]
+    @assert grad_tuple_op isa Call && grad_tuple_op.fn == tuple
+    grad_tuple_op.args = [ZeroTangent(), grad_tuple_op.args...]
+    for id=grad_tuple_op.id:grad_tuple_op.id + 2
+        Umlaut.exec!(tape, tape[V(id)])
+    end
+    return make_rrule(tape)
+end
 
 
 const GENERATED_RRULE_CACHE = Dict()

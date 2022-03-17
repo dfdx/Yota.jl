@@ -6,6 +6,7 @@ import Yota: isprimitive, CR_CTX
 double_inc(x::Number) = 2x + 1
 double_inc(x::AbstractArray) = 2x .+ 1
 
+double_dec(x::Number) = 2x - 1
 
 primitive_test(x; y=1) = x + y
 primitive_test(x, y) = x + y
@@ -22,6 +23,11 @@ rrule(::YotaRuleConfig, ::typeof(primitive_test2), x; y=1) = primitive_test2(x; 
 
     rr = make_rrule(double_inc, 2.0)
     val, pb = rr(double_inc, 3.0)
+    @test val == 7
+    @test pb(1.0) == (ZeroTangent(), 2.0)
+
+    rr = make_rrule(broadcasted, double_dec, [1.0, 2.0])
+    val, pb = rr(broadcasted, double_dec, [3.0, 4.0])
     @test val == 7
     @test pb(1.0) == (ZeroTangent(), 2.0)
 
