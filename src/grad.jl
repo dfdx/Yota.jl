@@ -87,7 +87,7 @@ function record_or_recurse!(t::Tracer{BcastGradCtx}, v_fargs...)
         return v_val
     else
         types = map(eltype, fargs[2:end])
-        trace!(t, code_info_of(fargs[1], types...), v_fargs...)
+        trace!(t, getcode(fargs[1], types), v_fargs...)
     end
 end
 

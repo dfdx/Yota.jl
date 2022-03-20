@@ -95,15 +95,7 @@ end
 
 
 function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), f::F, args...) where F
-    # TODO: use bcast_rrule instead
-    ys, pbs = unzip(rrule_via_ad.(YOTA_RULE_CONFIG, f, args...))
-    function pullback(Δ)
-        Δ = unthunk(Δ)
-        dxs = map((pb, Δ) -> pb(Δ), pbs, Δ) |> unzip
-        dxs = [all(dx .== NoTangent()) ? NoTangent() : dx for dx in dxs]
-        return NoTangent(), dxs...
-    end
-    return ys, pullback
+    return rrule_via_ad(YOTA_RULE_CONFIG, broadcasted, f, args...)
 end
 
 

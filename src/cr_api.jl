@@ -63,6 +63,7 @@ function to_rrule_expr(tape::Tape)
     # TODO (maybe): add YotaRuleConfig() as the first argument for consistency
     fn_name = gensym("rrule_$(tape[V(1)].val)")
     header = Expr(:call, fn_name)
+    push!(header.args, Expr(:(::), :config, YotaRuleConfig))
     for v in inputs(tape)
         op = tape[v]
         push!(header.args, Expr(:(::), make_name(op), op.typ))
@@ -127,9 +128,11 @@ function make_rrule(f, args...)
 end
 
 function make_rrule(::typeof(broadcasted), f, args...)
-    # note: we create rrule as for broadcasted(f, args...)
+    if isprimitive(GradCtx(), f, map(first, args)...)
+        return bcast_rrule # (YOTA_RULE_CONFIG, broadcasted, f, args...)
+    end
     ctx = BcastGradCtx(GradCtx())
-    val, tape = trace(f, args...; ctx=ctx)
+    _, tape = trace(f, args...; ctx=ctx, fargtypes=(f, map(eltype, args)))
     tape = Tape(tape; ctx=ctx.inner)
     gradtape!(tape, seed=:auto)
     # insert imaginary broadcasted to the list of inputs
@@ -160,13 +163,13 @@ function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
     if haskey(GENERATED_RRULE_CACHE, sig)
         rr = GENERATED_RRULE_CACHE[sig]
         # return Base.invokelatest(rr, f, args...)
-        val, pb = Base.invokelatest(rr, f, args...)
+        val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
         return val, dy -> Base.invokelatest(pb, dy)
     else
         rr = make_rrule(f, args...)
         GENERATED_RRULE_CACHE[sig] = rr
         # return Base.invokelatest(rr, f, args...)
-        val, pb = Base.invokelatest(rr, f, args...)
+        val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
         return val, dy -> Base.invokelatest(pb, dy)
     end
 end
