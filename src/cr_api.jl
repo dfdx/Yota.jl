@@ -10,16 +10,20 @@ import Umlaut: make_name, Input, to_expr, BcastCtx
 
 struct ChainRulesCtx end
 
+@inline instance_type(f::F) where {F} = F
+@inline instance_type(T::UnionAll) = Type{T}
+@inline instance_type(T::DataType) = Type{T}
+
 function isprimitive(::ChainRulesCtx, f, args...)
-    Ts = [a isa DataType ? Type{a} : typeof(a) for a in (f, args...)]
-    Core.Compiler.return_type(rrule, (YotaRuleConfig, Ts...,)) !== Nothing && return true
-    if is_kwfunc(Ts[1])
-        Ts_kwrrule = (Any, typeof(Core.kwfunc(f)), YotaRuleConfig, Ts[2:end]...,)
-        Core.Compiler.return_type(Core.kwfunc(rrule), Ts_kwrrule) !== Nothing && return true
+    F = instance_type(f)
+    Args = instance_type.(args)
+    Core.Compiler.return_type(rrule, Tuple{YotaRuleConfig, F, Args...}) !== Nothing && return true
+    if is_kwfunc(F)
+        Args_kwrrule = Tuple{Any, typeof(Core.kwfunc(f)), YotaRuleConfig, Args...,}
+        Core.Compiler.return_type(Core.kwfunc(rrule), Args_kwrrule) !== Nothing && return true
     end
     return false
 end
-
 
 ###############################################################################
 #                              RuleConfig                                     #
