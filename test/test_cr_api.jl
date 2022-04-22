@@ -29,6 +29,8 @@ rrule(::YotaRuleConfig, ::typeof(primitive_test2), x; y=1) = primitive_test2(x; 
     @test val == 7
     @test pb(1.0) == (ZeroTangent(), 2.0)
 
+    trace(broadcasted, double_dec, [1.0, 2.0])
+
     rr = make_rrule(broadcasted, double_dec, [1.0, 2.0])
     val, pb = rr(config, broadcasted, double_dec, [3.0, 4.0])
     @test val == [5.0, 7.0]
