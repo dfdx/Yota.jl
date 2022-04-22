@@ -49,7 +49,7 @@ function record_primitive!(tape::Tape{GradCtx}, v_fargs...)
         rr_op = (is_kwfunc(f) ?
                     mkcall(Core.kwfunc(rrule), v_args[1], rrule, YOTA_RULE_CONFIG, v_args[2:end]...) :
                     mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...))
-        @assert rr_op.val !== nothing "rrule($(op.fn), ...) returned nothing"
+        @assert rr_op.val !== nothing "rrule($f, ...) returned nothing"
         v_rr = push!(tape, rr_op)
         v_val = push!(tape, mkcall(_getfield, v_rr, 1))
         v_pb = push!(tape, mkcall(_getfield, v_rr, 2))
@@ -68,6 +68,11 @@ end
 struct BcastGradCtx
     inner
 end
+
+
+# get_static_params is broken for BcastGradCtx, so turning off
+# this feature for now
+Umlaut.get_static_params(::Tracer{BcastGradCtx}, v_fargs) = Core.svec([])
 
 
 function record_or_recurse!(t::Tracer{BcastGradCtx}, v_fargs...)
