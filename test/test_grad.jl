@@ -216,6 +216,14 @@ end
     @test g[2] == 2.0
 end
 
+@testset "grad: tuple index" begin
+    y, (_, g) = Yota.grad(x -> x[1].a, ((a=13,), (b=17,)))
+    @test y == 13
+    @test g isa Tangent{<:Tuple}
+    @test g[1] isa Tangent{<:NamedTuple}
+    @test g[1].a == 1
+    @test g[2] isa ZeroTangent
+end
 
 @testset "grad: seed" begin
     val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=ones(3))
