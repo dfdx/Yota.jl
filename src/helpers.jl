@@ -73,12 +73,13 @@ end
 unbroadcast_prod_y(x::ArrayOrBroadcasted, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_x(y, x, Δ)
 
 # device_like(example, a) = (device = guess_device([example]); device(a))
+array_like(value, example) = fill!(similar(example, (1,)), value)
 
 # unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(device_like(y, [x]), y, Δ)[1]
-unbroadcast_prod_x(x::Number, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_x(to_same_device([x], y), y, Δ)[1]
-unbroadcast_prod_x(x::ArrayOrBroadcasted, y::Number, Δ) = unbroadcast_prod_x(x, to_same_device([y], x), Δ)
-unbroadcast_prod_y(x::ArrayOrBroadcasted, y::Number, Δ) = unbroadcast_prod_y(x, to_same_device([y], x), Δ)[1]
-unbroadcast_prod_y(x::Number, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_y(to_same_device([x], y), y, Δ)
+unbroadcast_prod_x(x::Number, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_x(array_like(x, y), y, Δ)[1]
+unbroadcast_prod_x(x::ArrayOrBroadcasted, y::Number, Δ) = unbroadcast_prod_x(x, array_like(y, x), Δ)
+unbroadcast_prod_y(x::ArrayOrBroadcasted, y::Number, Δ) = unbroadcast_prod_y(x, array_like(y, x), Δ)[1]
+unbroadcast_prod_y(x::Number, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_y(array_like(x, y), y, Δ)
 
 
 untranspose_vec(ds::Transpose{T, <:AbstractVector{T}}) where T = transpose(ds)
