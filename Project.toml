@@ -1,7 +1,7 @@
 name = "Yota"
 uuid = "cd998857-8626-517d-b929-70ad188a48f0"
 authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
-version = "0.7.3"
+version = "0.7.4"
 
 [deps]
 ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
