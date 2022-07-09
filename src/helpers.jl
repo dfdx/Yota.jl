@@ -26,10 +26,10 @@ function ungetindex(x::AbstractArray, dy, I...)
 end
 
 function ungetindex(x::Tuple, dy, I...)
-    dx = map(1:length(x)) do i
-        i in I ? dy : zero(x[i])
+    dx = ntuple(length(x)) do i
+        i in I ? dy : ZeroTangent()
     end
-    return dx
+    return Tangent{typeof(x)}(dx...)
 end
 
 """
