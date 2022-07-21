@@ -150,6 +150,7 @@ end
 
 
 const GENERATED_RRULE_CACHE = Dict()
+const RRULE_VIA_AD_STATE = Ref{Tuple}()
 
 
 """
@@ -167,10 +168,17 @@ function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
         val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
         return val, dy -> Base.invokelatest(pb, dy)
     else
-        rr = make_rrule(f, args...)
-        GENERATED_RRULE_CACHE[sig] = rr
-        # return Base.invokelatest(rr, f, args...)
-        val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
-        return val, dy -> Base.invokelatest(pb, dy)
+        try
+            rr = make_rrule(f, args...)
+            GENERATED_RRULE_CACHE[sig] = rr
+            # return Base.invokelatest(rr, f, args...)
+            val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
+            return val, dy -> Base.invokelatest(pb, dy)
+        catch
+            RRULE_VIA_AD_STATE[] = (f, args)
+            @error("Failed to compile rrule for $(f)$args, extract details via:\n" *
+                 "\t(f, args) = Yota.RRULE_VIA_AD_STATE[]")
+            rethrow()
+        end
     end
 end
