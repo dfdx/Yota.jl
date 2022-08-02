@@ -1,6 +1,6 @@
 import ChainRulesCore: rrule, no_rrule
 import ChainRulesCore: rrule_via_ad, RuleConfig, NoForwardsMode, HasReverseMode
-import Umlaut: make_name, Input, to_expr, BcastCtx
+import Umlaut: make_name, Input, to_expr
 
 
 ###############################################################################
@@ -133,7 +133,7 @@ function make_rrule(::typeof(broadcasted), f, args...)
         return bcast_rrule # (YOTA_RULE_CONFIG, broadcasted, f, args...)
     end
     ctx = BcastGradCtx(GradCtx())
-    _, tape = trace(f, args...; ctx=ctx, fargtypes=(f, map(eltype, args)))
+    _, tape = trace(f, args...; ctx=ctx)
     tape = Tape(tape; ctx=ctx.inner)
     gradtape!(tape, seed=:auto)
     # insert imaginary broadcasted to the list of inputs

@@ -6,58 +6,48 @@ import Umlaut: __new__
 ###############################################################################
 
 
-# TODO: figure out failing test_rrules, move to actual tests
-
-
-# function rrule(::typeof(Broadcast.broadcasted), ::typeof(identity), x)
-#     identity_pullback(dy) = (NoTangent(), NoTangent(), dy)
-#     return x, identity_pullback
+# function rrule(::YotaRuleConfig, ::typeof(Core._apply_iterate),
+#         ::typeof(iterate), f::F, args...) where F
+#     # flatten nested arguments
+#     flat = []
+#     for a in args
+#         push!(flat, a...)
+#     end
+#     # apply rrule of the function on the flat arguments
+#     y, pb = rrule_via_ad(YotaRuleConfig(), f, flat...)
+#     sizes = map(length, args)
+#     function _apply_iterate_pullback(dy)
+#         if dy isa NoTangent
+#             return ntuple(_-> NoTangent(), length(args) + 3)
+#         end
+#         flat_dargs = pb(dy)
+#         df = flat_dargs[1]
+#         # group derivatives to tuples of the same sizes as arguments
+#         dargs = []
+#         j = 2
+#         for i = 1:length(args)
+#             darg_val = flat_dargs[j:j + sizes[i] - 1]
+#             if length(darg_val) == 1 && darg_val[1] isa NoTangent
+#                 push!(dargs, darg_val[1])
+#             else
+#                 darg = Tangent{typeof(darg_val)}(darg_val...)
+#                 push!(dargs, darg)
+#             end
+#             j = j + sizes[i]
+#         end
+#         return NoTangent(), NoTangent(), df, dargs...
+#     end
+#     return y, _apply_iterate_pullback
 # end
 
-# test_rrule(broadcasted, identity, [1.0, 2.0]) -- fails at the moment
 
-
-function rrule(::YotaRuleConfig, ::typeof(Core._apply_iterate),
-        ::typeof(iterate), f::F, args...) where F
-    # flatten nested arguments
-    flat = []
-    for a in args
-        push!(flat, a...)
-    end
-    # apply rrule of the function on the flat arguments
-    y, pb = rrule_via_ad(YotaRuleConfig(), f, flat...)
-    sizes = map(length, args)
-    function _apply_iterate_pullback(dy)
-        if dy isa NoTangent
-            return ntuple(_-> NoTangent(), length(args) + 3)
-        end
-        flat_dargs = pb(dy)
-        df = flat_dargs[1]
-        # group derivatives to tuples of the same sizes as arguments
-        dargs = []
-        j = 2
-        for i = 1:length(args)
-            darg_val = flat_dargs[j:j + sizes[i] - 1]
-            if length(darg_val) == 1 && darg_val[1] isa NoTangent
-                push!(dargs, darg_val[1])
-            else
-                darg = Tangent{typeof(darg_val)}(darg_val...)
-                push!(dargs, darg)
-            end
-            j = j + sizes[i]
-        end
-        return NoTangent(), NoTangent(), df, dargs...
-    end
-    return y, _apply_iterate_pullback
-end
-
-
+# TODO: test on this rule actually fails!
 function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(tuple), args...)
     y = tuple(args...)
     return y, dy -> (NoTangent(), collect(dy)...)
 end
 
-# test_rrule(tuple, 1, 2, 3; output_tangent=Tangent{Tuple}((1, 2, 3)), check_inferred=false)
+# test_rrule(YotaRuleConfig(), tuple, 1, 2, 3; output_tangent=Tangent{Tuple}((1, 2, 3)), check_inferred=false)
 
 
 function rrule(::YotaRuleConfig, nt::Type{NamedTuple{names}}, t::Tuple) where {names}

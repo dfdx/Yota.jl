@@ -2,13 +2,13 @@ import ChainRulesCore.rrule
 import Yota.YotaRuleConfig
 
 
-@testset "rulesets" begin
+# @testset "rulesets" begin
 
-    f = reshape
-    args = [(rand(3, 4),), (12,)]
-    test_rrule(YotaRuleConfig(), Core._apply_iterate, iterate, f, args...; check_inferred=false)
+#     f = reshape
+#     args = [(rand(3, 4),), (12,)]
+#     test_rrule(YotaRuleConfig(), Core._apply_iterate, iterate, f, args...; check_inferred=false)
 
-end
+# end
 
 
 # broacastable non-primitive

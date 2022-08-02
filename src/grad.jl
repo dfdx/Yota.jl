@@ -62,7 +62,7 @@ end
 
 
 ###############################################################################
-#                            BCAST GRAD CONTEXT                               #
+#                             GRAD CONTEXT                               #
 ###############################################################################
 
 struct BcastGradCtx
@@ -72,13 +72,21 @@ end
 
 # get_static_params is broken for BcastGradCtx, so turning off
 # this feature for now
-Umlaut.get_static_params(::Tracer{BcastGradCtx}, v_fargs) = Core.svec([])
+Umlaut.get_static_params(::Tracer{BcastGradCtx}, v_fargs::Union{Tuple, Vector}) = Core.svec([])
+
+function Umlaut.code_signature(::BcastGradCtx, v_fargs)
+    f, args... = Umlaut.var_values(v_fargs)
+    return (f, map(eltype, args))
+end
 
 
 function Umlaut.trace_call!(t::Tracer{BcastGradCtx}, v_fargs...)
     fargs = Umlaut.map_vars(v -> v.op.val, v_fargs)
-    return if isprimitive(t.tape.c.inner, fargs...) && !Umlaut.is_ho_tracable(t.tape.c.inner, fargs...)
-        rr_op = (is_kwfunc(fargs[1]) ?
+    f, args... = fargs
+    # TODO: should we check isprimitive() for map(first, fargs) instead?
+    el_args = map(first, fargs[2:end])
+    if isprimitive(t.tape.c.inner, f, el_args...) && !Umlaut.is_ho_tracable(t.tape.c.inner, f, el_args...)
+        rr_op = (is_kwfunc(f) ?
                     mkcall(Core.kwfunc(bcast_rrule), v_args[1], bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_args[2:end]...) :
                     mkcall(bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_fargs...))
         v_rr = push!(t.tape, rr_op)
@@ -87,8 +95,7 @@ function Umlaut.trace_call!(t::Tracer{BcastGradCtx}, v_fargs...)
         t.tape.c.inner.pullbacks[v_val] = v_pb
         return v_val
     else
-        types = map(eltype, fargs[2:end])
-        trace!(t, v_fargs, (fargs[1], types))
+        return trace!(t, v_fargs)
     end
 end
 
