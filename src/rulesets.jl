@@ -41,16 +41,19 @@ import Umlaut: __new__
 # end
 
 
-# TODO: test on this rule actually fails!
 function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(tuple), args...)
     y = tuple(args...)
-    return y, dy -> (NoTangent(), collect(dy)...)
+    N = length(args)
+    function tuple_pullback(Δ)
+        Δ = unthunk(Δ)
+        δargs = (Δ isa NoTangent || Δ isa ZeroTangent) ? [Δ for _=1:N] : collect(Δ)
+        (NoTangent(), δargs...)
+    end
+    return y, tuple_pullback
 end
 
-# test_rrule(YotaRuleConfig(), tuple, 1, 2, 3; output_tangent=Tangent{Tuple}((1, 2, 3)), check_inferred=false)
 
-
-function rrule(::YotaRuleConfig, nt::Type{NamedTuple{names}}, t::Tuple) where {names}
+function ChainRulesCore.rrule(::YotaRuleConfig, nt::Type{NamedTuple{names}}, t::Tuple) where {names}
     val = nt(t)
     function namedtuple_pullback(dy)
         return NoTangent(), dy
@@ -62,7 +65,7 @@ end
 # test_rrule(YotaRuleConfig(), NamedTuple{(:dims,)}, (1,))
 
 
-rrule(::Type{Val{V}}) where V = Val{V}(), dy -> (NoTangent(),)
+ChainRulesCore.rrule(::Type{Val{V}}) where V = Val{V}(), dy -> (NoTangent(),)
 
 
 ###############################################################################

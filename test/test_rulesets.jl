@@ -10,6 +10,10 @@ import Yota.YotaRuleConfig
 
 # end
 
+@testset "tuple" begin
+    test_rrule(YotaRuleConfig(), tuple, 1.0, 2.0, 3.0; check_inferred=false)
+end
+
 
 # broacastable non-primitive
 sin_inc(x::Number) = sin(x) + 1

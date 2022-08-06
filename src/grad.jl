@@ -43,6 +43,10 @@ Replace ChainRules primitives `f(args...)` with a sequence:
     pb = push!(tape, mkcall(getfield, rr, 2)      # extract pullback
 """
 function Umlaut.record_primitive!(tape::Tape{GradCtx}, v_fargs...)
+    # global STATE = tape, v_fargs
+    # length(tape) >= 327 && error("!!!!!")
+    # println(length(tape))
+    # length(v_fargs) >= 2 && v_fargs[2] isa V && v_fargs[2].id == 606 && error("!!!")
     v_f, v_args... = v_fargs
     f, args... = [v isa V ? tape[v].val : v for v in v_fargs]
     if isprimitive(CR_CTX, f, args...)
