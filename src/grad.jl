@@ -42,7 +42,11 @@ Replace ChainRules primitives `f(args...)` with a sequence:
     val = push!(tape, mkcall(getfield, rr, 1)     # extract value
     pb = push!(tape, mkcall(getfield, rr, 2)      # extract pullback
 """
-function record_primitive!(tape::Tape{GradCtx}, v_fargs...)
+function Umlaut.record_primitive!(tape::Tape{GradCtx}, v_fargs...)
+    # global STATE = tape, v_fargs
+    # length(tape) >= 327 && error("!!!!!")
+    # println(length(tape))
+    # length(v_fargs) >= 2 && v_fargs[2] isa V && v_fargs[2].id == 606 && error("!!!")
     v_f, v_args... = v_fargs
     f, args... = [v isa V ? tape[v].val : v for v in v_fargs]
     if isprimitive(CR_CTX, f, args...)
@@ -62,7 +66,7 @@ end
 
 
 ###############################################################################
-#                            BCAST GRAD CONTEXT                               #
+#                             GRAD CONTEXT                               #
 ###############################################################################
 
 struct BcastGradCtx
@@ -72,27 +76,30 @@ end
 
 # get_static_params is broken for BcastGradCtx, so turning off
 # this feature for now
-Umlaut.get_static_params(::Tracer{BcastGradCtx}, v_fargs) = Core.svec([])
+Umlaut.get_static_params(::Tracer{BcastGradCtx}, v_fargs::Union{Tuple, Vector}) = Core.svec([])
+
+function Umlaut.code_signature(::BcastGradCtx, v_fargs)
+    f, args... = Umlaut.var_values(v_fargs)
+    return (f, map(eltype, args))
+end
 
 
-function record_or_recurse!(t::Tracer{BcastGradCtx}, v_fargs...)
-    fargs = [v isa V ? t.tape[v].val : v for v in v_fargs]
-    # global STATE = (t, v_fargs)
-    v_f, v_args... = v_fargs
-    f, args... = [v isa V ? t.tape[v].val : v for v in v_fargs]
-    return if isprimitive(t.tape.c.inner, fargs...)
-        # push!(t.tape, mkcall(broadcasted, vs...))
+function Umlaut.trace_call!(t::Tracer{BcastGradCtx}, v_fargs...)
+    fargs = Umlaut.map_vars(v -> v.op.val, v_fargs)
+    f, args... = fargs
+    # TODO: should we check isprimitive() for map(first, fargs) instead?
+    el_args = map(first, fargs[2:end])
+    if isprimitive(t.tape.c.inner, f, el_args...) && !Umlaut.is_ho_tracable(t.tape.c.inner, f, el_args...)
         rr_op = (is_kwfunc(f) ?
                     mkcall(Core.kwfunc(bcast_rrule), v_args[1], bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_args[2:end]...) :
-                    mkcall(bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_f, v_args...))
+                    mkcall(bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_fargs...))
         v_rr = push!(t.tape, rr_op)
         v_val = push!(t.tape, mkcall(_getfield, v_rr, 1))
         v_pb = push!(t.tape, mkcall(_getfield, v_rr, 2))
         t.tape.c.inner.pullbacks[v_val] = v_pb
         return v_val
     else
-        types = map(eltype, fargs[2:end])
-        trace!(t, getcode(fargs[1], types), v_fargs...)
+        return trace!(t, v_fargs)
     end
 end
 
@@ -129,6 +136,13 @@ The returned vector is already deduplicated and reverse-sorted
 """
 function todo_list(tape::Tape{GradCtx}, y=tape.result)
     y_orig = y
+    @assert(tape[y] isa Call, "The tape's result is expected to be a Call, " *
+            "but instead $(typeof(tape[tape.result])) was encountered")
+    # if tape[y] isa Input
+    #     # for function that just return one of their arguments
+    #     # and don't have any calls in them
+    #     return [y_orig]
+    # end
     y_fargs = [tape[y].fn; tape[y].args...]
     is_rrule_based = haskey(tape.c.pullbacks, y)
     if is_rrule_based
@@ -196,8 +210,8 @@ function back!(tape::Tape; seed=1)
         error("Gradient of a vector-valued function requires a seed")
     elseif seed == :auto
         zval = tape[z].val
-        @assert zval isa Number || zval isa AbstractArray
-        seed = zval isa Number ? one(zval) : ones(eltype(zval), size(zval))
+        # @assert zval isa Number || zval isa AbstractArray
+        seed = zval isa AbstractArray ? ones(eltype(zval), size(zval)) : one(zval)
     end
     dy = push!(tape, Constant(seed))
     # save seed var to use in compilation later
@@ -241,6 +255,11 @@ See grad() for more high-level API.
 """
 function gradtape(f::Union{Function,DataType}, args...; ctx=GradCtx(), seed=1)
     _, tape = trace(f, args...; ctx=ctx)
+    # TODO: if it works, move the hack to Umlaut
+    if tape[tape.result] isa Input
+        new_result = push!(tape, mkcall(identity, tape.result))
+        tape.result = new_result
+    end
     tape = gradtape!(tape; seed=seed)
     return tape
 end

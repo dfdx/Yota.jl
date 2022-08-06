@@ -5,7 +5,7 @@ using ChainRules
 using NNlib
 using Umlaut
 import Umlaut: record_primitive!, isprimitive, BaseCtx
-import Umlaut: record_or_recurse!, Tracer, trace!, getcode
+import Umlaut: Tracer, trace!, getcode
 
 
 const V = Umlaut.Variable
