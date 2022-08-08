@@ -49,18 +49,19 @@ function Umlaut.record_primitive!(tape::Tape{GradCtx}, v_fargs...)
     # length(v_fargs) >= 2 && v_fargs[2] isa V && v_fargs[2].id == 606 && error("!!!")
     v_f, v_args... = v_fargs
     f, args... = [v isa V ? tape[v].val : v for v in v_fargs]
+    line = get(tape.meta, :line, nothing)
     if isprimitive(CR_CTX, f, args...)
         rr_op = (is_kwfunc(f) ?
-                    mkcall(Core.kwfunc(rrule), v_args[1], rrule, YOTA_RULE_CONFIG, v_args[2:end]...) :
-                    mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...))
+                    mkcall(Core.kwfunc(rrule), v_args[1], rrule, YOTA_RULE_CONFIG, v_args[2:end]...; line=line) :
+                    mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...; line=line))
         @assert rr_op.val !== nothing "rrule($f, ...) returned nothing"
         v_rr = push!(tape, rr_op)
-        v_val = push!(tape, mkcall(_getfield, v_rr, 1))
-        v_pb = push!(tape, mkcall(_getfield, v_rr, 2))
+        v_val = push!(tape, mkcall(_getfield, v_rr, 1; line="unpack rrule"))
+        v_pb = push!(tape, mkcall(_getfield, v_rr, 2; line="unpack rrule"))
         tape.c.pullbacks[v_val] = v_pb
         return v_val
     else
-        return push!(tape, mkcall(v_fargs...))
+        return push!(tape, mkcall(v_fargs...; line=line))
     end
 end
 
