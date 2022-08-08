@@ -5,27 +5,43 @@ _, dx, dy = g</code></pre><pre class="documenter-example-output"><code class="no
   inp %1::typeof(Main.f)
   inp %2::Float64
   inp %3::Float64
-  %5, %6 = [%4] = rrule(Yota.YotaRuleConfig(), apply_type, Val, 2)
-  %8, %9 = [%7] = rrule(Yota.YotaRuleConfig(), %5)
-  %11, %12 = [%10] = rrule(Yota.YotaRuleConfig(), literal_pow, ^, %2, %8)
-  %14, %15 = [%13] = rrule(Yota.YotaRuleConfig(), sqrt, %3)
-  %17, %18 = [%16] = rrule(Yota.YotaRuleConfig(), +, %11, %14)
+  %4 = rrule(Yota.YotaRuleConfig(), Core.apply_type, Val, 2)::Tuple{DataType, ChainRules.var&quot;#apply_type_pullback#25&quot;{Tuple{Int64}}} 
+  %5 = _getfield(%4, 1)::DataType 
+  %6 = _getfield(%4, 2)::ChainRules.var&quot;#apply_type_pullback#25&quot;{Tuple{Int64}} 
+  %7 = rrule(Yota.YotaRuleConfig(), %5)::Tuple{Val{2}, Yota.var&quot;#36#37&quot;} 
+  %8 = _getfield(%7, 1)::Val{2} 
+  %9 = _getfield(%7, 2)::Yota.var&quot;#36#37&quot; 
+  %10 = rrule(Yota.YotaRuleConfig(), Base.literal_pow, ^, %2, %8)::Tuple{Float64, ChainRules.var&quot;#square_pullback#1185&quot;{Float64}} 
+  %11 = _getfield(%10, 1)::Float64 
+  %12 = _getfield(%10, 2)::ChainRules.var&quot;#square_pullback#1185&quot;{Float64} 
+  %13 = rrule(Yota.YotaRuleConfig(), sqrt, %3)::Tuple{Float64, ChainRules.var&quot;#sqrt_pullback#1258&quot;{Float64, ChainRulesCore.ProjectTo{Float64, NamedTuple{(), Tuple{}}}}} 
+  %14 = _getfield(%13, 1)::Float64 
+  %15 = _getfield(%13, 2)::ChainRules.var&quot;#sqrt_pullback#1258&quot;{Float64, ChainRulesCore.ProjectTo{Float64, NamedTuple{(), Tuple{}}}} 
+  %16 = rrule(Yota.YotaRuleConfig(), +, %11, %14)::Tuple{Float64, ChainRules.var&quot;#+_pullback#1273&quot;{Bool, Bool, ChainRulesCore.ProjectTo{Float64, NamedTuple{(), Tuple{}}}, ChainRulesCore.ProjectTo{Float64, NamedTuple{(), Tuple{}}}}} 
+  %17 = _getfield(%16, 1)::Float64 
+  %18 = _getfield(%16, 2)::ChainRules.var&quot;#+_pullback#1273&quot;{Bool, Bool, ChainRulesCore.ProjectTo{Float64, NamedTuple{(), Tuple{}}}, ChainRulesCore.ProjectTo{Float64, NamedTuple{(), Tuple{}}}} 
   const %19 = 1::Int64
-  _, %21, %22 = [%20] = %18(%19)
-  _, %24 = [%23] = %15(%22)
-  _, _, %26, %27 = [%25] = %12(%21)
-  %29 = [%28] = %9(%27)
-  %30 = %6(%29)::Tuple{ChainRulesCore.NoTangent, ChainRulesCore.NoTangent, ChainRulesCore.NoTangent}
-  %31 = tuple(ChainRulesCore.ZeroTangent(), %26, %24)::Tuple{ChainRulesCore.ZeroTangent, Float64, Float64}
-  %32 = map(ChainRulesCore.unthunk, %31)::Tuple{ChainRulesCore.ZeroTangent, Float64, Float64}
-  %33 = tuple(%17, %32)::Tuple{Float64, Tuple{ChainRulesCore.ZeroTangent, Float64, Float64}}
+  %20 = %18(%19)::Tuple{ChainRulesCore.NoTangent, Float64, Float64} 
+  %21 = getfield(%20, 2)::Float64 
+  %22 = getfield(%20, 3)::Float64 
+  %23 = %15(%22)::Tuple{ChainRulesCore.NoTangent, Float64} 
+  %24 = getfield(%23, 2)::Float64 
+  %25 = %12(%21)::Tuple{ChainRulesCore.NoTangent, ChainRulesCore.NoTangent, Float64, ChainRulesCore.NoTangent} 
+  %26 = getfield(%25, 3)::Float64 
+  %27 = getfield(%25, 4)::ChainRulesCore.NoTangent 
+  %28 = %9(%27)::Tuple{ChainRulesCore.NoTangent} 
+  %29 = getfield(%28, 1)::ChainRulesCore.NoTangent 
+  %30 = %6(%29)::Tuple{ChainRulesCore.NoTangent, ChainRulesCore.NoTangent, ChainRulesCore.NoTangent} 
+  %31 = tuple(ChainRulesCore.ZeroTangent(), %26, %24)::Tuple{ChainRulesCore.ZeroTangent, Float64, Float64} 
+  %32 = map(ChainRulesCore.unthunk, %31)::Tuple{ChainRulesCore.ZeroTangent, Float64, Float64} 
+  %33 = tuple(%17, %32)::Tuple{Float64, Tuple{ChainRulesCore.ZeroTangent, Float64, Float64}} 
 </code></pre><p><strong>VJP, value and gradient:</strong></p><pre><code class="language-julia hljs">h(w, b, x) = w * x .+ b
 
 w, b, x = rand(3, 4), rand(3), rand(4, 5)
-val, g = grad(h, w, b, x; seed=ones(3, 5))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([1.3503520265363513 1.695012087871298 … 0.9862300232219596 1.727550805243081; 1.7191596361077215 1.6090734333187509 … 1.283317085236543 1.1947683525995163; 1.229061805711137 1.4146978679682463 … 0.8603695463657344 1.4641686447872047], (ChainRulesCore.ZeroTangent(), [2.666890269468766 2.0171744639200604 2.7434022972245447 3.1711986147292857; 2.666890269468766 2.0171744639200604 2.7434022972245447 3.1711986147292857; 2.666890269468766 2.0171744639200604 2.7434022972245447 3.1711986147292857], [5.0, 5.0, 5.0], [0.6746442290661059 0.6746442290661059 … 0.6746442290661059 0.6746442290661059; 1.1807583919831188 1.1807583919831188 … 1.1807583919831188 1.1807583919831188; 1.3778417587402032 1.3778417587402032 … 1.3778417587402032 1.3778417587402032; 1.0658925427636028 1.0658925427636028 … 1.0658925427636028 1.0658925427636028]))</code></pre><p><strong>VJP, value and pullback:</strong></p><pre><code class="language-julia hljs">import Yota: YotaRuleConfig, rrule_via_ad
+val, g = grad(h, w, b, x; seed=ones(3, 5))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([0.6151515380975368 0.20719549634786968 … 0.747856781867335 0.6409256580908328; 1.4641533097420971 1.2924632973329924 … 1.3668311254626087 2.016355159810894; 1.3595583064210486 1.081387327501397 … 1.290953612934205 1.510901149161273], (ChainRulesCore.ZeroTangent(), [2.252778153694453 2.0033537433627773 1.7692815500419332 2.0510101401196303; 2.252778153694453 2.0033537433627773 1.7692815500419332 2.0510101401196303; 2.252778153694453 2.0033537433627773 1.7692815500419332 2.0510101401196303], [5.0, 5.0, 5.0], [1.3616560396037072 1.3616560396037072 … 1.3616560396037072 1.3616560396037072; 1.2719926123337852 1.2719926123337852 … 1.2719926123337852 1.2719926123337852; 1.6244695406288345 1.6244695406288345 … 1.6244695406288345 1.6244695406288345; 1.7568647031983178 1.7568647031983178 … 1.7568647031983178 1.7568647031983178]))</code></pre><p><strong>VJP, value and pullback:</strong></p><pre><code class="language-julia hljs">import Yota: YotaRuleConfig, rrule_via_ad
 
 h(w, b, x) = w * x .+ b
 
 w, b, x = rand(3, 4), rand(3), rand(4, 5)
 val, pb = rrule_via_ad(YotaRuleConfig(), h, w, b, x)
-pb(ones(3, 5))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(ChainRulesCore.ZeroTangent(), InplaceableThunk(ChainRules.var&quot;#..., Thunk(ChainRules.var&quot;#...)), [5.0, 5.0, 5.0], InplaceableThunk(ChainRules.var&quot;#..., Thunk(ChainRules.var&quot;#...)))</code></pre><p><strong>Reset gradient cache:</strong></p><pre><code class="language-julia hljs">Yota.reset!()</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{Any, Any}()</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Main</a><a class="docs-footer-nextpage" href="../design/">Build your own AD »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.22 on <span class="colophon-date" title="Saturday 6 August 2022 22:27">Saturday 6 August 2022</span>. Using Julia version 1.6.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+pb(ones(3, 5))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(ChainRulesCore.ZeroTangent(), InplaceableThunk(ChainRules.var&quot;#..., Thunk(ChainRules.var&quot;#...)), [5.0, 5.0, 5.0], InplaceableThunk(ChainRules.var&quot;#..., Thunk(ChainRules.var&quot;#...)))</code></pre><p><strong>Reset gradient cache:</strong></p><pre><code class="language-julia hljs">Yota.reset!()</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{Any, Any}()</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Main</a><a class="docs-footer-nextpage" href="../design/">Build your own AD »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.22 on <span class="colophon-date" title="Monday 8 August 2022 19:45">Monday 8 August 2022</span>. Using Julia version 1.6.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
