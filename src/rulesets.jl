@@ -87,57 +87,57 @@ function unzip(tuples)
 end
 
 
-function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), f::F, args...) where F
-    return rrule_via_ad(YOTA_RULE_CONFIG, broadcasted, f, args...)
-end
+# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), f::F, args...) where F
+#     return rrule_via_ad(YOTA_RULE_CONFIG, broadcasted, f, args...)
+# end
 
 
 function rrule(::YotaRuleConfig, ::typeof(Broadcast.materialize), x)
     return Broadcast.materialize(x), dy -> (NoTangent(), dy)
 end
 
-# test_rrule(Broadcast.materialize, Broadcast.broadcasted(sin, rand(3)); output_tangent=ones(3))
+# # test_rrule(Broadcast.materialize, Broadcast.broadcasted(sin, rand(3)); output_tangent=ones(3))
 
 
-function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(+), x, y)
-    function plus_bcast_pullback(dy)
-        # println("dy- $dy")
-        dy = unthunk(dy)
-        # println("dy+ $dy")
-        return NoTangent(), NoTangent(), unbroadcast(x, dy), unbroadcast(y, dy)
-    end
-    return x .+ y, plus_bcast_pullback
-end
+# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(+), x, y)
+#     function plus_bcast_pullback(dy)
+#         # println("dy- $dy")
+#         dy = unthunk(dy)
+#         # println("dy+ $dy")
+#         return NoTangent(), NoTangent(), unbroadcast(x, dy), unbroadcast(y, dy)
+#     end
+#     return x .+ y, plus_bcast_pullback
+# end
 
 
-function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(*), x, y)
-    function mul_bcast_pullback(dy)
-        dy = unthunk(dy)
-        return NoTangent(), NoTangent(), unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
-    end
-    return x .* y, mul_bcast_pullback
-end
+# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(*), x, y)
+#     function mul_bcast_pullback(dy)
+#         dy = unthunk(dy)
+#         return NoTangent(), NoTangent(), unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
+#     end
+#     return x .* y, mul_bcast_pullback
+# end
 
 
-function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(Base.literal_pow),
-        ::typeof(^), x, ::Val{p}) where p
-    y = Broadcast.broadcasted(Base.literal_pow, ^, x, Val(p))
-    function literal_pow_pullback(dy)
-        dy = unthunk(dy)
-        return NoTangent(), NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
-    end
-    return y, literal_pow_pullback
-end
+# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(Base.literal_pow),
+#         ::typeof(^), x, ::Val{p}) where p
+#     y = Broadcast.broadcasted(Base.literal_pow, ^, x, Val(p))
+#     function literal_pow_pullback(dy)
+#         dy = unthunk(dy)
+#         return NoTangent(), NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
+#     end
+#     return y, literal_pow_pullback
+# end
 
 
-function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(^), x, p::Real)
-    y = x .^ p
-    function pow_pullback(dy)
-        dy = unthunk(dy)
-        return NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
-    end
-    return y, pow_pullback
-end
+# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(^), x, p::Real)
+#     y = x .^ p
+#     function pow_pullback(dy)
+#         dy = unthunk(dy)
+#         return NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
+#     end
+#     return y, pow_pullback
+# end
 
 
 ###############################################################################
