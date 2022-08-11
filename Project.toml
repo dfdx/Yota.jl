@@ -16,8 +16,8 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"
 
 [compat]
-ChainRules = "1"
-ChainRulesCore = "1"
+ChainRules = "1.43"
+ChainRulesCore = "1.15"
 FiniteDifferences = "0.12"
 NNlib = "0.8"
 Umlaut = "0.4.2"

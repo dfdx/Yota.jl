@@ -24,17 +24,22 @@ end
 
 
 const BASE_CTX = BaseCtx()
-const CR_CTX = ChainRulesCtx()
 const YOTA_RULE_CONFIG = YotaRuleConfig()
 
 
-function isprimitive(::GradCtx, f, args...)
-    return (isprimitive(BASE_CTX, f, args...) || isprimitive(CR_CTX, f, args...))
+function rewrite_special(v_fargs)
+    f, args... = Umlaut.map_vars(v -> v.op.val, v_fargs)
+    if f === broadcasted
+        orig_args = args[2:end]
+        style = Broadcast.combine_styles(map(Broadcast.broadcastable, orig_args)...)
+        v_fargs = [v_fargs[1]; style; v_fargs[2:end]...]
+    end
+    return v_fargs
 end
 
 
 """
-    record_primitive!(tape::Tape{GradCtx}, v_fargs...)
+    trace_call!(tape::Tape{GradCtx}, v_fargs...)
 
 Replace ChainRules primitives `f(args...)` with a sequence:
 
@@ -42,32 +47,39 @@ Replace ChainRules primitives `f(args...)` with a sequence:
     val = push!(tape, mkcall(getfield, rr, 1)     # extract value
     pb = push!(tape, mkcall(getfield, rr, 2)      # extract pullback
 """
-function Umlaut.record_primitive!(tape::Tape{GradCtx}, v_fargs...)
-    # global STATE = tape, v_fargs
-    # length(tape) >= 327 && error("!!!!!")
-    # println(length(tape))
-    # length(v_fargs) >= 2 && v_fargs[2] isa V && v_fargs[2].id == 606 && error("!!!")
+function Umlaut.trace_call!(t::Tracer{GradCtx}, v_fargs...)
+    line = get(t.tape.meta, :line, nothing)
+    v_fargs = rewrite_special(v_fargs)
     v_f, v_args... = v_fargs
-    f, args... = [v isa V ? tape[v].val : v for v in v_fargs]
-    line = get(tape.meta, :line, nothing)
-    if isprimitive(CR_CTX, f, args...)
-        rr_op = (is_kwfunc(f) ?
-                    mkcall(Core.kwfunc(rrule), v_args[1], rrule, YOTA_RULE_CONFIG, v_args[2:end]...; line=line) :
-                    mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...; line=line))
-        @assert rr_op.val !== nothing "rrule($f, ...) returned nothing"
-        v_rr = push!(tape, rr_op)
-        v_val = push!(tape, mkcall(_getfield, v_rr, 1; line="unpack rrule"))
-        v_pb = push!(tape, mkcall(_getfield, v_rr, 2; line="unpack rrule"))
-        tape.c.pullbacks[v_val] = v_pb
-        return v_val
+    f, args... = [v isa V ? t.tape[v].val : v for v in v_fargs]
+    rr_op = if is_kwfunc(f)
+        v_kw, v_orig_f, v_orig_args... = v_args
+        mkcall(Core.kwfunc(rrule), v_kw, rrule, YOTA_RULE_CONFIG, v_orig_f, v_orig_args...; line=line)
     else
-        return push!(tape, mkcall(v_fargs...; line=line))
+        mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...; line=line)
+    end
+    if !isnothing(rr_op.val)
+        v_rr = push!(t.tape, rr_op)
+        v_val = push!(t.tape, mkcall(_getfield, v_rr, 1; line="unpack rrule"))
+        v_pb = push!(t.tape, mkcall(_getfield, v_rr, 2; line="unpack rrule"))
+        t.tape.c.pullbacks[v_val] = v_pb
+        return v_val
+    elseif isprimitive(BaseCtx(), f, args...)
+        # In real code, there are many helper ops like getting object type,
+        # preparing keyword arguments, etc. They are not on the differentiation
+        # path and thus we don't need rrules for them, but we still need
+        # to record them to the tape
+        return push!(t.tape, mkcall(v_fargs...; line=line))
+    else
+        # if the call neither have an rrule, nor is a base primitive,
+        # then trace it
+        return Umlaut.trace!(t, v_fargs)
     end
 end
 
 
 ###############################################################################
-#                             GRAD CONTEXT                               #
+#                                  GRAD CONTEXT                               #
 ###############################################################################
 
 struct BcastGradCtx
