@@ -32,7 +32,8 @@ sin_inc(x::Number) = sin(x) + 1
         dxs = [pbs[1](1.0)[2], pbs[2](1.0)[2]]
 
         # use rrule for broadcasted
-        _, bcast_pb = rrule(YotaRuleConfig(), Broadcast.broadcasted, f, xs)
+        style = Broadcast.combine_styles(xs)
+        _, bcast_pb = rrule(YotaRuleConfig(), Broadcast.broadcasted, style, f, xs)
         dxs_bcast = bcast_pb(ones(2))[end]
 
         @test all(dxs .== dxs_bcast)

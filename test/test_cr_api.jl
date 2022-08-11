@@ -1,6 +1,6 @@
 import ChainRulesTestUtils.test_rrule
 import ChainRulesCore: rrule, unthunk
-import Yota: isprimitive, CR_CTX
+# import Yota: isprimitive, CR_CTX
 
 const broadcasted = Broadcast.broadcasted
 
@@ -56,12 +56,13 @@ rrule(::YotaRuleConfig, ::typeof(primitive_test2), x; y=1) = primitive_test2(x; 
     dxs = map(unthunk, pb([1, 2, 3]))
     @test dxs == (ZeroTangent(), ZeroTangent(), [2.0, 4.0, 6.0])
 
-    x, y = rand(2)
-    @test isprimitive(CR_CTX, primitive_test, x) == true
-    @test isprimitive(CR_CTX, Core.kwfunc(primitive_test), (y=1,), primitive_test, x) == true
-    @test isprimitive(CR_CTX, primitive_test, x, y) == false
+    # This context and corresponding isprimitive() are deprecated
+    # x, y = rand(2)
+    # @test isprimitive(CR_CTX, primitive_test, x) == true
+    # @test isprimitive(CR_CTX, Core.kwfunc(primitive_test), (y=1,), primitive_test, x) == true
+    # @test isprimitive(CR_CTX, primitive_test, x, y) == false
 
-    @test isprimitive(CR_CTX, primitive_test2, x) == true
-    @test isprimitive(CR_CTX, Core.kwfunc(primitive_test2), (y=1,), primitive_test, x,) == true
-    @test isprimitive(CR_CTX, primitive_test2, x, y) == false
+    # @test isprimitive(CR_CTX, primitive_test2, x) == true
+    # @test isprimitive(CR_CTX, Core.kwfunc(primitive_test2), (y=1,), primitive_test, x,) == true
+    # @test isprimitive(CR_CTX, primitive_test2, x, y) == false
 end

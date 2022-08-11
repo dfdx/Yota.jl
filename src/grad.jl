@@ -65,6 +65,18 @@ const YOTA_RULE_CONFIG = YotaRuleConfig()
 #     end
 # end
 
+
+function rewrite_special(v_fargs)
+    f, args... = Umlaut.map_vars(v -> v.op.val, v_fargs)
+    if f === broadcasted
+        orig_args = args[2:end]
+        style = Broadcast.combine_styles(map(Broadcast.broadcastable, orig_args)...)
+        v_fargs = [v_fargs[1]; style; v_fargs[2:end]...]
+    end
+    return v_fargs
+end
+
+
 """
     trace_call!(tape::Tape{GradCtx}, v_fargs...)
 
@@ -77,8 +89,8 @@ Replace ChainRules primitives `f(args...)` with a sequence:
 function Umlaut.trace_call!(t::Tracer{GradCtx}, v_fargs...)
     # global STATE = t, v_fargs
     # v_fargs[1] == broadcasted && error("!")
-
     line = get(t.tape.meta, :line, nothing)
+    v_fargs = rewrite_special(v_fargs)
     v_f, v_args... = v_fargs
     f, args... = [v isa V ? t.tape[v].val : v for v in v_fargs]
     rr_op = if is_kwfunc(f)
