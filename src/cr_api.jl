@@ -4,26 +4,6 @@ import Umlaut: make_name, Input, to_expr
 
 
 ###############################################################################
-#                              Primitives                                     #
-###############################################################################
-
-
-# struct ChainRulesCtx end
-
-
-# function isprimitive(::ChainRulesCtx, f, args...)
-#     F = Core.Typeof(f)
-#     Args = Core.Typeof.(args)
-#     Core.Compiler.return_type(rrule, Tuple{YotaRuleConfig, F, Args...}) !== Nothing && return true
-#     if is_kwfunc(F)
-#         _, orig_F, orig_Args... = Args
-#         Args_kwrrule = Tuple{Any, typeof(rrule), YotaRuleConfig, orig_F, orig_Args...,}
-#         Core.Compiler.return_type(Core.kwfunc(rrule), Args_kwrrule) !== Nothing && return true
-#     end
-#     return false
-# end
-
-###############################################################################
 #                              RuleConfig                                     #
 ###############################################################################
 

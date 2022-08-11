@@ -72,6 +72,10 @@ ChainRulesCore.rrule(::Type{Val{V}}) where V = Val{V}(), dy -> (NoTangent(),)
 #                                 Broadcast                                   #
 ###############################################################################
 
+# rrules for broadcasting are already defined in ChainRules
+# see for details: https://github.com/JuliaDiff/ChainRules.jl/pull/644
+# yet we need an rrule for materialize() and a few utilities for rrule_via_ad
+
 # unzip taken from Zygote:
 # https://github.com/FluxML/Zygote.jl/blob/d5be4d5ca80e79278d714eaac15ca71904a262e3/src/lib/array.jl#L177-L185
 struct StaticGetter{i} end
@@ -87,14 +91,11 @@ function unzip(tuples)
 end
 
 
-# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), f::F, args...) where F
-#     return rrule_via_ad(YOTA_RULE_CONFIG, broadcasted, f, args...)
-# end
-
-
-function rrule(::YotaRuleConfig, ::typeof(Broadcast.materialize), x)
+function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(Broadcast.materialize), x)
     return Broadcast.materialize(x), dy -> (NoTangent(), dy)
 end
+
+
 
 # # test_rrule(Broadcast.materialize, Broadcast.broadcasted(sin, rand(3)); output_tangent=ones(3))
 
@@ -273,42 +274,6 @@ function rrule(::YotaRuleConfig, ::typeof(Base.indexed_iterate), t::Tuple, i::In
     end
     return y, indexed_iterate_pullback
 end
-
-
-# ## tuple construction
-
-# ∇tuple(dy, ::typeof(tuple), args...) = (NoTangent(), [dy[i] for i=1:length(args)]...)
-# #@drule tuple(args::Vararg) ∇tuple
-
-# ## some no diff functions
-
-# #@drule Core.kwfunc(f::Any) (dy, _, f) -> NoTangent()
-
-# ## cat & co.
-
-# function ∇cat_kw(dy, ::typeof(Core.kwfunc(cat)), kw::Any, ::typeof(cat), arrs...)
-#     return (
-#         NoTangent(),
-#         NoTangent(),
-#         NoTangent(),
-#         [uncat(dy, i, arrs...; dims=kw.dims) for i=1:length(arrs)]...
-#     )
-# end
-# #@drule Core.kwfunc(cat)(kw::Any, _::typeof(cat), arrs::Vararg) ∇cat_kw
-
-# function ∇vcat(dy, ::typeof(vcat), arrs...)
-#     return NoTangent(), [uncat(dy, i, arrs...; dims=1) for i=1:length(arrs)]...
-# end
-# #@drule vcat(arrs::Vararg) ∇vcat
-
-# function ∇hcat(dy, ::typeof(hcat), arrs...)
-#     return NoTangent(), [uncat(dy, i, arrs...; dims=2) for i=1:length(arrs)]...
-# end
-# #@drule hcat(arrs::Vararg) ∇hcat
-
-## Colon
-
-#@drule Colon()(a::Int, b::Int) NoTangent()
 
 function rrule(::YotaRuleConfig, ::Colon, a::Int, b::Int)
     y = a:b

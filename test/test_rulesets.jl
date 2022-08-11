@@ -2,14 +2,6 @@ import ChainRulesCore.rrule
 import Yota.YotaRuleConfig
 
 
-# @testset "rulesets" begin
-
-#     f = reshape
-#     args = [(rand(3, 4),), (12,)]
-#     test_rrule(YotaRuleConfig(), Core._apply_iterate, iterate, f, args...; check_inferred=false)
-
-# end
-
 @testset "tuple" begin
     test_rrule(YotaRuleConfig(), tuple, 1.0, 2.0, 3.0; check_inferred=false)
 end
@@ -18,10 +10,13 @@ end
 # broacastable non-primitive
 sin_inc(x::Number) = sin(x) + 1
 
-
 @testset "generic broadcasted" begin
-    # see the discussion here:
-    # https://github.com/JuliaDiff/ChainRules.jl/issues/531
+    # numeric gradient in test_rrule() gives highly inaccurate results
+    # thus using gradcheck instead
+    # test_rrule(YotaRuleConfig(), Broadcast.materialize, Broadcast.broadcasted(sin, rand(3)))
+
+    @test gradcheck(x -> sum(sin.(x)), rand(3))
+
     for f in [sin, sin_inc]
         xs = rand(2)
 
