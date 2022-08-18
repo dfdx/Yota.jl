@@ -27,9 +27,20 @@ const BASE_CTX = BaseCtx()
 const YOTA_RULE_CONFIG = YotaRuleConfig()
 
 
+function has_rrule(f, args...)
+    # assuming kw functions are passed in the expanded form here
+    Ts = [a isa DataType ? Type{a} : typeof(a) for a in (f, args...)]
+    return Core.Compiler.return_type(rrule, (YotaRuleConfig, Ts...,)) !== Nothing
+end
+
+
 function rewrite_special(v_fargs)
     f, args... = Umlaut.map_vars(v -> v.op.val, v_fargs)
-    if f === broadcasted
+    # if f === broadcasted && args[1] == leakyrelu
+    #     global V_FARGS = v_fargs
+    #     error("!")
+    # end
+    if f === broadcasted # && !has_rrule(f, args...)
         orig_args = args[2:end]
         style = Broadcast.combine_styles(map(Broadcast.broadcastable, orig_args)...)
         v_fargs = [v_fargs[1]; style; v_fargs[2:end]...]
@@ -49,7 +60,9 @@ Replace ChainRules primitives `f(args...)` with a sequence:
 """
 function Umlaut.trace_call!(t::Tracer{GradCtx}, v_fargs...)
     line = get(t.tape.meta, :line, nothing)
+    # global STATE = t, v_fargs
     v_fargs = rewrite_special(v_fargs)
+    # v_fargs = Umlaut.unsplat!(t, v_fargs)
     v_f, v_args... = v_fargs
     f, args... = [v isa V ? t.tape[v].val : v for v in v_fargs]
     rr_op = if is_kwfunc(f)
@@ -260,13 +273,13 @@ end
 
 
 """
-    gradtape(f::Union{Function, DataType}, args...; ctx=GradCtx(), seed=1)
+    gradtape(f, args...; ctx=GradCtx(), seed=1)
     gradtape!(tape::Tape; seed=1)
 
 Calculate and record to the tape gradients of `tape[tape.resultid]` w.r.t. `Input` nodes.
 See grad() for more high-level API.
 """
-function gradtape(f::Union{Function,DataType}, args...; ctx=GradCtx(), seed=1)
+function gradtape(f, args...; ctx=GradCtx(), seed=1)
     _, tape = trace(f, args...; ctx=ctx)
     # TODO: if it works, move the hack to Umlaut
     if tape[tape.result] isa Input
@@ -335,7 +348,7 @@ All gradients can be applied to original variables using `update!()` function.
 
 See also: [gradtape](@ref)
 """
-function grad(f::Union{Function,DataType}, args...; seed=1)
+function grad(f, args...; seed=1)
     # key consists of function type and type of argument (for structs) or its size
     # cache_key = (f, ([(isstruct(arg) || args isa Function) ? typeof(arg) : size(arg) for arg in args]...,))
     cache_key = map(typeof, (f, args...))
