@@ -2,6 +2,23 @@
 #                                  GRAD CONTEXT                               #
 ###############################################################################
 
+struct ChainRulesCtx end
+
+
+function has_rrule(f, args...)
+    F = Core.Typeof(f)
+    Args = Core.Typeof.(args)
+    Core.Compiler.return_type(rrule, Tuple{YotaRuleConfig, F, Args...}) !== Nothing && return true
+    if is_kwfunc(F)
+        Args_kwrrule = Tuple{Any, typeof(Core.kwfunc(f)), YotaRuleConfig, Args...,}
+        Core.Compiler.return_type(Core.kwfunc(rrule), Args_kwrrule) !== Nothing && return true
+    end
+    return false
+end
+
+Umlaut.isprimitive(::ChainRulesCtx, f, args...) = has_rrule(f, args...)
+
+
 struct GradCtx
     # map from primal var to its pullback var
     pullbacks::Dict{Variable,Variable}
@@ -26,73 +43,31 @@ end
 const BASE_CTX = BaseCtx()
 const YOTA_RULE_CONFIG = YotaRuleConfig()
 
-
-function has_rrule(f, args...)
-    # assuming kw functions are passed in the expanded form here
-    Ts = [a isa DataType ? Type{a} : typeof(a) for a in (f, args...)]
-    return Core.Compiler.return_type(rrule, (YotaRuleConfig, Ts...,)) !== Nothing
-end
-
-
-function rewrite_special(v_fargs)
-    f, args... = Umlaut.map_vars(v -> v.op.val, v_fargs)
-    # if f === broadcasted && args[1] == leakyrelu
-    #     global V_FARGS = v_fargs
-    #     error("!")
-    # end
-    if f === broadcasted # && !has_rrule(f, args...)
-        orig_args = args[2:end]
-        style = Broadcast.combine_styles(map(Broadcast.broadcastable, orig_args)...)
-        v_fargs = [v_fargs[1]; style; v_fargs[2:end]...]
-    end
-    return v_fargs
-end
-
-
 """
-    trace_call!(tape::Tape{GradCtx}, v_fargs...)
+    actually_tracable(f, args...)
 
-Replace ChainRules primitives `f(args...)` with a sequence:
-
-    rr = push!(tape, mkcall(rrule, f, args...))   # i.e. rrule(f, args...)
-    val = push!(tape, mkcall(getfield, rr, 1)     # extract value
-    pb = push!(tape, mkcall(getfield, rr, 2)      # extract pullback
+Add exception for `isprimitive(BaseCtx(), f, args...)`.
+Note that it does NOT cancel `isprimitive(ChainRulesCtx(), f, args...)`.
 """
-function Umlaut.trace_call!(t::Tracer{GradCtx}, v_fargs...)
-    line = get(t.tape.meta, :line, nothing)
-    # global STATE = t, v_fargs
-    v_fargs = rewrite_special(v_fargs)
-    # v_fargs = Umlaut.unsplat!(t, v_fargs)
-    v_f, v_args... = v_fargs
-    f, args... = [v isa V ? t.tape[v].val : v for v in v_fargs]
-    rr_op = if is_kwfunc(f)
-        v_kw, v_orig_f, v_orig_args... = v_args
-        mkcall(Core.kwfunc(rrule), v_kw, rrule, YOTA_RULE_CONFIG, v_orig_f, v_orig_args...; line=line)
-    else
-        mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...; line=line)
+actually_tracable(f, args...) = false
+# we want to trace broadcast(ed) down to their version with rrules.
+actually_tracable(::typeof(broadcast), args...) = true
+actually_tracable(::typeof(broadcasted), args...) = true
+
+
+function Umlaut.isprimitive(::GradCtx, f, args...)
+    if isprimitive(BaseCtx(), f, args...) && !actually_tracable(f, args...)
+        return true
     end
-    if !isnothing(rr_op.val)
-        v_rr = push!(t.tape, rr_op)
-        v_val = push!(t.tape, mkcall(_getfield, v_rr, 1; line="unpack rrule"))
-        v_pb = push!(t.tape, mkcall(_getfield, v_rr, 2; line="unpack rrule"))
-        t.tape.c.pullbacks[v_val] = v_pb
-        return v_val
-    elseif isprimitive(BaseCtx(), f, args...)
-        # In real code, there are many helper ops like getting object type,
-        # preparing keyword arguments, etc. They are not on the differentiation
-        # path and thus we don't need rrules for them, but we still need
-        # to record them to the tape
-        return push!(t.tape, mkcall(v_fargs...; line=line))
-    else
-        # if the call neither have an rrule, nor is a base primitive,
-        # then trace it
-        return Umlaut.trace!(t, v_fargs)
+    if isprimitive(ChainRulesCtx(), f, args...)
+        return true
     end
+    return false
 end
 
 
 ###############################################################################
-#                                  GRAD CONTEXT                               #
+#                            BCAST GRAD CONTEXT                               #
 ###############################################################################
 
 struct BcastGradCtx
@@ -164,11 +139,6 @@ function todo_list(tape::Tape{GradCtx}, y=tape.result)
     y_orig = y
     @assert(tape[y] isa Call, "The tape's result is expected to be a Call, " *
             "but instead $(typeof(tape[tape.result])) was encountered")
-    # if tape[y] isa Input
-    #     # for function that just return one of their arguments
-    #     # and don't have any calls in them
-    #     return [y_orig]
-    # end
     y_fargs = [tape[y].fn; tape[y].args...]
     is_rrule_based = haskey(tape.c.pullbacks, y)
     if is_rrule_based
@@ -184,6 +154,42 @@ function todo_list(tape::Tape{GradCtx}, y=tape.result)
     todo = collect(Set([bound(tape, v) for v in todo]))
     todo = sort(todo, by=v->v.id, rev=true)
     return todo
+end
+
+call_values(op::Call) = Umlaut.var_values([op.fn, op.args...])
+
+"""
+Transofrm the tape replacing calls `fn(args...)` for which `ChainRule.rrule` is defined
+with the following chain or calls:
+    * t = rrule(fn, args...)
+    * val = _getfield(t, 1)
+    * pb = _getfield(t, 2)
+where `val = fn(args...)` and `pb` is the pullback function.
+"""
+function chainrules_transform!(tape::Tape)
+    i = 1
+    while i <= length(tape)
+        op = tape[V(i)]
+        if op isa Call && isprimitive(ChainRulesCtx(), call_values(op)...)
+            # replace f(args...) with rrule(f, args...)
+            v_f, v_args, line = op.fn, op.args, op.line
+            f = op.fn isa V ? tape[op.fn].val : op.fn
+            rr_op = if is_kwfunc(f)
+                v_kw, v_orig_f, v_orig_args... = v_args
+                mkcall(Core.kwfunc(rrule), v_kw, rrule, YOTA_RULE_CONFIG, v_orig_f, v_orig_args...; line=line)
+            else
+                mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...; line=line)
+            end
+            val_op = mkcall(_getfield, V(rr_op), 1)
+            pb_op = mkcall(_getfield, V(rr_op), 2)
+            tape.c.pullbacks[V(val_op)] = V(pb_op)
+            replace!(tape, i => [rr_op, val_op, pb_op]; rebind_to=2)
+            i += 3  # rrule + 2 _getfield ops
+        else
+            i += 1
+        end
+    end
+    return tape
 end
 
 
@@ -258,6 +264,8 @@ end
 
 
 function gradtape!(tape::Tape; seed=1)
+    # apply transformations needed for ChainRules
+    chainrules_transform!(tape)
     # backpropagate gradients
     back!(tape; seed=seed)
     # add a tuple of (val, (gradients...))

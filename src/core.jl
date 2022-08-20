@@ -22,5 +22,4 @@ include("update.jl")
 include("gradcheck.jl")
 
 
-# Base.show(io::IO, tape::Tape{GradCtx}) = Umlaut.show_compact(io, tape)
 Umlaut.SHOW_CONFIG.compact = true
