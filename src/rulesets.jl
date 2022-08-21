@@ -6,41 +6,6 @@ import Umlaut: __new__
 ###############################################################################
 
 
-# function rrule(::YotaRuleConfig, ::typeof(Core._apply_iterate),
-#         ::typeof(iterate), f::F, args...) where F
-#     # flatten nested arguments
-#     flat = []
-#     for a in args
-#         push!(flat, a...)
-#     end
-#     # apply rrule of the function on the flat arguments
-#     y, pb = rrule_via_ad(YotaRuleConfig(), f, flat...)
-#     sizes = map(length, args)
-#     function _apply_iterate_pullback(dy)
-#         if dy isa NoTangent
-#             return ntuple(_-> NoTangent(), length(args) + 3)
-#         end
-#         flat_dargs = pb(dy)
-#         df = flat_dargs[1]
-#         # group derivatives to tuples of the same sizes as arguments
-#         dargs = []
-#         j = 2
-#         for i = 1:length(args)
-#             darg_val = flat_dargs[j:j + sizes[i] - 1]
-#             if length(darg_val) == 1 && darg_val[1] isa NoTangent
-#                 push!(dargs, darg_val[1])
-#             else
-#                 darg = Tangent{typeof(darg_val)}(darg_val...)
-#                 push!(dargs, darg)
-#             end
-#             j = j + sizes[i]
-#         end
-#         return NoTangent(), NoTangent(), df, dargs...
-#     end
-#     return y, _apply_iterate_pullback
-# end
-
-
 function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(tuple), args...)
     y = tuple(args...)
     N = length(args)
@@ -96,49 +61,13 @@ function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(Broadcast.materialize),
 end
 
 
+for T in (AbstractArray, Broadcast.Broadcasted, Number)
+    function ChainRulesCore.rrule(::typeof(Broadcast.broadcastable), x::T)
+        broadcastable_pullback(dy) = (NoTangent(), dy)
+        return x, broadcastable_pullback
+    end
+end
 
-# # test_rrule(Broadcast.materialize, Broadcast.broadcasted(sin, rand(3)); output_tangent=ones(3))
-
-
-# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(+), x, y)
-#     function plus_bcast_pullback(dy)
-#         # println("dy- $dy")
-#         dy = unthunk(dy)
-#         # println("dy+ $dy")
-#         return NoTangent(), NoTangent(), unbroadcast(x, dy), unbroadcast(y, dy)
-#     end
-#     return x .+ y, plus_bcast_pullback
-# end
-
-
-# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(*), x, y)
-#     function mul_bcast_pullback(dy)
-#         dy = unthunk(dy)
-#         return NoTangent(), NoTangent(), unbroadcast_prod_x(x, y, dy), unbroadcast_prod_y(x, y, dy)
-#     end
-#     return x .* y, mul_bcast_pullback
-# end
-
-
-# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(Base.literal_pow),
-#         ::typeof(^), x, ::Val{p}) where p
-#     y = Broadcast.broadcasted(Base.literal_pow, ^, x, Val(p))
-#     function literal_pow_pullback(dy)
-#         dy = unthunk(dy)
-#         return NoTangent(), NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
-#     end
-#     return y, literal_pow_pullback
-# end
-
-
-# function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcasted), ::typeof(^), x, p::Real)
-#     y = x .^ p
-#     function pow_pullback(dy)
-#         dy = unthunk(dy)
-#         return NoTangent(), NoTangent(), (@. p * x ^ (p - 1) * dy), ZeroTangent()
-#     end
-#     return y, pow_pullback
-# end
 
 
 ###############################################################################
