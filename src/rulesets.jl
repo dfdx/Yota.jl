@@ -74,17 +74,6 @@ end
 #                        getindex, getfield, __new__                          #
 ###############################################################################
 
-function rrule(::YotaRuleConfig, ::typeof(getindex), x, I...)
-    y = getindex(x, I...)
-    function getindex_pullback(dy)
-        dy = unthunk(dy)
-        return NoTangent(), ungetindex(x, dy, I...), [ZeroTangent() for i in I]...
-    end
-    return y, getindex_pullback
-
-end
-
-
 function rrule(::YotaRuleConfig, ::typeof(getproperty), s, f::Symbol)
     y = getproperty(s, f)
     function getproperty_pullback(dy)
@@ -119,7 +108,7 @@ function rrule(::YotaRuleConfig, ::typeof(__new__), T, args...)
         else
             fld_derivs = [getproperty(dy, fld) for fld in fieldnames(T)]
         end
-        return NoTangent(), NoTangent(), fld_derivs...
+        return NoTangent(), ZeroTangent(), fld_derivs...
     end
     return y, __new__pullback
 end
@@ -133,7 +122,7 @@ function rrule(::YotaRuleConfig, ::typeof(iterate), x::AbstractArray)
     y = iterate(x)
     function iterate_pullback(dy)
         dy = unthunk(dy)
-        return NoTangent(), ungetindex(x, dy, 1)
+        return NoTangent(), ungetindex(x, dy[1], 1)
     end
     return y, iterate_pullback
 end
@@ -142,7 +131,7 @@ function rrule(::YotaRuleConfig, ::typeof(iterate), x::AbstractArray, i::Integer
     y = iterate(x, i)
     function iterate_pullback(dy)
         dy = unthunk(dy)
-        return NoTangent(), ungetindex(x, dy, i), ZeroTangent()
+        return NoTangent(), ungetindex(x, dy[1], i), ZeroTangent()
     end
     return y, iterate_pullback
 end
@@ -210,4 +199,13 @@ function rrule(::YotaRuleConfig, ::Colon, a::Int, b::Int)
         return NoTangent(), NoTangent(), NoTangent()
     end
     return y, colon_pullback
+end
+
+
+###############################################################################
+#                                   convert                                   #
+###############################################################################
+
+function ChainRulesCore.rrule(::typeof(convert), ::Type{T}, x::T) where T
+    return x, Δ -> (NoTangent(), ZeroTangent(), Δ)
 end

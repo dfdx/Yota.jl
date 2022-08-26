@@ -6,6 +6,13 @@ import Yota.YotaRuleConfig
     test_rrule(YotaRuleConfig(), tuple, 1.0, 2.0, 3.0; check_inferred=false)
 end
 
+@testset "iterate" begin
+    x = rand(3)
+    val, pb = rrule(YotaRuleConfig(), iterate, x)
+    @test pb((1, NoTangent())) == (NoTangent(), [1.0, 0, 0])
+    val, pb = rrule(YotaRuleConfig(), iterate, x, 2)
+    @test pb((1, NoTangent())) == (NoTangent(), [0, 1.0, 0], ZeroTangent())
+end
 
 # broacastable non-primitive
 sin_inc(x::Number) = sin(x) + 1

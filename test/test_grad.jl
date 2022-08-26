@@ -222,7 +222,7 @@ end
     @test g isa Tangent{<:Tuple}
     @test g[1] isa Tangent{<:NamedTuple}
     @test g[1].a == 1
-    @test g[2] isa ZeroTangent
+    @test g[2] isa NoTangent
 end
 
 @testset "grad: seed" begin

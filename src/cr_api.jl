@@ -20,26 +20,6 @@ struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
 #                              rrule_via_ad                                   #
 ###############################################################################
 
-# """
-#     bcast_rrule(::YotaRuleConfig, ::typeof(broadcasted), f, args...; kw...)
-
-# Similar to rrule(config, broadcasted, f, args...), but works on for ChainRule-primitive
-# functions. For a more flexible handling of broadcasting use rrule(...) directly.
-# """
-# function bcast_rrule(::YotaRuleConfig, ::typeof(broadcasted), f::F, args...; kw...) where F
-#     ys, pbs = unzip(rrule.(YOTA_RULE_CONFIG, f, args...; kw...))
-#     function pullback(Δ)
-#         if Δ isa NoTangent || Δ isa ZeroTangent
-#             return (NoTangent(), [Δ for _=1:length(pbs) + 1]...,)
-#         end
-#         Δ = unthunk(Δ)
-#         dxs = map((pb, Δ) -> pb(Δ), pbs, Δ) |> unzip
-#         dxs = [all(dx .== NoTangent()) ? NoTangent() : dx for dx in dxs]
-#         return (NoTangent(), dxs...,)
-#     end
-#     return ys, pullback
-# end
-
 
 function to_rrule_expr(tape::Tape)
     # TODO (maybe): add YotaRuleConfig() as the first argument for consistency
