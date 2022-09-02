@@ -121,7 +121,7 @@ const RRULE_VIA_AD_STATE = Ref{Tuple}()
 Generate `rrule` using Yota.
 """
 function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
-    res = rrule(f, args...)
+    res = rrule(YOTA_RULE_CONFIG, f, args...)
     !isnothing(res) && return res
     sig = map(typeof, (f, args...))
     if haskey(GENERATED_RRULE_CACHE, sig)
