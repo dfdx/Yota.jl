@@ -121,21 +121,34 @@ const RRULE_VIA_AD_STATE = Ref{Tuple}()
 Generate `rrule` using Yota.
 """
 function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
+    arg_type_str = join(["::$(typeof(a))" for a in args], ", ")
+    @debug "Running rrule_via_ad() for $f($arg_type_str)"
     res = rrule(f, args...)
     !isnothing(res) && return res
+    @debug "No existing rrule found"
     sig = map(typeof, (f, args...))
+    # if false
     if haskey(GENERATED_RRULE_CACHE, sig)
-        rr = GENERATED_RRULE_CACHE[sig]
-        # return Base.invokelatest(rr, f, args...)
-        val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
-        return val, dy -> Base.invokelatest(pb, dy)
+        @debug "Found rrule in cache"
+        # rr = GENERATED_RRULE_CACHE[sig]
+        # # return Base.invokelatest(rr, f, args...)
+        # val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
+        # @debug "Done using cached rrule for $f($arg_type_str)"
+        # return val, dy -> Base.invokelatest(pb, dy)
+        tape = GENERATED_RRULE_CACHE[sig]
+        return play!(tape, f, args...)
     else
         try
-            rr = make_rrule(f, args...)
-            GENERATED_RRULE_CACHE[sig] = rr
-            # return Base.invokelatest(rr, f, args...)
-            val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
-            return val, dy -> Base.invokelatest(pb, dy)
+            @debug "Generating a new rrule"
+            # rr = make_rrule(f, args...)
+            # GENERATED_RRULE_CACHE[sig] = rr
+            # # return Base.invokelatest(rr, f, args...)
+            # val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
+            # @debug "Done generating rrule for $f($arg_type_str)"
+            # return val, dy -> Base.invokelatest(pb, dy)
+            tape = gradtape(f, args...; seed=:auto, ctx=GradCtx())
+            GENERATED_RRULE_CACHE[sig] = tape
+            return play!(tape, f, args...)
         catch
             RRULE_VIA_AD_STATE[] = (f, args)
             @error("Failed to compile rrule for $(f)$args, extract details via:\n" *

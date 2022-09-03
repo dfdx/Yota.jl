@@ -15,7 +15,7 @@ const broadcasted = Broadcast.broadcasted
 include("helpers.jl")
 include("utils.jl")
 include("deprecated.jl")
-include("cr_api.jl")
+include("chainrules.jl")
 include("rulesets.jl")
 include("grad.jl")
 include("update.jl")
