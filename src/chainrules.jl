@@ -23,7 +23,7 @@ struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
 
 function to_rrule_expr(tape::Tape)
     # TODO (maybe): add YotaRuleConfig() as the first argument for consistency
-    fn_name = gensym("rrule_$(tape[V(1)].val)")
+    fn_name = :(ChainRulesCore.rrule)
     header = Expr(:call, fn_name)
     push!(header.args, Expr(:(::), :config, YotaRuleConfig))
     for v in inputs(tape)
@@ -120,40 +120,47 @@ const RRULE_VIA_AD_STATE = Ref{Tuple}()
 
 Generate `rrule` using Yota.
 """
-function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
+function ChainRulesCore.rrule_via_ad(cfg::YotaRuleConfig, f, args...)
     arg_type_str = join(["::$(typeof(a))" for a in args], ", ")
     @debug "Running rrule_via_ad() for $f($arg_type_str)"
-    res = rrule(f, args...)
+    res = rrule(cfg, f, args...)
     !isnothing(res) && return res
-    @debug "No existing rrule found"
-    sig = map(typeof, (f, args...))
+    @debug "No rrule in older world ages, falling back to invokelatest"
+    res = Base.invokelatest(rrule, cfg, f, args...)
+    # note: returned pullback is still in future, so we re-wrap it into invokelatest too
+    !isnothing(res) && return res[1], dy -> Base.invokelatest(res[2], dy)
+    @debug "No rrule in the latest world age, compiling a new one"
+    make_rrule(f, args...)
+    res = Base.invokelatest(rrule, cfg, f, args...)
+    return res[1], dy -> Base.invokelatest(res[2], dy)
+    # sig = map(typeof, (f, args...))
     # if false
-    if haskey(GENERATED_RRULE_CACHE, sig)
-        @debug "Found rrule in cache"
-        # rr = GENERATED_RRULE_CACHE[sig]
-        # # return Base.invokelatest(rr, f, args...)
-        # val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
-        # @debug "Done using cached rrule for $f($arg_type_str)"
-        # return val, dy -> Base.invokelatest(pb, dy)
-        tape = GENERATED_RRULE_CACHE[sig]
-        return play!(tape, f, args...)
-    else
-        try
-            @debug "Generating a new rrule"
-            # rr = make_rrule(f, args...)
-            # GENERATED_RRULE_CACHE[sig] = rr
-            # # return Base.invokelatest(rr, f, args...)
-            # val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
-            # @debug "Done generating rrule for $f($arg_type_str)"
-            # return val, dy -> Base.invokelatest(pb, dy)
-            tape = gradtape(f, args...; seed=:auto, ctx=GradCtx())
-            GENERATED_RRULE_CACHE[sig] = tape
-            return play!(tape, f, args...)
-        catch
-            RRULE_VIA_AD_STATE[] = (f, args)
-            @error("Failed to compile rrule for $(f)$args, extract details via:\n" *
-                 "\t(f, args) = Yota.RRULE_VIA_AD_STATE[]")
-            rethrow()
-        end
-    end
+    # if haskey(GENERATED_RRULE_CACHE, sig)
+    #     @debug "Found rrule in cache"
+    #     # rr = GENERATED_RRULE_CACHE[sig]
+    #     # # return Base.invokelatest(rr, f, args...)
+    #     # val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
+    #     # @debug "Done using cached rrule for $f($arg_type_str)"
+    #     # return val, dy -> Base.invokelatest(pb, dy)
+    #     tape = GENERATED_RRULE_CACHE[sig]
+    #     return play!(tape, f, args...)
+    # else
+    #     try
+    #         @debug "Generating a new rrule"
+    #         # rr = make_rrule(f, args...)
+    #         # GENERATED_RRULE_CACHE[sig] = rr
+    #         # # return Base.invokelatest(rr, f, args...)
+    #         # val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
+    #         # @debug "Done generating rrule for $f($arg_type_str)"
+    #         # return val, dy -> Base.invokelatest(pb, dy)
+    #         tape = gradtape(f, args...; seed=:auto, ctx=GradCtx())
+    #         GENERATED_RRULE_CACHE[sig] = tape
+    #         return play!(tape, f, args...)
+    #     catch
+    #         RRULE_VIA_AD_STATE[] = (f, args)
+    #         @error("Failed to compile rrule for $(f)$args, extract details via:\n" *
+    #              "\t(f, args) = Yota.RRULE_VIA_AD_STATE[]")
+    #         rethrow()
+    #     end
+    # end
 end
