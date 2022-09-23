@@ -83,11 +83,13 @@ Examples:
     pb(1.0)
 
 """
-make_rrule(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
+make_rrule!(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
 
-function make_rrule(f, args...)
+function make_rrule!(f, args...)
+    arg_str = join(["::$(typeof(a))" for a in args], ", ")
+    @debug "Generating new rrule for $(f)($arg_str)"
     tape = gradtape(f, args...; seed=:auto, ctx=GradCtx())
-    return make_rrule(tape)
+    make_rrule!(tape)
 end
 
 
@@ -113,7 +115,7 @@ function ChainRulesCore.rrule_via_ad(cfg::YotaRuleConfig, f, args...)
         return y, pb
     end
     @debug "No rrule in the latest world age, compiling a new one"
-    make_rrule(f, args...)
+    make_rrule!(f, args...)
     res = Base.invokelatest(rrule, cfg, f, args...)
     y, pb_ = res
     pb = dy -> Base.invokelatest(pb_, dy)
