@@ -1,6 +1,15 @@
 import Statistics
+import Yota: isprimitive, ChainRulesCtx
 import ChainRulesCore
 import ChainRulesCore: rrule, Tangent, ZeroTangent, NoTangent, @opt_out
+
+
+@testset "ChainRulesCtx" begin
+    @test isprimitive(ChainRulesCtx(), sum, rand(3, 4))
+    @test isprimitive(ChainRulesCtx(), Core.kwfunc(sum), (dims=1,), sum, rand(3, 4))
+    @test !isprimitive(ChainRulesCtx(), Core.kwfunc(sum), (dims=1,), sum, rand())
+end
+
 
 loss_simple(W, b, x) = sum(W * x .+ b)
 loss_double_broadcast(W, b, x) = sum(sin.(W * x) .+ b)

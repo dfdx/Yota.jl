@@ -23,7 +23,7 @@ struct YotaRuleConfig <: RuleConfig{Union{NoForwardsMode,HasReverseMode}} end
 
 function to_rrule_expr(tape::Tape)
     # TODO (maybe): add YotaRuleConfig() as the first argument for consistency
-    fn_name = gensym("rrule_$(tape[V(1)].val)")
+    fn_name = :(ChainRulesCore.rrule)
     header = Expr(:call, fn_name)
     push!(header.args, Expr(:(::), :config, YotaRuleConfig))
     for v in inputs(tape)
@@ -83,36 +83,14 @@ Examples:
     pb(1.0)
 
 """
-make_rrule(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
+make_rrule!(tape::Tape) = Base.eval(@__MODULE__, to_rrule_expr(tape))
 
-function make_rrule(f, args...)
+function make_rrule!(f, args...)
+    arg_str = join(["::$(typeof(a))" for a in args], ", ")
+    @debug "Generating new rrule for $(f)($arg_str)"
     tape = gradtape(f, args...; seed=:auto, ctx=GradCtx())
-    return make_rrule(tape)
+    make_rrule!(tape)
 end
-
-# function make_rrule(::typeof(broadcasted), f, args...)
-#     if isprimitive(GradCtx(), f, map(first, args)...)
-#         return bcast_rrule # (YOTA_RULE_CONFIG, broadcasted, f, args...)
-#     end
-#     ctx = BcastGradCtx(GradCtx())
-#     _, tape = trace(f, args...; ctx=ctx)
-#     tape = Tape(tape; ctx=ctx.inner)
-#     gradtape!(tape, seed=:auto)
-#     # insert imaginary broadcasted to the list of inputs
-#     insert!(tape, 1, Umlaut.Input(broadcasted))
-#     # insert ZeroTangent to the result to account for the additional argument
-#     grad_tuple_op = tape[V(tape.result.id - 2)]
-#     @assert grad_tuple_op isa Call && grad_tuple_op.fn == tuple
-#     grad_tuple_op.args = [ZeroTangent(), grad_tuple_op.args...]
-#     for id=grad_tuple_op.id:grad_tuple_op.id + 2
-#         Umlaut.exec!(tape, tape[V(id)])
-#     end
-#     return make_rrule(tape)
-# end
-
-
-const GENERATED_RRULE_CACHE = Dict()
-const RRULE_VIA_AD_STATE = Ref{Tuple}()
 
 
 """
@@ -120,27 +98,26 @@ const RRULE_VIA_AD_STATE = Ref{Tuple}()
 
 Generate `rrule` using Yota.
 """
-function ChainRulesCore.rrule_via_ad(::YotaRuleConfig, f, args...)
-    res = rrule(f, args...)
-    !isnothing(res) && return res
-    sig = map(typeof, (f, args...))
-    if haskey(GENERATED_RRULE_CACHE, sig)
-        rr = GENERATED_RRULE_CACHE[sig]
-        # return Base.invokelatest(rr, f, args...)
-        val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
-        return val, dy -> Base.invokelatest(pb, dy)
-    else
-        try
-            rr = make_rrule(f, args...)
-            GENERATED_RRULE_CACHE[sig] = rr
-            # return Base.invokelatest(rr, f, args...)
-            val, pb = Base.invokelatest(rr, YOTA_RULE_CONFIG, f, args...)
-            return val, dy -> Base.invokelatest(pb, dy)
-        catch
-            RRULE_VIA_AD_STATE[] = (f, args)
-            @error("Failed to compile rrule for $(f)$args, extract details via:\n" *
-                 "\t(f, args) = Yota.RRULE_VIA_AD_STATE[]")
-            rethrow()
-        end
+function ChainRulesCore.rrule_via_ad(cfg::YotaRuleConfig, f, args...)
+    arg_type_str = join(["::$(typeof(a))" for a in args], ", ")
+    @debug "Running rrule_via_ad() for $f($arg_type_str)"
+    res = rrule(cfg, f, args...)
+    if !isnothing(res)
+        y, pb = res
+        return y, pb
     end
+    @debug "No rrule in older world ages, falling back to invokelatest"
+    res = Base.invokelatest(rrule, cfg, f, args...)
+    if !isnothing(res)
+        y, pb_ = res
+        # note: returned pullback is still in future, so we re-wrap it into invokelatest too
+        pb = dy -> Base.invokelatest(pb_, dy)
+        return y, pb
+    end
+    @debug "No rrule in the latest world age, compiling a new one"
+    make_rrule!(f, args...)
+    res = Base.invokelatest(rrule, cfg, f, args...)
+    y, pb_ = res
+    pb = dy -> Base.invokelatest(pb_, dy)
+    return y, pb
 end

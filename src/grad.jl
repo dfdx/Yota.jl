@@ -10,7 +10,9 @@ function has_rrule(f, args...)
     Args = Core.Typeof.(args)
     Core.Compiler.return_type(rrule, Tuple{YotaRuleConfig, F, Args...}) !== Nothing && return true
     if is_kwfunc(F)
-        Args_kwrrule = Tuple{Any, typeof(Core.kwfunc(f)), YotaRuleConfig, Args...,}
+        # must be: Tuple{Any, typeof(rrule), YotaRuleConfig, typeof(unkwfunc(f)), Args[3:end]...}
+        nokw_f = unkwfunc(f, args...)
+        Args_kwrrule = Tuple{Any, typeof(rrule), YotaRuleConfig, typeof(nokw_f), Args[3:end]...}
         Core.Compiler.return_type(Core.kwfunc(rrule), Args_kwrrule) !== Nothing && return true
     end
     return false
@@ -171,6 +173,7 @@ function chainrules_transform!(tape::Tape)
     while i <= length(tape)
         op = tape[V(i)]
         if op isa Call && isprimitive(ChainRulesCtx(), call_values(op)...)
+            global STATE = tape, op
             # replace f(args...) with rrule(f, args...)
             v_f, v_args, line = op.fn, op.args, op.line
             f = op.fn isa V ? tape[op.fn].val : op.fn
@@ -213,7 +216,7 @@ function step_back!(tape::Tape, y::Variable)
         y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[4:end] : tape[rr].args[2:end]
     else
         sig_str = join(["::$T" for T in Umlaut.call_signature(tape, tape[y]).parameters], ", ")
-        error("No deriative rule found for op $(tape[y]), " *
+        error("No derivative rule found for op $(tape[y]), " *
               "try defining it using \n\n\tChainRulesCore.rrule($sig_str) = ...\n")
     end
     for (i, x) in enumerate(y_fargs)
@@ -362,7 +365,7 @@ function grad(f, args...; seed=1)
     cache_key = map(typeof, (f, args...))
     if haskey(GRAD_CACHE, cache_key)
         gf = GRAD_CACHE[cache_key]
-        return gf(f, args...; seed=seed)
+        return Base.invokelatest(gf, f, args...; seed=seed)
     else
         tape = gradtape(f, args...; seed=seed)
         gf = grad_compile(tape)

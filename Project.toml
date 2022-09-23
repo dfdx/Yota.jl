@@ -1,7 +1,7 @@
 name = "Yota"
 uuid = "cd998857-8626-517d-b929-70ad188a48f0"
 authors = ["Andrei Zhabinski <andrei.zhabinski@gmail.com>"]
-version = "0.8.0"
+version = "0.8.1"
 
 [deps]
 ChainRules = "082447d4-558c-5d27-93f4-14fc19e9eca2"
@@ -11,6 +11,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 Umlaut = "92992a2b-8ce5-4a9c-bb9d-58be9a7dc841"

@@ -2,5 +2,14 @@
 is_kwfunc(f) = (name = string(f); endswith(name, "##kw") || endswith(name, "##kw\""))
 is_kwfunc(v::Variable) = is_kwfunc(v._op.val)
 
+function unkwfunc(f, args...)
+    @assert is_kwfunc(f) "Trying to undo Core.kwfunc() on f, but f is not a kw func"
+    nokw_f = args[2]
+    @assert Core.kwfunc(nokw_f) === f
+    return nokw_f
+end
+
+
 # REPL utils - unstable API! don't use in library code!
-Base.:(^)(tape::Tape, i::Integer) = tape[V(i)].val
+Base.:(//)(tape::Tape, i::Integer) = tape[V(i)].val
+Base.:(:)(tape::Tape, i::Integer) = tape[V(i)].val

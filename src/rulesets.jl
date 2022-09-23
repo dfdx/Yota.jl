@@ -74,15 +74,30 @@ end
 #                        getindex, getfield, __new__                          #
 ###############################################################################
 
-function rrule(::YotaRuleConfig, ::typeof(getproperty), s, f::Symbol)
-    y = getproperty(s, f)
+function rrule(::YotaRuleConfig, ::typeof(getproperty), x::T, f::Symbol) where T
+    y = getproperty(x, f)
+    proj = ProjectTo(x)
+    # valT = Val(T)  # perhaps more stable inside closure?
     function getproperty_pullback(dy)
-        dy = unthunk(dy)
-        T = typeof(s)
-        nt = NamedTuple{(f,)}((dy,))
-        return NoTangent(), Tangent{T}(; nt...), ZeroTangent()
+        nt = NamedTuple{(f,)}((unthunk(dy),))
+        # not really sure whether this ought to unthunk or not, maybe ProjectTo will anyway, in which case best to be explicit?
+        return NoTangent(), proj(Tangent{T}(; nt...)), ZeroTangent()
     end
     return y, getproperty_pullback
+end
+
+
+# from https://github.com/FluxML/Optimisers.jl/pull/105#issuecomment-1229243707
+function rrule(::typeof(getfield), x::T, f::Symbol) where T
+    y = getfield(x, f)
+    proj = ProjectTo(x)
+    # valT = Val(T)  # perhaps more stable inside closure?
+    function getfield_pullback(dy)
+        nt = NamedTuple{(f,)}((unthunk(dy),))
+        # not really sure whether this ought to unthunk or not, maybe ProjectTo will anyway, in which case best to be explicit?
+        return NoTangent(), proj(Tangent{T}(; nt...)), ZeroTangent()
+    end
+    return y, getfield_pullback
 end
 
 
