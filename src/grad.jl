@@ -365,7 +365,7 @@ function grad(f, args...; seed=1)
     cache_key = map(typeof, (f, args...))
     if haskey(GRAD_CACHE, cache_key)
         gf = GRAD_CACHE[cache_key]
-        return gf(f, args...; seed=seed)
+        return Base.invokelatest(gf, f, args...; seed=seed)
     else
         tape = gradtape(f, args...; seed=seed)
         gf = grad_compile(tape)
