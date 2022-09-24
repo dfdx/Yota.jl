@@ -1,9 +1,11 @@
 *~
+_*
 \#*
 \.#*
 .juliahistory
-_*
 Manifest.toml
 benchmark/*.json
 benchmark/Manifest.toml
 .vscode/
+
+*.bson

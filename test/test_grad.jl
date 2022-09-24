@@ -68,6 +68,22 @@ end
 end
 
 
+@testset "grad: input-only" begin
+    _, g = grad((x, y) -> x, 42.0, 54.0)
+    @test g == (ZeroTangent(), 1, ZeroTangent())
+    _, g = grad((x, y) -> y, 42.0, 54.0)
+    @test g == (ZeroTangent(), ZeroTangent(), 1)
+end
+
+
+@testset "grad: constant" begin
+    _, g = grad(x -> 1, 42.0)
+    @test g == (ZeroTangent(), ZeroTangent())
+    # _, g = grad(xs -> sum(map(_->1, xs)), [1.0, 2.0])
+    # @test g == (ZeroTangent(), ZeroTangent())
+end
+
+
 @testset "grad: getindex" begin
     x = rand(3, 4, 5)
     x1 = zero(x); x1[1] = 1

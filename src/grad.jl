@@ -266,11 +266,7 @@ function back!(tape::Tape; seed=1)
 end
 
 
-function gradtape!(tape::Tape; seed=1)
-    # apply transformations needed for ChainRules
-    chainrules_transform!(tape)
-    # backpropagate gradients
-    back!(tape; seed=seed)
+function finalize_grad!(tape::Tape)
     # add a tuple of (val, (gradients...))
     deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
@@ -279,6 +275,16 @@ function gradtape!(tape::Tape; seed=1)
     new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple_unthunked))
     # set result
     tape.result = new_result
+end
+
+
+function gradtape!(tape::Tape; seed=1)
+    # apply transformations needed for ChainRules
+    chainrules_transform!(tape)
+    # backpropagate gradients
+    back!(tape; seed=seed)
+    # post-backprop actions
+    finalize_grad!(tape)
     return tape
 end
 
@@ -292,13 +298,33 @@ See grad() for more high-level API.
 """
 function gradtape(f, args...; ctx=GradCtx(), seed=1)
     _, tape = trace(f, args...; ctx=ctx)
-    # TODO: if it works, move the hack to Umlaut
-    if tape[tape.result] isa Input
-        new_result = push!(tape, mkcall(identity, tape.result))
+    res_op = tape[tape.result]
+    if res_op isa Call
+        # normal flow
+        return gradtape!(tape; seed=seed)
+    elseif res_op isa Constant
+        # special case - function call returning a constant
+        # record tuple of ZeroTangent() for each argument
+        tape.meta[:seed] = push!(tape, Constant(seed))   # needed for compilation later
+        deriv_vals = [ZeroTangent() for _ in inputs(tape)]
+        deriv_tuple = push!(tape, Constant(tuple(deriv_vals...)))
+        new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple))
         tape.result = new_result
+        return tape
+    elseif res_op isa Input
+        # special case - function call simply returning its input
+        # record the seed as the derivative
+        v_seed = push!(tape, Constant(seed))   # needed for compilation later
+        tape.meta[:seed] = v_seed
+        deriv_vals = [inp.op === res_op ? v_seed : ZeroTangent() for inp in inputs(tape)]
+        deriv_tuple = push!(tape, mkcall(tuple, deriv_vals...))
+        new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple))
+        tape.result = new_result
+        return tape
+    else
+        throw(AssertionError("Unexpected type of result operation: $(typeof(res_op))"))
     end
-    tape = gradtape!(tape; seed=seed)
-    return tape
+
 end
 
 

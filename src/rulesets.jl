@@ -1,4 +1,4 @@
-import ChainRulesCore: rrule
+import ChainRulesCore: rrule, @non_differentiable
 import Umlaut: __new__
 
 ###############################################################################
@@ -221,6 +221,14 @@ end
 #                                   convert                                   #
 ###############################################################################
 
-function ChainRulesCore.rrule(::typeof(convert), ::Type{T}, x::T) where T
+function rrule(::typeof(convert), ::Type{T}, x::T) where T
     return x, Δ -> (NoTangent(), ZeroTangent(), Δ)
 end
+
+
+###############################################################################
+#                             non-differentiable                              #
+###############################################################################
+
+@non_differentiable Base.lastindex(::NTuple)
+@non_differentiable Base.eltype(::Any)
