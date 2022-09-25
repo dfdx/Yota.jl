@@ -2,38 +2,6 @@ import ChainRulesCore: rrule, @non_differentiable
 import Umlaut: __new__
 
 ###############################################################################
-#                                 Rules                                       #
-###############################################################################
-
-
-function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(tuple), args...)
-    y = tuple(args...)
-    N = length(args)
-    function tuple_pullback(Δ)
-        Δ = unthunk(Δ)
-        δargs = (Δ isa NoTangent || Δ isa ZeroTangent) ? [Δ for _=1:N] : collect(Δ)
-        (NoTangent(), δargs...)
-    end
-    return y, tuple_pullback
-end
-
-
-function ChainRulesCore.rrule(::YotaRuleConfig, nt::Type{NamedTuple{names}}, t::Tuple) where {names}
-    val = nt(t)
-    function namedtuple_pullback(dy)
-        return NoTangent(), dy
-    end
-    return val, namedtuple_pullback
-end
-
-
-# test_rrule(YotaRuleConfig(), NamedTuple{(:dims,)}, (1,))
-
-
-ChainRulesCore.rrule(::Type{Val{V}}) where V = Val{V}(), dy -> (NoTangent(),)
-
-
-###############################################################################
 #                                 Broadcast                                   #
 ###############################################################################
 
@@ -43,35 +11,34 @@ ChainRulesCore.rrule(::Type{Val{V}}) where V = Val{V}(), dy -> (NoTangent(),)
 
 # unzip taken from Zygote:
 # https://github.com/FluxML/Zygote.jl/blob/d5be4d5ca80e79278d714eaac15ca71904a262e3/src/lib/array.jl#L177-L185
-struct StaticGetter{i} end
-(::StaticGetter{i})(v) where {i} = v[i]
+# struct StaticGetter{i} end
+# (::StaticGetter{i})(v) where {i} = v[i]
 
-@generated function _unzip(tuples, ::Val{N}) where {N}
-  Expr(:tuple, (:(map($(StaticGetter{i}()), tuples)) for i ∈ 1:N)...)
-end
+# @generated function _unzip(tuples, ::Val{N}) where {N}
+#   Expr(:tuple, (:(map($(StaticGetter{i}()), tuples)) for i ∈ 1:N)...)
+# end
 
-function unzip(tuples)
-  N = length(first(tuples))
-  _unzip(tuples, Val(N))
-end
+# function unzip(tuples)
+#   N = length(first(tuples))
+#   _unzip(tuples, Val(N))
+# end
 
 
-function ChainRulesCore.rrule(::YotaRuleConfig, ::typeof(Broadcast.materialize), x)
+function rrule(::YotaRuleConfig, ::typeof(Broadcast.materialize), x)
     return Broadcast.materialize(x), dy -> (NoTangent(), dy)
 end
 
 
 for T in (AbstractArray, Broadcast.Broadcasted, Number)
-    function ChainRulesCore.rrule(::typeof(Broadcast.broadcastable), x::T)
+    @eval function rrule(::YotaRuleConfig, ::typeof(Broadcast.broadcastable), x::$T)
         broadcastable_pullback(dy) = (NoTangent(), dy)
         return x, broadcastable_pullback
     end
 end
 
 
-
 ###############################################################################
-#                        getindex, getfield, __new__                          #
+#                        getproperty, getfield, __new__                       #
 ###############################################################################
 
 function rrule(::YotaRuleConfig, ::typeof(getproperty), x::T, f::Symbol) where T
@@ -81,21 +48,21 @@ function rrule(::YotaRuleConfig, ::typeof(getproperty), x::T, f::Symbol) where T
     function getproperty_pullback(dy)
         nt = NamedTuple{(f,)}((unthunk(dy),))
         # not really sure whether this ought to unthunk or not, maybe ProjectTo will anyway, in which case best to be explicit?
-        return NoTangent(), proj(Tangent{T}(; nt...)), ZeroTangent()
+        return NoTangent(), proj(Tangent{T}(; nt...)), NoTangent()
     end
     return y, getproperty_pullback
 end
 
 
 # from https://github.com/FluxML/Optimisers.jl/pull/105#issuecomment-1229243707
-function rrule(::typeof(getfield), x::T, f::Symbol) where T
+function rrule(::YotaRuleConfig, ::typeof(getfield), x::T, f::Symbol) where T
     y = getfield(x, f)
     proj = ProjectTo(x)
     # valT = Val(T)  # perhaps more stable inside closure?
     function getfield_pullback(dy)
         nt = NamedTuple{(f,)}((unthunk(dy),))
         # not really sure whether this ought to unthunk or not, maybe ProjectTo will anyway, in which case best to be explicit?
-        return NoTangent(), proj(Tangent{T}(; nt...)), ZeroTangent()
+        return NoTangent(), proj(Tangent{T}(; nt...)), NoTangent()
     end
     return y, getfield_pullback
 end
@@ -108,7 +75,7 @@ function rrule(::YotaRuleConfig, ::typeof(getfield), s::Tuple, f::Int)
         T = typeof(s)
         # deriv of a tuple is a Tangent{Tuple}(...) with all elements set to ZeroTangent()
         # except for the one at index f which is set to dy
-        return NoTangent(), Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), ZeroTangent()
+        return NoTangent(), Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), NoTangent()
     end
     return y, tuple_getfield_pullback
 end
@@ -123,7 +90,7 @@ function rrule(::YotaRuleConfig, ::typeof(__new__), T, args...)
         else
             fld_derivs = [getproperty(dy, fld) for fld in fieldnames(T)]
         end
-        return NoTangent(), ZeroTangent(), fld_derivs...
+        return NoTangent(), NoTangent(), fld_derivs...
     end
     return y, __new__pullback
 end
@@ -172,17 +139,19 @@ end
 
 # here we explicitely stop propagation in iteration
 # over ranges (e.g for i=1:3 ... end)
+# note: we can't use @non_differentiable here since UnitRange <: AbstractArray
+# so the rules above will intercept the call anyway
 function rrule(::YotaRuleConfig, ::typeof(iterate), x::UnitRange)
     y = iterate(x)
-    function iterate_pullback(dy)
-        return NoTangent(), ZeroTangent()
+    function iterate_pullback(_)
+        return NoTangent(), NoTangent()
     end
     return y, iterate_pullback
 end
 function rrule(::YotaRuleConfig, ::typeof(iterate), x::UnitRange, i::Integer)
     y = iterate(x, i)
-    function iterate_pullback(dy)
-        return NoTangent(), ZeroTangent(), ZeroTangent()
+    function iterate_pullback(_)
+        return NoTangent(), NoTangent(), NoTangent()
     end
     return y, iterate_pullback
 end
@@ -218,12 +187,52 @@ end
 
 
 ###############################################################################
-#                                   convert                                   #
+#                                 Tuples                                      #
 ###############################################################################
 
-function rrule(::typeof(convert), ::Type{T}, x::T) where T
-    return x, Δ -> (NoTangent(), ZeroTangent(), Δ)
+
+function rrule(::YotaRuleConfig, ::typeof(tuple), args...)
+    y = tuple(args...)
+    N = length(args)
+    function tuple_pullback(Δ)
+        Δ = unthunk(Δ)
+        δargs = (Δ isa NoTangent || Δ isa ZeroTangent) ? [Δ for _=1:N] : collect(Δ)
+        (NoTangent(), δargs...)
+    end
+    return y, tuple_pullback
 end
+
+
+function rrule(::YotaRuleConfig, nt::Type{NamedTuple{names}}, t::Tuple) where {names}
+    val = nt(t)
+    function namedtuple_pullback(dy)
+        return NoTangent(), dy
+    end
+    return val, namedtuple_pullback
+end
+
+
+function rrule(::YotaRuleConfig, ::typeof(getindex), s::NamedTuple, f::Symbol)
+    y = getindex(s, f)
+    function nt_getindex_pullback(dy)
+        dy = unthunk(dy)
+        nt = NamedTuple{(f,)}((unthunk(dy),))
+        return NoTangent(), Tangent{typeof(s)}(; nt...), NoTangent()
+    end
+    return y, nt_getindex_pullback
+end
+
+
+###############################################################################
+#                                    Misc                                     #
+###############################################################################
+
+function rrule(::YotaRuleConfig, ::typeof(convert), ::Type{T}, x::T) where T
+    return x, Δ -> (NoTangent(), NoTangent(), Δ)
+end
+
+
+rrule(::YotaRuleConfig, ::Type{Val{V}}) where V = Val{V}(), _ -> (NoTangent(),)
 
 
 ###############################################################################

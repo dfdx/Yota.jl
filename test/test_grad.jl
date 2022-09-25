@@ -120,8 +120,8 @@ end
     # @test grad(x -> iterate(x, 3)[1], x)[2][1] == [0, 0, 1.0]
 
     x = (1:3)
-    @test grad(x -> iterate(x)[1], x)[2][2] == ZeroTangent()
-    @test grad(x -> iterate(x, 1)[1], x)[2][2] == ZeroTangent()
+    @test grad(x -> iterate(x)[1], x)[2][2] == NoTangent()
+    @test grad(x -> iterate(x, 1)[1], x)[2][2] == NoTangent()
 
 end
 
