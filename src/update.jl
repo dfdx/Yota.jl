@@ -44,14 +44,17 @@ minus_updater(x::Real, gx) = (x - gx)
 
 
 function update!(x::AbstractArray{T,N}, gx::AbstractArray{T,N}, fn::Function=minus_updater) where {T,N}
+    @warn "Yota.update!() is deprecated, use methods from Opimisers.jl instead"
     x .= fn(x, gx)
 end
 
 function update!(x::Real, gx::Real, fn::Function=minus_updater)
+    @warn "Yota.update!() is deprecated, use methods from Opimisers.jl instead"
     error("Can't update value of $(typeof(x)) in-place!")
 end
 
 function update!(x, gx, fn::Function=minus_updater; ignore=Set())
+    @warn "Yota.update!() is deprecated, use methods from Opimisers.jl instead"
     @assert isstruct(x) "Expected mutable struct as 1st argument"
     @assert gx isa Tangent "Gradient for structs should be Tangent"
     for (path, gv) in path_value_pairs(gx)

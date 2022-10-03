@@ -99,6 +99,7 @@ end
 Generate `rrule` using Yota.
 """
 function ChainRulesCore.rrule_via_ad(cfg::YotaRuleConfig, f, args...)
+    # global RVA_STATE = (f, args)
     arg_type_str = join(["::$(typeof(a))" for a in args], ", ")
     @debug "Running rrule_via_ad() for $f($arg_type_str)"
     res = rrule(cfg, f, args...)

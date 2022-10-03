@@ -18,7 +18,7 @@ include("deprecated.jl")
 include("chainrules.jl")
 include("rulesets.jl")
 include("grad.jl")
-include("update.jl")
+include("update.jl")      # TODO: remove this, update docs to use Optimisers.jl instead
 include("gradcheck.jl")
 
 

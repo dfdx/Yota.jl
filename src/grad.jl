@@ -69,45 +69,6 @@ end
 
 
 ###############################################################################
-#                            BCAST GRAD CONTEXT                               #
-###############################################################################
-
-# struct BcastGradCtx
-#     inner
-# end
-
-
-# # get_static_params is broken for BcastGradCtx, so turning off
-# # this feature for now
-# Umlaut.get_static_params(::Tracer{BcastGradCtx}, v_fargs::Union{Tuple, Vector}) = Core.svec([])
-
-# function Umlaut.code_signature(::BcastGradCtx, v_fargs)
-#     f, args... = Umlaut.var_values(v_fargs)
-#     return (f, map(eltype, args))
-# end
-
-
-# function Umlaut.trace_call!(t::Tracer{BcastGradCtx}, v_fargs...)
-#     fargs = Umlaut.map_vars(v -> v.op.val, v_fargs)
-#     f, args... = fargs
-#     # TODO: should we check isprimitive() for map(first, fargs) instead?
-#     el_args = map(first, fargs[2:end])
-#     if isprimitive(t.tape.c.inner, f, el_args...) && !Umlaut.is_ho_tracable(t.tape.c.inner, f, el_args...)
-#         rr_op = (is_kwfunc(f) ?
-#                     mkcall(Core.kwfunc(bcast_rrule), v_args[1], bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_args[2:end]...) :
-#                     mkcall(bcast_rrule, YOTA_RULE_CONFIG, broadcasted, v_fargs...))
-#         v_rr = push!(t.tape, rr_op)
-#         v_val = push!(t.tape, mkcall(_getfield, v_rr, 1))
-#         v_pb = push!(t.tape, mkcall(_getfield, v_rr, 2))
-#         t.tape.c.inner.pullbacks[v_val] = v_pb
-#         return v_val
-#     else
-#         return trace!(t, v_fargs)
-#     end
-# end
-
-
-###############################################################################
 #                                   GRAD                                      #
 ###############################################################################
 
@@ -124,9 +85,9 @@ function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
     else
         old_dx = getderiv(tape, x)
         if tape[dx].val isa Tangent || tape[old_dx].val isa Tangent
-            new_dx = push!(tape, mkcall(+, dx, old_dx))
+            new_dx = push!(tape, mkcall(+, dx, old_dx; line="updated deriv for $x"))
         else
-            new_dx = push!(tape, mkcall(broadcast, +, dx, old_dx))
+            new_dx = push!(tape, mkcall(broadcast, +, dx, old_dx; line="updated deriv for $x"))
         end
         setderiv!(tape, x, new_dx)
     end
@@ -173,7 +134,6 @@ function chainrules_transform!(tape::Tape)
     while i <= length(tape)
         op = tape[V(i)]
         if op isa Call && isprimitive(ChainRulesCtx(), call_values(op)...)
-            global STATE = tape, op
             # replace f(args...) with rrule(f, args...)
             v_f, v_args, line = op.fn, op.args, op.line
             f = op.fn isa V ? tape[op.fn].val : op.fn
@@ -181,7 +141,7 @@ function chainrules_transform!(tape::Tape)
                 v_kw, v_orig_f, v_orig_args... = v_args
                 mkcall(Core.kwfunc(rrule), v_kw, rrule, YOTA_RULE_CONFIG, v_orig_f, v_orig_args...; line=line)
             else
-                mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...; line=line)
+                mkcall(rrule, YOTA_RULE_CONFIG, v_f, v_args...; line)
             end
             val_op = mkcall(_getfield, V(rr_op), 1)
             pb_op = mkcall(_getfield, V(rr_op), 2)
@@ -200,17 +160,14 @@ end
 Make a single step of backpropagation.
 """
 function step_back!(tape::Tape, y::Variable)
-    @debug "step_back!() for $(tape[y])"
-    if !hasderiv(tape, y)
-        @debug "No derivative found for y = $y, stop propagating the gradient in this path"
-        return
-    end
+    hasderiv(tape, y) || return
     dy = tape.c.derivs[y]
+    iszerotangent(tape[dy].val) && return
     if haskey(tape.c.pullbacks, y)
         # ChainRules
         pb = tape.c.pullbacks[y]
-        @debug "Found pullback: $pb"
-        dxs = push!(tape, mkcall(pb, dy))
+        # @debug "Found pullback: $pb"
+        dxs = push!(tape, mkcall(pb, dy; line="pullback for $y"))
         # propage derivs to rrule variable
         rr = tape[y].args[1]
         y_fargs = is_kwfunc(rr._op.fn) ? tape[rr].args[4:end] : tape[rr].args[2:end]
@@ -221,8 +178,8 @@ function step_back!(tape::Tape, y::Variable)
     end
     for (i, x) in enumerate(y_fargs)
         if x isa V
-            dx = push!(tape, mkcall(getfield, dxs, i))
-            @debug "Updating derivative: $x -> $dx"
+            dx = push!(tape, mkcall(getfield, dxs, i; line="d$y/d$x"))
+            # @debug "Updating derivative: $x -> $dx"
             set_or_add_deriv!(tape, x, dx)
         end
     end
@@ -248,7 +205,7 @@ function back!(tape::Tape; seed=1)
         # @assert zval isa Number || zval isa AbstractArray
         seed = zval isa AbstractArray ? ones(eltype(zval), size(zval)) : one(zval)
     end
-    dy = push!(tape, Constant(seed))
+    dy = push!(tape, Constant(seed; line="seed for $(tape[V(1)].val)"))
     # save seed var to use in compilation later
     tape.meta[:seed] = dy
     # set initial derivative value
@@ -266,11 +223,7 @@ function back!(tape::Tape; seed=1)
 end
 
 
-function gradtape!(tape::Tape; seed=1)
-    # apply transformations needed for ChainRules
-    chainrules_transform!(tape)
-    # backpropagate gradients
-    back!(tape; seed=seed)
+function finalize_grad!(tape::Tape)
     # add a tuple of (val, (gradients...))
     deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
@@ -279,6 +232,16 @@ function gradtape!(tape::Tape; seed=1)
     new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple_unthunked))
     # set result
     tape.result = new_result
+end
+
+
+function gradtape!(tape::Tape; seed=1)
+    # apply transformations needed for ChainRules
+    chainrules_transform!(tape)
+    # backpropagate gradients
+    back!(tape; seed=seed)
+    # post-backprop actions
+    finalize_grad!(tape)
     return tape
 end
 
@@ -292,13 +255,33 @@ See grad() for more high-level API.
 """
 function gradtape(f, args...; ctx=GradCtx(), seed=1)
     _, tape = trace(f, args...; ctx=ctx)
-    # TODO: if it works, move the hack to Umlaut
-    if tape[tape.result] isa Input
-        new_result = push!(tape, mkcall(identity, tape.result))
+    res_op = tape[tape.result]
+    if res_op isa Call
+        # normal flow
+        return gradtape!(tape; seed=seed)
+    elseif res_op isa Constant
+        # special case - function call returning a constant
+        # record tuple of ZeroTangent() for each argument
+        tape.meta[:seed] = push!(tape, Constant(seed; line="seed"))   # needed for compilation later
+        deriv_vals = [ZeroTangent() for _ in inputs(tape)]
+        deriv_tuple = push!(tape, Constant(tuple(deriv_vals...)))
+        new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple))
         tape.result = new_result
+        return tape
+    elseif res_op isa Input
+        # special case - function call simply returning its input
+        # record the seed as the derivative
+        v_seed = push!(tape, Constant(seed; line="seed"))
+        tape.meta[:seed] = v_seed
+        deriv_vals = [inp.op === res_op ? v_seed : ZeroTangent() for inp in inputs(tape)]
+        deriv_tuple = push!(tape, mkcall(tuple, deriv_vals...))
+        new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple))
+        tape.result = new_result
+        return tape
+    else
+        throw(AssertionError("Unexpected type of result operation: $(typeof(res_op))"))
     end
-    tape = gradtape!(tape; seed=seed)
-    return tape
+
 end
 
 
