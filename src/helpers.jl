@@ -10,20 +10,35 @@ function ungetindex!(dx::AbstractArray, x::AbstractArray, dy::AbstractArray, I..
     return NNlib.scatter!(+, dx, dy, idx)
 end
 
-_array_type_only(A::AT) where AT <: AbstractArray{T, N} where {T, N} = AT
+# _array_type_only(A::AT) where AT <: AbstractArray{T, N} where {T, N} = AT
 
 
-function ungetindex!(dx::AbstractArray, x::AbstractArray, dy::Number, I...)
+function ungetindex!(dx::AbstractArray{<:Number}, x::AbstractArray{<:Number}, dy::Number, I...)
     d_dy = similar(dx, (1,))
     fill!(d_dy, dy)
     ungetindex!(dx, x, d_dy, I...)
 end
 
 
-function ungetindex(x::AbstractArray, dy, I...)
+function ungetindex!(dx::AbstractArray, x::AbstractArray, dy::Any, I...)
+    d_dy = similar(dx, (1,))
+    fill!(d_dy, dy)
+    ungetindex!(dx, x, d_dy, I...)
+end
+
+
+function ungetindex(x::AbstractArray{<:Number}, dy, I...)
     dx = zero(x)
     return ungetindex!(dx, x, dy, I...)
 end
+
+
+function ungetindex(x::AbstractArray{Any}, dy, I...)
+    dx = similar(x)
+    fill!(dx, ZeroTangent())
+    return ungetindex!(dx, x, dy, I...)
+end
+
 
 function ungetindex(x::Tuple, dy, I...)
     dx = ntuple(length(x)) do i

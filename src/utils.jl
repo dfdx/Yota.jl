@@ -10,6 +10,14 @@ function unkwfunc(f, args...)
 end
 
 
+Base.names(_::Tangent{NamedTuple{F, TT}}) where {F, TT} = F
+
+
+iszerotangent(x::ZeroTangent) = true
+iszerotangent(x::NoTangent) = true
+iszerotangent(x) = false
+
+
 # REPL utils - unstable API! don't use in library code!
-Base.:(//)(tape::Tape, i::Integer) = tape[V(i)].val
+Base.:(//)(tape::Tape, i::Integer) = tape[V(i)]
 Base.:(:)(tape::Tape, i::Integer) = tape[V(i)].val

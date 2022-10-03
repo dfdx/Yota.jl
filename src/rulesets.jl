@@ -196,8 +196,19 @@ function rrule(::YotaRuleConfig, ::typeof(tuple), args...)
     N = length(args)
     function tuple_pullback(Δ)
         Δ = unthunk(Δ)
-        δargs = (Δ isa NoTangent || Δ isa ZeroTangent) ? [Δ for _=1:N] : collect(Δ)
-        (NoTangent(), δargs...)
+        projs = map(ProjectTo, args)
+        δargs = if Δ isa NoTangent || Δ isa ZeroTangent
+             [Δ for _=1:N]
+        elseif Δ isa Tangent{<:NamedTuple}
+            # weird for Δ, but happens in Flux in practise
+            # TODO: write test for it
+            ns = names(Δ)
+            [getproperty(Δ, ns[i]) |> projs[i] for i in eachindex(ns)]
+        else
+            collect(Δ)
+        end
+        @assert length(δargs) == length(args)
+        return (NoTangent(), δargs...)
     end
     return y, tuple_pullback
 end
@@ -221,6 +232,13 @@ function rrule(::YotaRuleConfig, ::typeof(getindex), s::NamedTuple, f::Symbol)
     end
     return y, nt_getindex_pullback
 end
+
+
+# function rrule(::YotaRuleConfig, ::typeof(ntuple), f, i::Integer)
+#     y = ntuple(f, i)
+
+# end
+
 
 
 ###############################################################################
