@@ -223,6 +223,15 @@ function rrule(::YotaRuleConfig, nt::Type{NamedTuple{names}}, t::Tuple) where {n
 end
 
 
+function rrule(::YotaRuleConfig, nt::Type{Tuple}, t::Tuple)
+    val = Tuple(t)
+    function tuple_pullback(dy)
+        return NoTangent(), dy
+    end
+    return val, tuple_pullback
+end
+
+
 function rrule(::YotaRuleConfig, ::typeof(getindex), s::NamedTuple, f::Symbol)
     y = getindex(s, f)
     function nt_getindex_pullback(dy)
