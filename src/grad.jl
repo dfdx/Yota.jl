@@ -94,30 +94,31 @@ function set_or_add_deriv!(tape::Tape, x::Variable, dx::Variable)
 end
 
 
+function todo_list!(tape::Tape{GradCtx}, y_id::Int, result::Set{Int})
+    push!(result, y_id)
+    y = V(tape, y_id)
+    # since `y = getfield(rr, 2)`, we use arguments of the original rrule instead
+    y_fargs = is_kwfunc(y._op.fn) ? tape[y].args[3:end] : tape[y].args
+    for x in y_fargs
+        if x isa V && !in(x.id, result) && tape[x] isa Call
+            todo_list!(tape, x.id, result)
+        end
+    end
+end
+
 """
 Collect variables that we need to step through during the reverse pass.
 The returned vector is already deduplicated and reverse-sorted
 """
-function todo_list(tape::Tape{GradCtx}, y=tape.result)
-    y_orig = y
-    @assert(tape[y] isa Call, "The tape's result is expected to be a Call, " *
+function todo_list(tape::Tape{GradCtx})
+    @assert(tape[tape.result] isa Call, "The tape's result is expected to be a Call, " *
             "but instead $(typeof(tape[tape.result])) was encountered")
-    y_fargs = [tape[y].fn; tape[y].args...]
-    is_rrule_based = haskey(tape.c.pullbacks, y)
-    if is_rrule_based
-        # use rrule instead
-        y = tape[y].args[1]
-        y_fargs = is_kwfunc(y._op.fn) ? tape[y].args[3:end] : tape[y].args
-    end
-    y_todo = [x for x in y_fargs if x isa V && tape[x] isa Call]
-    x_todos = [todo_list(tape, x) for x in y_todo]
-    # include y itself (original), its parents and their parents recursively
-    todo = [[y_orig]; y_todo; vcat(x_todos...)]
-    # deduplicate
-    todo = collect(Set([bound(tape, v) for v in todo]))
-    todo = sort(todo, by=v->v.id, rev=true)
-    return todo
+    result = Set{Int}()
+    todo_list!(tape, tape.result.id, result)
+    ids = sort(collect(result), rev=true)
+    return [V(tape, id) for id in ids]
 end
+
 
 call_values(op::Call) = Umlaut.var_values([op.fn, op.args...])
 
@@ -212,6 +213,7 @@ function back!(tape::Tape; seed=1)
     tape.c.derivs[z] = dy
     # queue of variables to calculate derivatives for
     deriv_todo = todo_list(tape)
+    deriv_todo = sort(deriv_todo, by=v->v.id, rev=true)
     for y in deriv_todo
         try
             step_back!(tape, y)
