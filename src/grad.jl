@@ -6,6 +6,7 @@ struct ChainRulesCtx end
 
 
 function has_rrule(f, args...)
+    @nospecialize
     F = Core.Typeof(f)
     Args = Core.Typeof.(args)
     Core.Compiler.return_type(rrule, Tuple{YotaRuleConfig, F, Args...}) !== Nothing && return true
@@ -18,7 +19,7 @@ function has_rrule(f, args...)
     return false
 end
 
-Umlaut.isprimitive(::ChainRulesCtx, f, args...) = has_rrule(f, args...)
+Umlaut.isprimitive(::ChainRulesCtx, f, args...) = has_rrule(Base.inferencebarrier(f), Base.inferencebarrier(args)...)
 
 
 struct GradCtx

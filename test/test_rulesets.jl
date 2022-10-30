@@ -71,6 +71,7 @@ config = YotaRuleConfig()
     @testset "tuple" begin
         test_rrule(config, tuple, 1.0, 2.0, 3.0; check_inferred=false)
         test_rrule(config, NamedTuple{(:dims,)}, (1,))
+        test_rrule(config, Tuple, (1,))
         test_rrule(config, getindex, (a=42.0, b=54.0), :a; check_inferred=false)
     end
 
