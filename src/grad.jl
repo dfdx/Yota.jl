@@ -230,11 +230,8 @@ function finalize_grad!(tape::Tape)
     # add a tuple of (val, (gradients...))
     deriv_vars = [hasderiv(tape, v) ? getderiv(tape, v) : ZeroTangent() for v in inputs(tape)]
     deriv_tuple = push!(tape, mkcall(tuple, deriv_vars...))
-    # unthunk results
-    deriv_tuple_unthunked = push!(tape, mkcall(map, ChainRules.unthunk, deriv_tuple))
-    new_result = push!(tape, mkcall(tuple, tape.result, deriv_tuple_unthunked))
     # set result
-    tape.result = new_result
+    tape.result = deriv_tuple
 end
 
 
