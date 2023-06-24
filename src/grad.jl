@@ -10,7 +10,7 @@ function has_rrule(f, args...)
     F = Core.Typeof(f)
     Args = Core.Typeof.(args)
     Core.Compiler.return_type(rrule, Tuple{YotaRuleConfig, F, Args...}) !== Nothing && return true
-    if is_kwfunc(F)
+    if is_kwfunc(f)
         # must be: Tuple{Any, typeof(rrule), YotaRuleConfig, typeof(unkwfunc(f)), Args[3:end]...}
         nokw_f = unkwfunc(f, args...)
         Args_kwrrule = Tuple{Any, typeof(rrule), YotaRuleConfig, typeof(nokw_f), Args[3:end]...}
@@ -132,8 +132,11 @@ with the following chain or calls:
 where `val = fn(args...)` and `pb` is the pullback function.
 """
 function chainrules_transform!(tape::Tape)
+    # global TAPE = tape
+    # error("")
     i = 1
     while i <= length(tape)
+        # tape[V(i)] isa Call && tape[V(i)].fn == Core.kwcall && break
         op = tape[V(i)]
         if op isa Call && isprimitive(ChainRulesCtx(), call_values(op)...)
             # replace f(args...) with rrule(f, args...)
@@ -180,6 +183,7 @@ function step_back!(tape::Tape, y::Variable)
     end
     for (i, x) in enumerate(y_fargs)
         if x isa V
+            global STATE = (tape, y, y_fargs, i, x)
             dx = push!(tape, mkcall(getfield, dxs, i; line="d$y/d$x"))
             # @debug "Updating derivative: $x -> $dx"
             set_or_add_deriv!(tape, x, dx)

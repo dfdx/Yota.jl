@@ -1,5 +1,9 @@
 # not the most robust function, but works in practise
-is_kwfunc(f) = (name = string(f); endswith(name, "##kw") || endswith(name, "##kw\""))
+if VERSION < v"1.9.0"
+    is_kwfunc(f) = (name = string(f); endswith(name, "##kw") || endswith(name, "##kw\""))
+else
+    is_kwfunc(f) = (f === Core.kwcall)
+end
 is_kwfunc(v::Variable) = is_kwfunc(v._op.val)
 
 function unkwfunc(f, args...)
