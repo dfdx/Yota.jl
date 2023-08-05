@@ -5,8 +5,8 @@ import Yota.Umlaut.__new__
 
 # broacastable non-primitive
 sin_inc(x::Number) = sin(x) + 1
-struct PointRS x; y end
-config = YotaRuleConfig()
+struct PointRS{X,Y} x::X; y::Y end
+const config = YotaRuleConfig()
 
 
 @testset "rulesets" begin
@@ -43,14 +43,30 @@ config = YotaRuleConfig()
     end
 
     @testset "getfield & co." begin
-        p = PointRS(42.0, 54.0)
+        p = PointRS(42.0+im, 54.0) # different types to test inference
         test_rrule(config, getproperty, p, :x; check_inferred=false)
         test_rrule(config, getfield, p, :x; check_inferred=false)
 
         t = (2.0, 4.0, 8.0)
         test_rrule(config, getfield, t, 3; check_inferred=false)
 
-        test_rrule(config, __new__, PointRS, 42.0, 54.0; check_inferred=false)
+        PT = PointRS{ComplexF64, Float64}
+        test_rrule(config, __new__, PT, 42.0+im, 54.0; check_inferred=false)
+
+        # These tests must be done separately because test_rrule could break constprop
+        if VERSION > v"1.6"
+            # Function barrier because @inferred can also break constprop
+            function test_inference(cfg, fn, obj, ::Val{F}) where {F}
+                val, back = rrule(cfg, fn, obj, F)
+                return val, back(1.0)
+            end
+
+            @testset "inference" begin
+                @inferred test_inference(config, getfield, p, Val(:x))
+                @inferred test_inference(config, getfield, t, Val(3))
+                @inferred test_inference(config, getproperty, p, Val(:x))
+            end
+        end
     end
 
     @testset "iterate" begin

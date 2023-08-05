@@ -2,6 +2,8 @@ import Statistics
 using LinearAlgebra
 using ChainRulesCore
 using ChainRules
+using Compat
+using Compat: @constprop
 using NNlib
 using Umlaut
 import Umlaut: record_primitive!, isprimitive, BaseCtx

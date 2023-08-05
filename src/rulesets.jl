@@ -41,11 +41,11 @@ end
 #                        getproperty, getfield, __new__                       #
 ###############################################################################
 
-function rrule(::YotaRuleConfig, ::typeof(getproperty), x::T, f::Symbol) where T
+@constprop :aggressive function rrule(::YotaRuleConfig, ::typeof(getproperty), x::T, f::Symbol) where T
     y = getproperty(x, f)
     proj = ProjectTo(x)
     # valT = Val(T)  # perhaps more stable inside closure?
-    function getproperty_pullback(dy)
+    @constprop :aggressive function getproperty_pullback(dy)
         nt = NamedTuple{(f,)}((unthunk(dy),))
         # not really sure whether this ought to unthunk or not, maybe ProjectTo will anyway, in which case best to be explicit?
         return NoTangent(), proj(Tangent{T}(; nt...)), NoTangent()
@@ -55,27 +55,26 @@ end
 
 
 # from https://github.com/FluxML/Optimisers.jl/pull/105#issuecomment-1229243707
-function rrule(::YotaRuleConfig, ::typeof(getfield), x::T, f::Symbol) where T
+@constprop :aggressive function rrule(::YotaRuleConfig, ::typeof(getfield), x::T, f::Symbol) where T
     y = getfield(x, f)
     proj = ProjectTo(x)
-    # valT = Val(T)  # perhaps more stable inside closure?
-    function getfield_pullback(dy)
+    @constprop :aggressive function getfield_pullback(dy)
         nt = NamedTuple{(f,)}((unthunk(dy),))
         # not really sure whether this ought to unthunk or not, maybe ProjectTo will anyway, in which case best to be explicit?
-        return NoTangent(), proj(Tangent{T}(; nt...)), NoTangent()
+        return NoTangent(), proj(Tangent{T,typeof(nt)}(nt)), NoTangent()
     end
     return y, getfield_pullback
 end
 
 
-function rrule(::YotaRuleConfig, ::typeof(getfield), s::Tuple, f::Int)
+@constprop :aggressive function rrule(::YotaRuleConfig, ::typeof(getfield), s::Tuple, f::Int)
     y = getfield(s, f)
-    function tuple_getfield_pullback(dy)
-        dy = unthunk(dy)
-        T = typeof(s)
+    @constprop :aggressive function tuple_getfield_pullback(dy)
         # deriv of a tuple is a Tangent{Tuple}(...) with all elements set to ZeroTangent()
         # except for the one at index f which is set to dy
-        return NoTangent(), Tangent{T}([i == f ? dy : ZeroTangent() for i=1:length(s)]...), NoTangent()
+        backing = ntuple(Returns(ZeroTangent()), length(s))
+        backing = Base.setindex(backing, unthunk(dy), f)
+        return NoTangent(), Tangent{typeof(s),typeof(backing)}(backing), NoTangent()
     end
     return y, tuple_getfield_pullback
 end
@@ -85,10 +84,10 @@ function rrule(::YotaRuleConfig, ::typeof(__new__), T, args...)
     y = __new__(T, args...)
     function __new__pullback(dy)
         dy = unthunk(dy)
-        if dy isa NoTangent || dy isa ZeroTangent
-            fld_derivs = [dy for fld in fieldnames(T)]
+        fld_derivs = if dy isa NoTangent || dy isa ZeroTangent
+            ntuple(Returns(dy), fieldcount(T))
         else
-            fld_derivs = [getproperty(dy, fld) for fld in fieldnames(T)]
+            map(f -> getproperty(dy, f), fieldnames(T))
         end
         return NoTangent(), NoTangent(), fld_derivs...
     end
