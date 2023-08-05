@@ -254,6 +254,17 @@ end
     val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=ones(3))
     @test val == [2.0, 4.0, 6.0]
     @test g == (ZeroTangent(), [2.0, 2.0, 2.0])
+
+    val, g = grad(x -> 2x, [1.0, 2.0, 3.0]; seed=:auto)
+    @test val == [2.0, 4.0, 6.0]
+    @test g == (ZeroTangent(), [2.0, 2.0, 2.0])
+
+    if CUDA.functional()
+        CUDA.allowscalar(false)
+        val, g = grad(x -> 2x, cu([1.0, 2.0, 3.0]); seed=:auto)
+        @test val == cu([2.0, 4.0, 6.0])
+        @test g == (ZeroTangent(), cu([2.0, 2.0, 2.0]))
+    end
 end
 
 
