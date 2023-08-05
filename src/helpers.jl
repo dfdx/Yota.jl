@@ -88,7 +88,7 @@ end
 unbroadcast_prod_y(x::ArrayOrBroadcasted, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_x(y, x, Δ)
 
 # device_like(example, a) = (device = guess_device([example]); device(a))
-array_like(value, example) = fill!(similar(example, (1,)), value)
+array_like(value, example, sz=(1,)) = fill!(similar(example, sz), value)
 
 # unbroadcast_prod_x(x::Number, y::AbstractArray, Δ) = unbroadcast_prod_x(device_like(y, [x]), y, Δ)[1]
 unbroadcast_prod_x(x::Number, y::ArrayOrBroadcasted, Δ) = unbroadcast_prod_x(array_like(x, y), y, Δ)[1]

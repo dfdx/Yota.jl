@@ -132,8 +132,6 @@ with the following chain or calls:
 where `val = fn(args...)` and `pb` is the pullback function.
 """
 function chainrules_transform!(tape::Tape)
-    # global TAPE = tape
-    # error("")
     i = 1
     while i <= length(tape)
         # tape[V(i)] isa Call && tape[V(i)].fn == Core.kwcall && break
@@ -183,7 +181,6 @@ function step_back!(tape::Tape, y::Variable)
     end
     for (i, x) in enumerate(y_fargs)
         if x isa V
-            global STATE = (tape, y, y_fargs, i, x)
             dx = push!(tape, mkcall(getfield, dxs, i; line="d$y/d$x"))
             # @debug "Updating derivative: $x -> $dx"
             set_or_add_deriv!(tape, x, dx)
@@ -208,8 +205,8 @@ function back!(tape::Tape; seed=1)
         error("Gradient of a vector-valued function requires a seed")
     elseif seed == :auto
         zval = tape[z].val
-        # @assert zval isa Number || zval isa AbstractArray
-        seed = zval isa AbstractArray ? ones(eltype(zval), size(zval)) : one(zval)
+        @assert zval isa Number || zval isa AbstractArray
+        seed = zval isa AbstractArray ? array_like(1, zval, size(zval)) : one(zval)
     end
     dy = push!(tape, Constant(seed; line="seed for $(tape[V(1)].val)"))
     # save seed var to use in compilation later
